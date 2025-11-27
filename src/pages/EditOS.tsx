@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Save, ArrowLeft, Trash2 } from 'lucide-react';
+import { Save, ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { ImageUpload } from '../components/ImageUpload';
+import { ImageViewer } from '../components/ImageViewer';
 
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
@@ -182,11 +183,7 @@ export default function EditOS() {
         }
     };
 
-    const removePhoto = (index: number) => {
-        const newPhotos = [...existingPhotos];
-        newPhotos.splice(index, 1);
-        setExistingPhotos(newPhotos);
-    };
+
 
     if (loading) return <div className="flex justify-center p-8">Carregando...</div>;
 
@@ -305,19 +302,10 @@ export default function EditOS() {
 
                             {/* Existing Photos */}
                             {existingPhotos.length > 0 && (
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                                    {existingPhotos.map((url, index) => (
-                                        <div key={index} className="relative group">
-                                            <img src={url} alt={`Foto ${index + 1}`} className="w-full h-24 object-cover rounded-lg" />
-                                            <button
-                                                type="button"
-                                                onClick={() => removePhoto(index)}
-                                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))}
+                                <div className="mb-4">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Fotos Salvas</h4>
+                                    <ImageViewer images={existingPhotos} />
+                                    <p className="text-xs text-gray-500 mt-2">Clique em uma foto para visualizar em tela cheia</p>
                                 </div>
                             )}
 

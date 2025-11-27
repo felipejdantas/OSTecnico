@@ -4,6 +4,7 @@ import { CheckCircle, AlertCircle, Check, X, Minus } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
+import { ImageViewer } from '../components/ImageViewer';
 import { supabase } from '../lib/supabase';
 
 // Helper component for checklist items
@@ -182,7 +183,7 @@ export default function ClientSignature() {
             <div className="max-w-3xl mx-auto">
                 {/* Logo */}
                 <div className="text-center mb-8">
-                    <img src="/logo.jpg" alt="Dantas Info" className="h-16 mx-auto mb-4" />
+                    <img src="/logo.jpg" alt="OSTecnico" className="h-16 mx-auto mb-4" />
                     <h1 className="text-2xl sm:text-3xl font-bold text-dark">Assinatura de Ordem de Serviço</h1>
                 </div>
 
@@ -284,13 +285,7 @@ export default function ClientSignature() {
                             {os.photos && os.photos.length > 0 && (
                                 <div className="border-t pt-4">
                                     <h3 className="font-semibold text-gray-900 mb-2">Fotos do Equipamento</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                        {os.photos.map((url: string, index: number) => (
-                                            <a key={index} href={url} target="_blank" rel="noopener noreferrer">
-                                                <img src={url} alt={`Foto ${index + 1}`} className="w-full h-24 object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity" />
-                                            </a>
-                                        ))}
-                                    </div>
+                                    <ImageViewer images={os.photos} />
                                 </div>
                             )}
                         </Card>

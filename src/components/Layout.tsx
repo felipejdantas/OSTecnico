@@ -35,7 +35,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <div className="flex items-center gap-3">
                         <img
                             src="/logo.jpg"
-                            alt="Dantas Info"
+                            alt="OSTecnico"
                             className="h-10 sm:h-12 w-auto object-contain"
                             onError={(e) => {
                                 // Fallback to text if image fails to load
@@ -46,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         />
                         <div className="hidden">
                             <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-cyan to-primary-cyan bg-clip-text text-transparent">
-                                Danta Info
+                                OSTecnico
                             </h1>
                             <p className="text-xs text-gray-400 mt-1">Sistema de Gestão</p>
                         </div>

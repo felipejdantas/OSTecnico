@@ -52,7 +52,7 @@ export async function generateOSPDF(osData: OSData) {
     doc.setFontSize(20);
     doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]); // Blue
     doc.setFont('helvetica', 'bold');
-    doc.text('DANTAS INFO', pageWidth - 15, 20, { align: 'right' });
+    doc.text('OSTECNICO', pageWidth - 15, 20, { align: 'right' });
 
     doc.setFontSize(12);
     doc.setTextColor(100); // Grey
@@ -72,6 +72,10 @@ export async function generateOSPDF(osData: OSData) {
 
     // Customer and Technician Info
     // Ensure data exists to avoid blank fields
+    // Debug: Log the data structure to understand what we're receiving
+    console.log('PDF Generator - Customer data:', osData.customer);
+    console.log('PDF Generator - Technician data:', osData.technician);
+
     const customerName = osData.customer?.name || 'N/A';
     const customerCpf = osData.customer?.cpf || 'N/A';
     const customerPhone = osData.customer?.phone || 'N/A';
@@ -238,8 +242,28 @@ export async function generateOSPDF(osData: OSData) {
                     xPos = 15;
                 }
 
-                doc.addImage(photoImg, 'JPEG', xPos, yPos, photoWidth, photoHeight);
-                xPos += photoWidth + gap;
+                // Improved image sizing for better quality
+                const maxWidth = 85;
+                const maxHeight = 65;
+
+                // Calculate aspect ratio to maintain image proportions
+                const img = new Image();
+                img.src = photoImg;
+                const aspectRatio = img.width / img.height;
+
+                let finalWidth = maxWidth;
+                let finalHeight = maxHeight;
+
+                if (aspectRatio > 1) {
+                    // Landscape
+                    finalHeight = maxWidth / aspectRatio;
+                } else {
+                    // Portrait
+                    finalWidth = maxHeight * aspectRatio;
+                }
+
+                doc.addImage(photoImg, 'JPEG', xPos, yPos, finalWidth, finalHeight, undefined, 'FAST');
+                xPos += maxWidth + gap;
             } catch (error) {
                 console.error('Error loading photo for PDF:', error);
                 // Draw a placeholder if image fails
