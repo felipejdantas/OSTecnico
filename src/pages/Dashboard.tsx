@@ -4,7 +4,7 @@ import { FileText, User, Calendar, AlertCircle, CheckCircle, Clock, Star, PenToo
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
-import { LoadingSkeleton } from '../components/ui/LoadingSkeleton';
+
 import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
 import { useNavigate } from 'react-router-dom';

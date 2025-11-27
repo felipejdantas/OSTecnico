@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,7 +8,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { ImageUpload } from '../components/ImageUpload';
-import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
+
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
 import { supabase } from '../lib/supabase';
@@ -62,8 +62,8 @@ export default function EditOS() {
     const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const sigPadRef = useRef<SignaturePadRef>(null);
-    const { register, handleSubmit, formState: { errors }, reset, setValue } = useForm<OSForm>({
+    // const sigPadRef = useRef<SignaturePadRef>(null);
+    const { register, handleSubmit, formState: { errors }, setValue } = useForm<OSForm>({
         resolver: zodResolver(osSchema),
     });
 
