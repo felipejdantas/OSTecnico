@@ -76,10 +76,10 @@ export async function generateOSPDF(osData: OSData) {
     console.log('PDF Generator - Customer data:', osData.customer);
     console.log('PDF Generator - Technician data:', osData.technician);
 
-    const customerName = osData.customer?.name || 'N/A';
-    const customerCpf = osData.customer?.cpf || 'N/A';
-    const customerPhone = osData.customer?.phone || 'N/A';
-    const technicianName = osData.technician?.name || 'N/A';
+    // Handle both array and object formats from Supabase`r`n    const customer = Array.isArray(osData.customer) ? osData.customer[0] : osData.customer;`r`n    const technician = Array.isArray(osData.technician) ? osData.technician[0] : osData.technician;`r`n    `r`n    const customerName = customer?.name || 'N/A';
+    const customerCpf = customer?.cpf || 'N/A';
+    const customerPhone = customer?.phone || 'N/A';
+    const technicianName = technician?.name || 'N/A';
 
     autoTable(doc, {
         startY: yPos,
