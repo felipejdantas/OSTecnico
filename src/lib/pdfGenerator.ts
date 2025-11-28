@@ -73,6 +73,18 @@ export async function generateOSPDF(osData: OSData) {
     // Customer and Technician Info
     // Ensure data exists to avoid blank fields
     // Debug: Log the data structure to understand what we're receiving
+    console.log('PDF Generator - Customer data:', osData.customer);
+    console.log('PDF Generator - Technician data:', osData.technician);
+
+    // Handle both array and object formats from Supabase
+    const customer = Array.isArray(osData.customer) ? osData.customer[0] : osData.customer;
+    const technician = Array.isArray(osData.technician) ? osData.technician[0] : osData.technician;
+    
+    const customerName = customer?.name || 'N/A';
+    const customerCpf = customer?.cpf || 'N/A';
+    const customerPhone = customer?.phone || 'N/A';
+    const technicianName = technician?.name || 'N/A';
+
     autoTable(doc, {
         startY: yPos,
         head: [['Informações Principais']],
