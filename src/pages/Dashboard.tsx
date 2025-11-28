@@ -56,10 +56,6 @@ export default function Dashboard() {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-
-            console.log('Dashboard - Fetched orders:', data);
-            console.log('Dashboard - Total orders:', data?.length);
-
             setOrders((data as any) || []);
         } catch (error) {
             console.error('Error fetching orders:', error);
