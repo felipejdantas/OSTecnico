@@ -79,7 +79,7 @@ export async function generateOSPDF(osData: OSData) {
     // Handle both array and object formats from Supabase
     const customer = Array.isArray(osData.customer) ? osData.customer[0] : osData.customer;
     const technician = Array.isArray(osData.technician) ? osData.technician[0] : osData.technician;
-    
+
     const customerName = customer?.name || 'N/A';
     const customerCpf = customer?.cpf || 'N/A';
     const customerPhone = customer?.phone || 'N/A';
@@ -246,28 +246,12 @@ export async function generateOSPDF(osData: OSData) {
                     xPos = 15;
                 }
 
-                // Improved image sizing for better quality
-                const maxWidth = 85;
-                const maxHeight = 65;
+                // Add image to PDF with fixed dimensions
+                const imgWidth = 80;
+                const imgHeight = 60;
 
-                // Calculate aspect ratio to maintain image proportions
-                const img = new Image();
-                img.src = photoImg;
-                const aspectRatio = img.width / img.height;
-
-                let finalWidth = maxWidth;
-                let finalHeight = maxHeight;
-
-                if (aspectRatio > 1) {
-                    // Landscape
-                    finalHeight = maxWidth / aspectRatio;
-                } else {
-                    // Portrait
-                    finalWidth = maxHeight * aspectRatio;
-                }
-
-                doc.addImage(photoImg, 'JPEG', xPos, yPos, finalWidth, finalHeight, undefined, 'FAST');
-                xPos += maxWidth + gap;
+                doc.addImage(photoImg, 'JPEG', xPos, yPos, imgWidth, imgHeight);
+                xPos += imgWidth + gap;
             } catch (error) {
                 console.error('Error loading photo for PDF:', error);
                 // Draw a placeholder if image fails
