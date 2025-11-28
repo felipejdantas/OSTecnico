@@ -43,7 +43,7 @@ export async function generateOSPDF(osData: OSData) {
     // Header with logo (if available)
     try {
         const logoImg = await loadImage('/logo-full.jpg');
-        doc.addImage(logoImg, 'JPEG', 15, 10, 50, 20);
+        doc.addImage(logoImg.data, 'JPEG', 15, 10, 50, 20);
     } catch (error) {
         console.log('Logo not found, skipping');
     }
@@ -248,12 +248,28 @@ export async function generateOSPDF(osData: OSData) {
                     xPos = 15;
                 }
 
-                // Add image to PDF with fixed dimensions
-                const imgWidth = 80;
-                const imgHeight = 60;
+                // Add image to PDF preserving aspect ratio
+                const maxWidth = 80;
+                const maxHeight = 60;
 
-                doc.addImage(photoImg, 'JPEG', xPos, yPos, imgWidth, imgHeight);
-                xPos += imgWidth + gap;
+                let finalWidth = maxWidth;
+                let finalHeight = maxHeight;
+                const ratio = photoImg.width / photoImg.height;
+
+                if (ratio > maxWidth / maxHeight) {
+                    // Wider than box
+                    finalHeight = maxWidth / ratio;
+                } else {
+                    // Taller than box
+                    finalWidth = maxHeight * ratio;
+                }
+
+                // Center the image in the box
+                const xOffset = (maxWidth - finalWidth) / 2;
+                const yOffset = (maxHeight - finalHeight) / 2;
+
+                doc.addImage(photoImg.data, 'JPEG', xPos + xOffset, yPos + yOffset, finalWidth, finalHeight);
+                xPos += maxWidth + gap;
             } catch (error) {
                 console.error('Error loading photo for PDF:', error);
                 // Draw a placeholder if image fails
@@ -311,7 +327,7 @@ function getStatusLabel(status: string): string {
     }
 }
 
-function loadImage(url: string): Promise<string> {
+function loadImage(url: string): Promise<{ data: string; width: number; height: number }> {
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'Anonymous'; // Critical for loading images from other domains (Supabase)
@@ -328,7 +344,11 @@ function loadImage(url: string): Promise<string> {
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.drawImage(img, 0, 0);
-                resolve(canvas.toDataURL('image/jpeg'));
+                resolve({
+                    data: canvas.toDataURL('image/jpeg', 0.9), // 0.9 quality
+                    width: img.width,
+                    height: img.height
+                });
             } else {
                 reject(new Error('Could not get canvas context'));
             }
