@@ -48,14 +48,18 @@ export default function Dashboard() {
           is_pinned,
           signature_token,
           client_signed_at,
-          customers!inner (name),
-          technicians!inner (name)
+          customers (name),
+          technicians (name)
         `)
                 .eq('user_id', user.id)
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
+
+            console.log('Dashboard - Fetched orders:', data);
+            console.log('Dashboard - Total orders:', data?.length);
+
             setOrders((data as any) || []);
         } catch (error) {
             console.error('Error fetching orders:', error);
