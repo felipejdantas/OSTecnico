@@ -85,6 +85,8 @@ export async function generateOSPDF(osData: OSData) {
     const customerPhone = customer?.phone || 'N/A';
     const technicianName = technician?.name || 'N/A';
 
+    console.log('Extracted values:', { customerName, customerCpf, customerPhone, technicianName });
+
     autoTable(doc, {
         startY: yPos,
         head: [['Informações Principais']],
