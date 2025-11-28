@@ -89,14 +89,14 @@ export async function generateOSPDF(osData: OSData) {
 
     autoTable(doc, {
         startY: yPos,
-        head: [['Informações Principais']],
+        head: [['Informações Principais', '']], // Add empty column to match body columns
         body: [
-            ['Cliente', customerName],
-            ['CPF', customerCpf],
-            ['Telefone', customerPhone],
-            ['Técnico Responsável', technicianName],
-            ['Equipamento', osData.equipment || 'N/A'],
-            ['Número de Série', osData.serial_number || 'N/A'],
+            ['Cliente', String(customerName || '')],
+            ['CPF', String(customerCpf || '')],
+            ['Telefone', String(customerPhone || '')],
+            ['Técnico Responsável', String(technicianName || '')],
+            ['Equipamento', String(osData.equipment || 'N/A')],
+            ['Número de Série', String(osData.serial_number || 'N/A')],
             ['Status', getStatusLabel(osData.status)],
         ],
         theme: 'grid',
