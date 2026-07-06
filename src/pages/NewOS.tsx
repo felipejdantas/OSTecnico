@@ -11,9 +11,12 @@ import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
 import ServiceOrderItemsSection, { type OrderItem } from '../components/ServiceOrderItemsSection';
+import ServiceOrderServicesSection, { type OrderServiceLine } from '../components/ServiceOrderServicesSection';
+import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
+import type { DiscountType } from '../lib/orderFinance';
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow manual OS number
@@ -86,6 +89,11 @@ export default function NewOS() {
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [images, setImages] = useState<File[]>([]);
     const [items, setItems] = useState<OrderItem[]>([]);
+    const [serviceLines, setServiceLines] = useState<OrderServiceLine[]>([]);
+    const [discountType, setDiscountType] = useState<DiscountType>('fixed');
+    const [discountValue, setDiscountValue] = useState(0);
+    const [freight, setFreight] = useState(0);
+    const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const sigPadRef = useRef<SignaturePadRef>(null);
@@ -164,7 +172,11 @@ export default function NewOS() {
                 technician_observation: data.technicianObservation,
                 signature_url: signatureUrl,
                 photos: imageUrls,
-                status: data.status
+                status: data.status,
+                discount_type: discountType,
+                discount_value: discountValue,
+                freight: freight,
+                urgency_fee: urgencyFee,
             };
 
             // Add OS number if provided
@@ -197,6 +209,21 @@ export default function NewOS() {
                 if (itemsError) throw itemsError;
             }
 
+            // Persist services performed
+            if (serviceLines.length > 0) {
+                const { error: servicesError } = await supabase.from('service_order_services').insert(
+                    serviceLines.map(line => ({
+                        service_order_id: createdOrder.id,
+                        service_id: line.service_id,
+                        service_name: line.service_name,
+                        description: line.description,
+                        quantity: line.quantity,
+                        price: line.price,
+                    }))
+                );
+                if (servicesError) throw servicesError;
+            }
+
             alert('Ordem de Serviço criada com sucesso!');
 
             // Reset form
@@ -207,6 +234,11 @@ export default function NewOS() {
             setAccessories({ fonte: false, cabo: false, mochila: false, outro: '' });
             setImages([]);
             setItems([]);
+            setServiceLines([]);
+            setDiscountType('fixed');
+            setDiscountValue(0);
+            setFreight(0);
+            setUrgencyFee(0);
             sigPadRef.current?.clear();
 
         } catch (error: any) {
@@ -339,6 +371,21 @@ export default function NewOS() {
                         </Card>
 
                         <ServiceOrderItemsSection items={items} onChange={setItems} />
+
+                        <ServiceOrderServicesSection lines={serviceLines} onChange={setServiceLines} />
+
+                        <OrderBudgetSummary
+                            itemsTotal={items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)}
+                            servicesTotal={serviceLines.reduce((sum, l) => sum + l.quantity * l.price, 0)}
+                            discountType={discountType}
+                            discountValue={discountValue}
+                            freight={freight}
+                            urgencyFee={urgencyFee}
+                            onDiscountTypeChange={setDiscountType}
+                            onDiscountValueChange={setDiscountValue}
+                            onFreightChange={setFreight}
+                            onUrgencyFeeChange={setUrgencyFee}
+                        />
 
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4">Assinatura do Cliente</h3>

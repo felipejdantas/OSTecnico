@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getStatusConfig } from './orderStatus';
+import { calculateOrderTotal, formatCurrency, type DiscountType } from './orderFinance';
 
 type ChecklistItem = {
     label: string;
@@ -13,6 +14,21 @@ type AccessoriesData = {
     cabo: boolean;
     mochila: boolean;
     outro: string;
+};
+
+type OrderItemRow = { product_name: string; quantity: number; unit_price: number };
+type OrderServiceRow = { service_name: string; description?: string | null; quantity: number; price: number };
+
+type CompanyInfo = {
+    company_name?: string;
+    cnpj?: string | null;
+    address?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    pix_key?: string | null;
+    bank_details?: string | null;
+    warranty_days?: number | null;
+    warranty_text?: string | null;
 };
 
 type OSData = {
@@ -31,6 +47,13 @@ type OSData = {
     status: string;
     client_signed_at?: string;
     photos?: string[];
+    items?: OrderItemRow[];
+    services?: OrderServiceRow[];
+    discount_type?: DiscountType;
+    discount_value?: number;
+    freight?: number;
+    urgency_fee?: number;
+    company?: CompanyInfo;
 };
 
 export async function generateOSPDF(osData: OSData) {
@@ -53,14 +76,23 @@ export async function generateOSPDF(osData: OSData) {
     doc.setFontSize(20);
     doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]); // Blue
     doc.setFont('helvetica', 'bold');
-    doc.text('OSTECNICO', pageWidth - 15, 20, { align: 'right' });
+    doc.text((osData.company?.company_name || 'OSTECNICO').toUpperCase(), pageWidth - 15, 20, { align: 'right' });
 
     doc.setFontSize(12);
     doc.setTextColor(100); // Grey
     doc.setFont('helvetica', 'normal');
     doc.text('Ordem de Serviço', pageWidth - 15, 28, { align: 'right' });
 
-    yPos = 40;
+    let headerY = 34;
+    doc.setFontSize(8);
+    const companyLines = [osData.company?.cnpj && `CNPJ: ${osData.company.cnpj}`, osData.company?.phone, osData.company?.email]
+        .filter(Boolean) as string[];
+    for (const line of companyLines) {
+        doc.text(line, pageWidth - 15, headerY, { align: 'right' });
+        headerY += 4;
+    }
+
+    yPos = Math.max(40, headerY + 6);
 
     // OS Number and Date
     doc.setFontSize(10);
@@ -199,6 +231,128 @@ export async function generateOSPDF(osData: OSData) {
             styles: { fontSize: 8 },
         });
         yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Services performed
+    if (osData.services && osData.services.length > 0) {
+        if (yPos > 240) {
+            doc.addPage();
+            yPos = 20;
+        }
+        autoTable(doc, {
+            startY: yPos,
+            head: [['Serviços Realizados', 'Qtd', 'Preço', 'Total']],
+            body: osData.services.map(s => [
+                s.description ? `${s.service_name}\n${s.description}` : s.service_name,
+                String(s.quantity),
+                formatCurrency(s.price),
+                formatCurrency(s.quantity * s.price),
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: brandColor },
+            styles: { fontSize: 8 },
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Parts used
+    if (osData.items && osData.items.length > 0) {
+        if (yPos > 240) {
+            doc.addPage();
+            yPos = 20;
+        }
+        autoTable(doc, {
+            startY: yPos,
+            head: [['Peças Utilizadas', 'Qtd', 'Preço Unit.', 'Total']],
+            body: osData.items.map(i => [
+                i.product_name,
+                String(i.quantity),
+                formatCurrency(i.unit_price),
+                formatCurrency(i.quantity * i.unit_price),
+            ]),
+            theme: 'striped',
+            headStyles: { fillColor: brandColor },
+            styles: { fontSize: 8 },
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Financial summary
+    const itemsTotal = (osData.items || []).reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
+    const servicesTotal = (osData.services || []).reduce((sum, s) => sum + s.quantity * s.price, 0);
+    const hasFinance = itemsTotal > 0 || servicesTotal > 0 || (osData.freight || 0) > 0 || (osData.urgency_fee || 0) > 0 || (osData.discount_value || 0) > 0;
+
+    if (hasFinance) {
+        const { subtotal, discountAmount, total } = calculateOrderTotal({
+            itemsTotal,
+            servicesTotal,
+            discountType: osData.discount_type || 'fixed',
+            discountValue: osData.discount_value || 0,
+            freight: osData.freight || 0,
+            urgencyFee: osData.urgency_fee || 0,
+        });
+
+        if (yPos > 240) {
+            doc.addPage();
+            yPos = 20;
+        }
+
+        const financeRows: string[][] = [['Subtotal', formatCurrency(subtotal)]];
+        if (discountAmount > 0) financeRows.push(['Desconto', `- ${formatCurrency(discountAmount)}`]);
+        if ((osData.freight || 0) > 0) financeRows.push(['Frete', formatCurrency(osData.freight || 0)]);
+        if ((osData.urgency_fee || 0) > 0) financeRows.push(['Taxa de Urgência', formatCurrency(osData.urgency_fee || 0)]);
+        financeRows.push(['Total', formatCurrency(total)]);
+
+        autoTable(doc, {
+            startY: yPos,
+            head: [['Resumo Financeiro', '']],
+            body: financeRows,
+            theme: 'grid',
+            headStyles: { fillColor: brandColor, textColor: 255 },
+            styles: { fontSize: 9 },
+            didParseCell: (data) => {
+                if (data.row.index === financeRows.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                }
+            },
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Payment & warranty info
+    if (osData.company?.pix_key || osData.company?.bank_details || osData.company?.warranty_text) {
+        if (yPos > 250) {
+            doc.addPage();
+            yPos = 20;
+        }
+        if (osData.company?.pix_key || osData.company?.bank_details) {
+            doc.setFont('helvetica', 'bold');
+            doc.text('Pagamento:', 15, yPos);
+            yPos += 5;
+            doc.setFont('helvetica', 'normal');
+            if (osData.company?.pix_key) {
+                doc.text(`PIX: ${osData.company.pix_key}`, 15, yPos);
+                yPos += 5;
+            }
+            if (osData.company?.bank_details) {
+                const bankLines = doc.splitTextToSize(osData.company.bank_details, pageWidth - 30);
+                doc.text(bankLines, 15, yPos);
+                yPos += bankLines.length * 5;
+            }
+            yPos += 5;
+        }
+        if (osData.company?.warranty_text || osData.company?.warranty_days) {
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Garantia${osData.company?.warranty_days ? ` (${osData.company.warranty_days} dias)` : ''}:`, 15, yPos);
+            yPos += 5;
+            doc.setFont('helvetica', 'normal');
+            if (osData.company?.warranty_text) {
+                const warrantyLines = doc.splitTextToSize(osData.company.warranty_text, pageWidth - 30);
+                doc.text(warrantyLines, 15, yPos);
+                yPos += warrantyLines.length * 5;
+            }
+            yPos += 5;
+        }
     }
 
     // Technician Observation

@@ -168,20 +168,23 @@ export default function Dashboard() {
         if (!user) return;
 
         try {
-            const { data, error } = await supabase
-                .from('service_orders')
-                .select(`
+            const [{ data, error }, { data: itemsData }, { data: servicesData }, { data: companyData }] = await Promise.all([
+                supabase
+                    .from('service_orders')
+                    .select(`
           *,
           customers (name, cpf, phone),
           technicians (name)
         `)
-                .eq('id', orderId)
-                .eq('user_id', user.id)
-                .single();
+                    .eq('id', orderId)
+                    .eq('user_id', user.id)
+                    .single(),
+                supabase.from('service_order_items').select('*').eq('service_order_id', orderId),
+                supabase.from('service_order_services').select('*').eq('service_order_id', orderId),
+                supabase.from('company_settings').select('*').eq('user_id', user.id).maybeSingle(),
+            ]);
 
             if (error) throw error;
-
-            console.log('PDF Data:', data); // Debug log
 
             await generateOSPDF({
                 os_number: data.os_number,
@@ -199,6 +202,13 @@ export default function Dashboard() {
                 status: data.status,
                 client_signed_at: data.client_signed_at,
                 photos: data.photos || [], // Pass photos to PDF generator
+                items: itemsData || [],
+                services: servicesData || [],
+                discount_type: data.discount_type || 'fixed',
+                discount_value: data.discount_value || 0,
+                freight: data.freight || 0,
+                urgency_fee: data.urgency_fee || 0,
+                company: companyData || undefined,
             });
         } catch (error: any) {
             console.error('Error exporting PDF:', error);

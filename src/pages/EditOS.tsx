@@ -13,9 +13,12 @@ import { ImageViewer } from '../components/ImageViewer';
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
 import ServiceOrderItemsSection, { type OrderItem } from '../components/ServiceOrderItemsSection';
+import ServiceOrderServicesSection, { type OrderServiceLine } from '../components/ServiceOrderServicesSection';
+import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
+import type { DiscountType } from '../lib/orderFinance';
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow editing OS number
@@ -64,6 +67,11 @@ export default function EditOS() {
     const [newImages, setNewImages] = useState<File[]>([]);
     const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
     const [items, setItems] = useState<OrderItem[]>([]);
+    const [serviceLines, setServiceLines] = useState<OrderServiceLine[]>([]);
+    const [discountType, setDiscountType] = useState<DiscountType>('fixed');
+    const [discountValue, setDiscountValue] = useState(0);
+    const [freight, setFreight] = useState(0);
+    const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<string>('');
 
@@ -107,6 +115,10 @@ export default function EditOS() {
             setValue('status', os.status);
             setValue('technicianObservation', os.technician_observation || '');
             setOriginalStatus(os.status);
+            setDiscountType((os.discount_type as DiscountType) || 'fixed');
+            setDiscountValue(os.discount_value || 0);
+            setFreight(os.freight || 0);
+            setUrgencyFee(os.urgency_fee || 0);
 
             // Fetch parts/products used on this OS
             const { data: orderItems } = await supabase
@@ -119,6 +131,20 @@ export default function EditOS() {
                 product_name: i.product_name,
                 quantity: i.quantity,
                 unit_price: i.unit_price,
+            })));
+
+            // Fetch services performed on this OS
+            const { data: orderServices } = await supabase
+                .from('service_order_services')
+                .select('*')
+                .eq('service_order_id', id);
+            setServiceLines((orderServices || []).map(s => ({
+                id: s.id,
+                service_id: s.service_id,
+                service_name: s.service_name,
+                description: s.description || '',
+                quantity: s.quantity,
+                price: s.price,
             })));
 
             // Populate Checklists (handle if null/empty by using defaults)
@@ -183,7 +209,11 @@ export default function EditOS() {
                     accessories_received: accessories,
                     technician_observation: data.technicianObservation,
                     photos: allPhotos,
-                    status: data.status
+                    status: data.status,
+                    discount_type: discountType,
+                    discount_value: discountValue,
+                    freight: freight,
+                    urgency_fee: urgencyFee,
                 })
                 .eq('id', id)
                 .eq('user_id', user.id);
@@ -337,6 +367,21 @@ export default function EditOS() {
                         </Card>
 
                         <ServiceOrderItemsSection orderId={id} items={items} onChange={setItems} />
+
+                        <ServiceOrderServicesSection orderId={id} lines={serviceLines} onChange={setServiceLines} />
+
+                        <OrderBudgetSummary
+                            itemsTotal={items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)}
+                            servicesTotal={serviceLines.reduce((sum, l) => sum + l.quantity * l.price, 0)}
+                            discountType={discountType}
+                            discountValue={discountValue}
+                            freight={freight}
+                            urgencyFee={urgencyFee}
+                            onDiscountTypeChange={setDiscountType}
+                            onDiscountValueChange={setDiscountValue}
+                            onFreightChange={setFreight}
+                            onUrgencyFeeChange={setUrgencyFee}
+                        />
                     </div>
 
                     {/* Sidebar Info - Removed Button from here */}

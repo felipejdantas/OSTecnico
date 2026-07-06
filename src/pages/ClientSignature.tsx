@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
 import { ImageViewer } from '../components/ImageViewer';
 import { StatusTimeline } from '../components/StatusTimeline';
+import { PublicBudget } from '../components/PublicBudget';
 import { supabase } from '../lib/supabase';
 import { getStatusConfig } from '../lib/orderStatus';
 
@@ -45,6 +46,7 @@ export default function ClientSignature() {
     const [error, setError] = useState('');
     const [notFound, setNotFound] = useState(false);
     const [justSigned, setJustSigned] = useState(false);
+    const [isApproving, setIsApproving] = useState(false);
     const sigPadRef = useRef<SignaturePadRef>(null);
 
     const fetchOrder = useCallback(async () => {
@@ -160,6 +162,26 @@ export default function ClientSignature() {
         }
     };
 
+    const approveBudget = async () => {
+        if (!token) return;
+        try {
+            setIsApproving(true);
+            const { data: success, error } = await supabase.rpc('approve_public_budget', { p_token: token });
+            if (error) throw error;
+            if (!success) {
+                setError('Não foi possível aprovar o orçamento. Recarregue a página e tente novamente.');
+                return;
+            }
+            await fetchOrder();
+            await fetchHistory();
+        } catch (err: any) {
+            console.error('Error approving budget:', err);
+            setError('Erro ao aprovar orçamento: ' + err.message);
+        } finally {
+            setIsApproving(false);
+        }
+    };
+
     if (notFound) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
@@ -272,6 +294,25 @@ export default function ClientSignature() {
                 <Card>
                     <StatusTimeline currentStatus={os.status} history={history} />
                 </Card>
+
+                {/* Budget */}
+                <PublicBudget
+                    items={os.items || []}
+                    services={os.services || []}
+                    discountType={os.discount_type || 'fixed'}
+                    discountValue={os.discount_value || 0}
+                    freight={os.freight || 0}
+                    urgencyFee={os.urgency_fee || 0}
+                    budgetApprovedAt={os.budget_approved_at}
+                    canApprove={os.status === 'aguardando_aprovacao' && !os.budget_approved_at}
+                    isApproving={isApproving}
+                    onApprove={approveBudget}
+                    pixKey={os.company_pix_key}
+                    bankDetails={os.company_bank_details}
+                    companyPhone={os.company_phone}
+                    warrantyDays={os.company_warranty_days}
+                    warrantyText={os.company_warranty_text}
+                />
 
                 {/* OS Details */}
                 <Card>
