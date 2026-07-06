@@ -61,19 +61,16 @@ export default function ClientSignature() {
         return order;
     }, [token]);
 
-    const fetchHistory = useCallback(async (orderId: string) => {
-        const { data } = await supabase
-            .from('status_history')
-            .select('status, note, created_at')
-            .eq('service_order_id', orderId)
-            .order('created_at', { ascending: true });
+    const fetchHistory = useCallback(async () => {
+        if (!token) return;
+        const { data } = await supabase.rpc('get_public_order_history', { p_token: token });
         setHistory(data || []);
-    }, []);
+    }, [token]);
 
     useEffect(() => {
         (async () => {
             const order = await fetchOrder();
-            if (order) await fetchHistory(order.id);
+            if (order) await fetchHistory();
         })();
     }, [fetchOrder, fetchHistory]);
 
@@ -88,7 +85,7 @@ export default function ClientSignature() {
                 { event: 'INSERT', schema: 'public', table: 'status_history', filter: `service_order_id=eq.${os.id}` },
                 async () => {
                     await fetchOrder();
-                    await fetchHistory(os.id);
+                    await fetchHistory();
                 }
             )
             .subscribe();
@@ -154,7 +151,7 @@ export default function ClientSignature() {
 
             setJustSigned(true);
             await fetchOrder();
-            await fetchHistory(os.id);
+            await fetchHistory();
         } catch (err: any) {
             console.error('Error submitting signature:', err);
             setError('Erro ao salvar assinatura: ' + err.message);
@@ -196,7 +193,7 @@ export default function ClientSignature() {
             <div className="max-w-3xl mx-auto space-y-6">
                 {/* Logo / Header */}
                 <div className="text-center mb-2">
-                    <img src="/logo.jpg" alt="Dantas Info" className="h-16 mx-auto mb-4" />
+                    <img src="/logo-full.jpg" alt="Dantas Info" className="h-16 mx-auto mb-4" />
                     <h1 className="text-2xl sm:text-3xl font-bold text-dark">Acompanhe sua Ordem de Serviço</h1>
                     <p className="text-gray-500 mt-1">OS #{os.os_number} · {os.customer_name}</p>
                 </div>

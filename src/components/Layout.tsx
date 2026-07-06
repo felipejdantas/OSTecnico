@@ -35,7 +35,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="p-4 sm:p-6">
                     <div className="flex items-center gap-3">
                         <img
-                            src="/logo.jpg"
+                            src="/logo-full.jpg"
                             alt="OSTecnico"
                             className="h-10 sm:h-12 w-auto object-contain"
                             onError={(e) => {
