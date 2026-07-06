@@ -6,6 +6,7 @@ import NewOS from './pages/NewOS';
 import EditOS from './pages/EditOS';
 import Customers from './pages/Customers';
 import Technicians from './pages/Technicians';
+import Products from './pages/Products';
 import ClientSignature from './pages/ClientSignature';
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -65,6 +66,7 @@ function App() {
           <Route path="/editar-os/:id" element={<ProtectedRoute><Layout><EditOS /></Layout></ProtectedRoute>} />
           <Route path="/clientes" element={<ProtectedRoute><Layout><Customers /></Layout></ProtectedRoute>} />
           <Route path="/tecnicos" element={<ProtectedRoute><Layout><Technicians /></Layout></ProtectedRoute>} />
+          <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 const customerSchema = z.object({
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
     phone: z.string().min(10, 'Telefone inválido'),
+    email: z.union([z.literal(''), z.string().email('E-mail inválido')]).optional(),
     cpf: z.string().min(11, 'CPF inválido'),
     cep: z.string().min(8, 'CEP inválido'),
     address: z.string().min(5, 'Endereço obrigatório'),
@@ -69,6 +70,7 @@ export default function Customers() {
         setEditingId(customer.id);
         setValue('name', customer.name);
         setValue('phone', customer.phone);
+        setValue('email', customer.email || '');
         setValue('cpf', customer.cpf);
         setValue('cep', customer.cep);
         setValue('address', customer.address);
@@ -165,7 +167,8 @@ export default function Customers() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
                             <Input label="CPF" {...register('cpf')} error={errors.cpf?.message} />
-                            <Input label="Telefone" {...register('phone')} error={errors.phone?.message} />
+                            <Input label="Telefone (WhatsApp)" {...register('phone')} error={errors.phone?.message} />
+                            <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
                             <Input
                                 label="CEP"
                                 {...register('cep')}

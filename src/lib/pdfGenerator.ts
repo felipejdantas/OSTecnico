@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { getStatusConfig } from './orderStatus';
 
 type ChecklistItem = {
     label: string;
@@ -315,16 +316,7 @@ function getStatusIcon(status: string): string {
 }
 
 function getStatusLabel(status: string): string {
-    switch (status) {
-        case 'pendente':
-            return 'Pendente';
-        case 'em_atendimento':
-            return 'Em Atendimento';
-        case 'concluido':
-            return 'Concluído';
-        default:
-            return status;
-    }
+    return getStatusConfig(status).label;
 }
 
 function loadImage(url: string): Promise<{ data: string; width: number; height: number }> {

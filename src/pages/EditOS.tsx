@@ -12,8 +12,10 @@ import { ImageViewer } from '../components/ImageViewer';
 
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
+import ServiceOrderItemsSection, { type OrderItem } from '../components/ServiceOrderItemsSection';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow editing OS number
@@ -22,7 +24,7 @@ const osSchema = z.object({
     equipment: z.string().min(3, 'Equipamento obrigatório'),
     serialNumber: z.string().optional(),
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
-    status: z.enum(['pendente', 'em_atendimento', 'concluido']),
+    status: z.string(),
     technicianObservation: z.string().optional(),
 });
 
@@ -61,7 +63,9 @@ export default function EditOS() {
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [newImages, setNewImages] = useState<File[]>([]);
     const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
+    const [items, setItems] = useState<OrderItem[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [originalStatus, setOriginalStatus] = useState<string>('');
 
     // const sigPadRef = useRef<SignaturePadRef>(null);
     const { register, handleSubmit, formState: { errors }, setValue } = useForm<OSForm>({
@@ -102,6 +106,20 @@ export default function EditOS() {
             setValue('problemDescription', os.problem_description);
             setValue('status', os.status);
             setValue('technicianObservation', os.technician_observation || '');
+            setOriginalStatus(os.status);
+
+            // Fetch parts/products used on this OS
+            const { data: orderItems } = await supabase
+                .from('service_order_items')
+                .select('*')
+                .eq('service_order_id', id);
+            setItems((orderItems || []).map(i => ({
+                id: i.id,
+                product_id: i.product_id,
+                product_name: i.product_name,
+                quantity: i.quantity,
+                unit_price: i.unit_price,
+            })));
 
             // Populate Checklists (handle if null/empty by using defaults)
             setPhysicalCondition(os.physical_condition || PHYSICAL_CONDITION_ITEMS.map(label => ({ label, status: 'na', observation: '' })));
@@ -172,6 +190,11 @@ export default function EditOS() {
 
             if (error) throw error;
 
+            // Log the transition on the timeline the client sees, only when it actually changed
+            if (data.status !== originalStatus) {
+                await supabase.from('status_history').insert([{ service_order_id: id, status: data.status }]);
+            }
+
             alert('Ordem de Serviço atualizada com sucesso!');
             navigate('/');
 
@@ -224,9 +247,10 @@ export default function EditOS() {
                                         {...register('status')}
                                         className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
                                     >
-                                        <option value="pendente">Pendente</option>
-                                        <option value="em_atendimento">Em Atendimento</option>
-                                        <option value="concluido">Concluído</option>
+                                        {STATUS_STEPS.map(status => (
+                                            <option key={status} value={status}>{STATUS_CONFIG[status].label}</option>
+                                        ))}
+                                        <option value="cancelado">{STATUS_CONFIG.cancelado.label}</option>
                                     </select>
                                 </div>
 
@@ -311,6 +335,8 @@ export default function EditOS() {
 
                             <ImageUpload onImagesChange={setNewImages} />
                         </Card>
+
+                        <ServiceOrderItemsSection orderId={id} items={items} onChange={setItems} />
                     </div>
 
                     {/* Sidebar Info - Removed Button from here */}

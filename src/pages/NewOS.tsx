@@ -10,8 +10,10 @@ import { ImageUpload } from '../components/ImageUpload';
 import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
 import ChecklistSection, { type ChecklistItem } from '../components/ChecklistSection';
 import AccessoriesSection, { type AccessoriesData } from '../components/AccessoriesSection';
+import ServiceOrderItemsSection, { type OrderItem } from '../components/ServiceOrderItemsSection';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow manual OS number
@@ -20,7 +22,7 @@ const osSchema = z.object({
     equipment: z.string().min(3, 'Equipamento obrigatório'),
     serialNumber: z.string().optional(),
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
-    status: z.enum(['pendente', 'em_atendimento', 'concluido']),
+    status: z.string(),
     technicianObservation: z.string().optional(),
 });
 
@@ -83,13 +85,14 @@ export default function NewOS() {
     const [customers, setCustomers] = useState<any[]>([]);
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [images, setImages] = useState<File[]>([]);
+    const [items, setItems] = useState<OrderItem[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const sigPadRef = useRef<SignaturePadRef>(null);
     const { register, handleSubmit, formState: { errors }, reset } = useForm<OSForm>({
         resolver: zodResolver(osSchema),
         defaultValues: {
-            status: 'pendente'
+            status: 'recebido'
         }
     });
 
@@ -169,9 +172,30 @@ export default function NewOS() {
                 osData.os_number = parseInt(data.osNumber);
             }
 
-            const { error } = await supabase.from('service_orders').insert([osData]);
+            const { data: createdOrder, error } = await supabase
+                .from('service_orders')
+                .insert([osData])
+                .select('id')
+                .single();
 
             if (error) throw error;
+
+            // Record the initial status on the timeline the client will see
+            await supabase.from('status_history').insert([{ service_order_id: createdOrder.id, status: data.status }]);
+
+            // Persist parts/products used (this also deducts stock via DB trigger)
+            if (items.length > 0) {
+                const { error: itemsError } = await supabase.from('service_order_items').insert(
+                    items.map(item => ({
+                        service_order_id: createdOrder.id,
+                        product_id: item.product_id,
+                        product_name: item.product_name,
+                        quantity: item.quantity,
+                        unit_price: item.unit_price,
+                    }))
+                );
+                if (itemsError) throw itemsError;
+            }
 
             alert('Ordem de Serviço criada com sucesso!');
 
@@ -182,6 +206,7 @@ export default function NewOS() {
             setTechnicalTests(TECHNICAL_TESTS_ITEMS.map(label => ({ label, status: 'na', observation: '' })));
             setAccessories({ fonte: false, cabo: false, mochila: false, outro: '' });
             setImages([]);
+            setItems([]);
             sigPadRef.current?.clear();
 
         } catch (error: any) {
@@ -257,9 +282,9 @@ export default function NewOS() {
                                         {...register('status')}
                                         className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
                                     >
-                                        <option value="pendente">Pendente</option>
-                                        <option value="em_atendimento">Em Atendimento</option>
-                                        <option value="concluido">Concluído</option>
+                                        {STATUS_STEPS.map(status => (
+                                            <option key={status} value={status}>{STATUS_CONFIG[status].label}</option>
+                                        ))}
                                     </select>
                                     {errors.status && <p className="text-xs text-red-500">{errors.status.message}</p>}
                                 </div>
@@ -312,6 +337,8 @@ export default function NewOS() {
                             <h3 className="font-semibold text-base sm:text-lg mb-4">Fotos do Equipamento</h3>
                             <ImageUpload onImagesChange={setImages} />
                         </Card>
+
+                        <ServiceOrderItemsSection items={items} onChange={setItems} />
 
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4">Assinatura do Cliente</h3>

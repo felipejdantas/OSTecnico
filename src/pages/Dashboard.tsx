@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, AlertCircle, CheckCircle, Clock, Star, PenTool, FileDown, Edit, Copy, Trash2 } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -9,14 +9,16 @@ import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
+import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail } from '../lib/shareLinks';
 
 type ServiceOrder = {
     id: string;
     os_number: number;
     created_at: string;
     equipment: string;
-    status: 'pendente' | 'em_atendimento' | 'concluido';
-    customers: { name: string } | null;
+    status: OrderStatus;
+    customers: { name: string; phone: string | null; email: string | null } | null;
     technicians: { name: string } | null;
     is_pinned: boolean;
     signature_token: string;
@@ -48,7 +50,7 @@ export default function Dashboard() {
           is_pinned,
           signature_token,
           client_signed_at,
-          customers (name),
+          customers (name, phone, email),
           technicians (name)
         `)
                 .eq('user_id', user.id)
@@ -204,24 +206,41 @@ export default function Dashboard() {
         }
     };
 
-    const getStatusConfig = (status: string) => {
-        switch (status) {
-            case 'pendente':
-                return { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock };
-            case 'em_atendimento':
-                return { label: 'Em Atendimento', color: 'bg-blue-100 text-blue-700', icon: AlertCircle };
-            case 'concluido':
-                return { label: 'Concluído', color: 'bg-green-100 text-green-700', icon: CheckCircle };
-            default:
-                return { label: 'Pendente', color: 'bg-gray-100 text-gray-700', icon: Clock };
+    const quickChangeStatus = async (orderId: string, newStatus: OrderStatus) => {
+        try {
+            await changeOrderStatus(orderId, newStatus);
+            toast.success('Status atualizado!');
+            fetchOrders();
+        } catch (error: any) {
+            toast.error('Erro ao atualizar status: ' + error.message);
         }
+    };
+
+    const shareViaWhatsApp = (order: ServiceOrder) => {
+        if (!order.customers?.phone) {
+            toast.error('Cliente sem telefone cadastrado');
+            return;
+        }
+        const link = buildTrackingLink(order.signature_token);
+        const message = buildTrackingMessage(order.customers.name, order.os_number, link);
+        openWhatsApp(order.customers.phone, message);
+    };
+
+    const shareViaEmail = (order: ServiceOrder) => {
+        if (!order.customers?.email) {
+            toast.error('Cliente sem e-mail cadastrado');
+            return;
+        }
+        const link = buildTrackingLink(order.signature_token);
+        const message = buildTrackingMessage(order.customers.name, order.os_number, link);
+        openEmail(order.customers.email, order.os_number, message);
     };
 
     const stats = {
         total: orders.length,
-        pendente: orders.filter(o => o.status === 'pendente').length,
-        em_atendimento: orders.filter(o => o.status === 'em_atendimento').length,
-        concluido: orders.filter(o => o.status === 'concluido').length,
+        emAndamento: orders.filter(o => !['pronto', 'entregue', 'cancelado'].includes(o.status)).length,
+        pronto: orders.filter(o => o.status === 'pronto').length,
+        entregue: orders.filter(o => o.status === 'entregue').length,
     };
 
     return (
@@ -248,33 +267,33 @@ export default function Dashboard() {
                     </div>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-yellow-100/50 to-yellow-50/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Pendentes</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-yellow-700">{stats.pendente}</p>
-                        </div>
-                        <Clock className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-600 opacity-50" />
-                    </div>
-                </Card>
-
                 <Card className="bg-gradient-to-br from-blue-100/50 to-blue-50/30">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Em Atendimento</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.em_atendimento}</p>
+                            <p className="text-xs sm:text-sm text-gray-600">Em Andamento</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.emAndamento}</p>
                         </div>
-                        <AlertCircle className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 opacity-50" />
+                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 opacity-50" />
                     </div>
                 </Card>
 
                 <Card className="bg-gradient-to-br from-green-100/50 to-green-50/30">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Concluídos</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-green-700">{stats.concluido}</p>
+                            <p className="text-xs sm:text-sm text-gray-600">Prontos p/ Retirada</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-green-700">{stats.pronto}</p>
                         </div>
-                        <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-green-600 opacity-50" />
+                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-green-600 opacity-50" />
+                    </div>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-emerald-100/50 to-emerald-50/30">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-xs sm:text-sm text-gray-600">Entregues</p>
+                            <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{stats.entregue}</p>
+                        </div>
+                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-600 opacity-50" />
                     </div>
                 </Card>
             </div>
@@ -291,7 +310,6 @@ export default function Dashboard() {
                     <div className="space-y-3">
                         {orders.map((order) => {
                             const statusConfig = getStatusConfig(order.status);
-                            const StatusIcon = statusConfig.icon;
 
                             return (
                                 <div
@@ -307,10 +325,17 @@ export default function Dashboard() {
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-2 flex-wrap">
                                                 <span className="font-bold text-primary-cyan text-lg">OS #{order.os_number}</span>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusConfig.color} flex items-center gap-1`}>
-                                                    <StatusIcon className="w-3 h-3" />
-                                                    {statusConfig.label}
-                                                </span>
+                                                <select
+                                                    value={order.status}
+                                                    onChange={(e) => quickChangeStatus(order.id, e.target.value as OrderStatus)}
+                                                    className={`px-2 py-0.5 rounded-full text-xs font-medium border-none cursor-pointer ${statusConfig.color}`}
+                                                    title="Alterar status"
+                                                >
+                                                    {STATUS_STEPS.map(s => (
+                                                        <option key={s} value={s}>{STATUS_CONFIG[s].shortLabel}</option>
+                                                    ))}
+                                                    <option value="cancelado">{STATUS_CONFIG.cancelado.shortLabel}</option>
+                                                </select>
                                                 {order.is_pinned && (
                                                     <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                                 )}
@@ -353,11 +378,31 @@ export default function Dashboard() {
                                                 size="sm"
                                                 onClick={() => copySignatureLink(order.signature_token)}
                                                 className="touch-manipulation min-w-[40px]"
-                                                title="Assinar OS"
+                                                title="Copiar link do cliente"
                                             >
                                                 <PenTool className="w-4 h-4" />
                                             </Button>
                                         )}
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => shareViaWhatsApp(order)}
+                                            className="touch-manipulation min-w-[40px] text-green-600 border-green-200 hover:bg-green-50"
+                                            title="Enviar link por WhatsApp"
+                                        >
+                                            <MessageCircle className="w-4 h-4" />
+                                        </Button>
+
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => shareViaEmail(order)}
+                                            className="touch-manipulation min-w-[40px]"
+                                            title="Enviar link por e-mail"
+                                        >
+                                            <Mail className="w-4 h-4" />
+                                        </Button>
 
                                         <Button
                                             variant="outline"
