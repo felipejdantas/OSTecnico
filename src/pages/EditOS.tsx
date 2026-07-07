@@ -29,6 +29,9 @@ const osSchema = z.object({
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
     status: z.string(),
     technicianObservation: z.string().optional(),
+    entryDate: z.string().min(1, 'Informe a data de entrada'),
+    estimatedCompletionDate: z.string().optional(),
+    completedDate: z.string().optional(),
 });
 
 type OSForm = z.infer<typeof osSchema>;
@@ -114,6 +117,9 @@ export default function EditOS() {
             setValue('problemDescription', os.problem_description);
             setValue('status', os.status);
             setValue('technicianObservation', os.technician_observation || '');
+            setValue('entryDate', os.entry_date || '');
+            setValue('estimatedCompletionDate', os.estimated_completion_date || '');
+            setValue('completedDate', os.completed_date || '');
             setOriginalStatus(os.status);
             setDiscountType((os.discount_type as DiscountType) || 'fixed');
             setDiscountValue(os.discount_value || 0);
@@ -211,6 +217,9 @@ export default function EditOS() {
                     technician_observation: data.technicianObservation,
                     photos: allPhotos,
                     status: data.status,
+                    entry_date: data.entryDate,
+                    estimated_completion_date: data.estimatedCompletionDate || null,
+                    completed_date: data.completedDate || null,
                     discount_type: discountType,
                     discount_value: discountValue,
                     freight: freight,
@@ -313,6 +322,10 @@ export default function EditOS() {
 
                                 <Input label="Equipamento / Modelo" {...register('equipment')} error={errors.equipment?.message} />
                                 <Input label="Número de Série" {...register('serialNumber')} />
+
+                                <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />
+                                <Input label="Previsão de Conclusão" type="date" {...register('estimatedCompletionDate')} />
+                                <Input label="Data de Finalização" type="date" {...register('completedDate')} />
 
                                 <div className="sm:col-span-2">
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">Descrição do Problema</label>

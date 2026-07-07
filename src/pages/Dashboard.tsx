@@ -173,7 +173,7 @@ export default function Dashboard() {
                     .from('service_orders')
                     .select(`
           *,
-          customers (name, cpf, phone, email, address, number),
+          customers (name, cpf, phone, email, address, number, cnpj, company_name, trade_name, state_registration, municipal_registration),
           technicians (name)
         `)
                     .eq('id', orderId)
@@ -189,6 +189,9 @@ export default function Dashboard() {
             await generateOSPDF({
                 os_number: data.os_number,
                 created_at: data.created_at,
+                entry_date: data.entry_date,
+                estimated_completion_date: data.estimated_completion_date,
+                completed_date: data.completed_date,
                 customer: data.customers, // This should be an object {name, cpf, phone}
                 technician: data.technicians, // This should be an object {name}
                 equipment: data.equipment,

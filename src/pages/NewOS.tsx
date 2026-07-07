@@ -27,6 +27,8 @@ const osSchema = z.object({
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
     status: z.string(),
     technicianObservation: z.string().optional(),
+    entryDate: z.string().min(1, 'Informe a data de entrada'),
+    estimatedCompletionDate: z.string().optional(),
 });
 
 type OSForm = z.infer<typeof osSchema>;
@@ -100,7 +102,8 @@ export default function NewOS() {
     const { register, handleSubmit, formState: { errors }, reset } = useForm<OSForm>({
         resolver: zodResolver(osSchema),
         defaultValues: {
-            status: 'recebido'
+            status: 'recebido',
+            entryDate: new Date().toISOString().slice(0, 10),
         }
     });
 
@@ -175,6 +178,8 @@ export default function NewOS() {
                 signature_url: signatureUrl,
                 photos,
                 status: data.status,
+                entry_date: data.entryDate,
+                estimated_completion_date: data.estimatedCompletionDate || null,
                 discount_type: discountType,
                 discount_value: discountValue,
                 freight: freight,
@@ -325,6 +330,9 @@ export default function NewOS() {
 
                                 <Input label="Equipamento / Modelo" {...register('equipment')} error={errors.equipment?.message} />
                                 <Input label="Número de Série" {...register('serialNumber')} />
+
+                                <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />
+                                <Input label="Previsão de Conclusão" type="date" {...register('estimatedCompletionDate')} />
 
                                 <div className="sm:col-span-2">
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">Descrição do Problema</label>

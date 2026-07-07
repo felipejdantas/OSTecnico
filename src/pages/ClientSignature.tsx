@@ -340,13 +340,24 @@ export default function ClientSignature() {
                     <div className="mb-4">
                         <h3 className="font-bold text-primary-cyan text-xl">OS #{os.os_number}</h3>
                         <p className="text-gray-600 text-sm">{os.equipment}{os.serial_number ? ` · Série: ${os.serial_number}` : ''}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
+                            {os.entry_date && <span>Entrada: {new Date(os.entry_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                            {os.estimated_completion_date && <span>Previsão: {new Date(os.estimated_completion_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                            {os.completed_date && <span className="text-green-700 font-medium">Concluído em: {new Date(os.completed_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                        </div>
                     </div>
 
                     {/* Client */}
                     <div className="mb-6 pb-4 border-b border-gray-100">
-                        <h3 className="font-semibold text-gray-900 text-sm mb-1">Cliente: {os.customer_name}</h3>
+                        <h3 className="font-semibold text-gray-900 text-sm mb-1">
+                            Cliente: {os.customer_trade_name || os.customer_company_name || os.customer_name}
+                        </h3>
                         <div className="text-xs text-gray-600 space-y-0.5">
-                            {os.customer_cpf && <p>CPF/CNPJ: {os.customer_cpf}</p>}
+                            {os.customer_company_name && os.customer_trade_name && <p>Razão Social: {os.customer_company_name}</p>}
+                            {os.customer_cnpj && <p>CNPJ: {os.customer_cnpj}</p>}
+                            {os.customer_state_registration && <p>Inscrição Estadual: {os.customer_state_registration}</p>}
+                            {os.customer_municipal_registration && <p>Inscrição Municipal: {os.customer_municipal_registration}</p>}
+                            {os.customer_cpf && <p>CPF: {os.customer_cpf}</p>}
                             {os.customer_address && (
                                 <p className="flex items-center gap-1">
                                     <MapPin className="w-3 h-3 flex-shrink-0" />

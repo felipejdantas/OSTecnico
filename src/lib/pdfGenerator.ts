@@ -40,11 +40,19 @@ type CustomerInfo = {
     email?: string;
     address?: string;
     number?: string;
+    cnpj?: string;
+    company_name?: string;
+    trade_name?: string;
+    state_registration?: string;
+    municipal_registration?: string;
 } | any;
 
 type OSData = {
     os_number: number;
     created_at: string;
+    entry_date?: string | null;
+    estimated_completion_date?: string | null;
+    completed_date?: string | null;
     customer: CustomerInfo;
     technician: { name: string } | any;
     equipment: string;
@@ -147,19 +155,28 @@ export async function generateOSPDF(osData: OSData) {
     // ---- Client block / Equipment block (two columns) ----
     const colWidth = (pageWidth - 30 - 10) / 2;
     const clientLines = [
-        `Cliente: ${customer?.name || 'N/A'}`,
-        customer?.cpf && `CPF/CNPJ: ${customer.cpf}`,
+        `Cliente: ${customer?.trade_name || customer?.company_name || customer?.name || 'N/A'}`,
+        customer?.company_name && customer?.trade_name && `Razão Social: ${customer.company_name}`,
+        customer?.cnpj && `CNPJ: ${customer.cnpj}`,
+        customer?.state_registration && `Inscrição Estadual: ${customer.state_registration}`,
+        customer?.municipal_registration && `Inscrição Municipal: ${customer.municipal_registration}`,
+        customer?.cpf && `CPF: ${customer.cpf}`,
         customer?.phone && `Telefone: ${customer.phone}`,
         customer?.email && `E-mail: ${customer.email}`,
         customer?.address && `Endereço: ${customer.address}${customer?.number ? `, ${customer.number}` : ''}`,
     ].filter(Boolean) as string[];
+
+    const formatDate = (d?: string | null) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : null;
 
     const equipmentLines = [
         `Equipamento: ${osData.equipment || 'N/A'}`,
         `Número de Série: ${osData.serial_number || 'N/A'}`,
         `Técnico Responsável: ${technician?.name || 'N/A'}`,
         `Status: ${getStatusLabel(osData.status)}`,
-    ];
+        osData.entry_date && `Data de Entrada: ${formatDate(osData.entry_date)}`,
+        osData.estimated_completion_date && `Previsão de Conclusão: ${formatDate(osData.estimated_completion_date)}`,
+        osData.completed_date && `Concluído em: ${formatDate(osData.completed_date)}`,
+    ].filter(Boolean) as string[];
 
     const clientEndY = drawInfoBlock(doc, 15, yPos, colWidth, clientLines);
     const equipEndY = drawInfoBlock(doc, 15 + colWidth + 10, yPos, colWidth, equipmentLines);

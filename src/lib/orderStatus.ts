@@ -98,9 +98,24 @@ export function getStatusConfig(status: string): StatusConfig {
  * produces a consistent timeline the client can follow on their tracking link.
  */
 export async function changeOrderStatus(orderId: string, newStatus: OrderStatus, note?: string) {
+    const updates: { status: OrderStatus; completed_date?: string } = { status: newStatus };
+
+    // Auto-fill the completion date the first time an order reaches "pronto"/"entregue",
+    // without clobbering a date the technician may have already set manually.
+    if (newStatus === 'pronto' || newStatus === 'entregue') {
+        const { data: existing } = await supabase
+            .from('service_orders')
+            .select('completed_date')
+            .eq('id', orderId)
+            .single();
+        if (!existing?.completed_date) {
+            updates.completed_date = new Date().toISOString().slice(0, 10);
+        }
+    }
+
     const { error: updateError } = await supabase
         .from('service_orders')
-        .update({ status: newStatus })
+        .update(updates)
         .eq('id', orderId);
 
     if (updateError) throw updateError;

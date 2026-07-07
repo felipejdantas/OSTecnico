@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, MapPin, Phone, User, Edit2, Search, Trash2 } from 'lucide-react';
+import { Plus, MapPin, Phone, User, Edit2, Search, Trash2, Building2, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -21,6 +21,11 @@ const customerSchema = z.object({
     address: z.string().min(5, 'Endereço obrigatório'),
     number: z.string().min(1, 'Número obrigatório'),
     complement: z.string().optional(),
+    cnpj: z.string().optional(),
+    companyName: z.string().optional(),
+    tradeName: z.string().optional(),
+    stateRegistration: z.string().optional(),
+    municipalRegistration: z.string().optional(),
 });
 
 type CustomerForm = z.infer<typeof customerSchema>;
@@ -52,6 +57,8 @@ export default function Customers() {
         else setCustomers(data || []);
     };
 
+    const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
+
     const handleCepBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
         const cep = e.target.value.replace(/\D/g, '');
         if (cep.length === 8) {
@@ -66,6 +73,37 @@ export default function Customers() {
         }
     };
 
+    const handleCnpjSearch = async (cnpjValue: string) => {
+        const cnpj = cnpjValue.replace(/\D/g, '');
+        if (cnpj.length !== 14) {
+            toast.error('CNPJ inválido. Deve ter 14 dígitos.');
+            return;
+        }
+
+        setIsSearchingCnpj(true);
+        try {
+            const response = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+            const data = response.data;
+
+            setValue('companyName', data.razao_social || '');
+            setValue('tradeName', data.nome_fantasia || '');
+            if (data.ddd_telefone_1) setValue('phone', data.ddd_telefone_1);
+            if (data.email) setValue('email', data.email);
+            if (data.cep) setValue('cep', data.cep);
+            if (data.logradouro) {
+                setValue('address', `${data.logradouro}, ${data.bairro} - ${data.municipio}/${data.uf}`);
+            }
+            if (data.numero) setValue('number', data.numero);
+
+            toast.success('Dados da empresa encontrados na Receita Federal!');
+        } catch (error) {
+            console.error('Erro ao buscar CNPJ', error);
+            toast.error('Não foi possível encontrar esse CNPJ. Preencha os dados da empresa manualmente.');
+        } finally {
+            setIsSearchingCnpj(false);
+        }
+    };
+
     const handleEdit = (customer: any) => {
         setEditingId(customer.id);
         setValue('name', customer.name);
@@ -76,6 +114,11 @@ export default function Customers() {
         setValue('address', customer.address);
         setValue('number', customer.number);
         setValue('complement', customer.complement);
+        setValue('cnpj', customer.cnpj || '');
+        setValue('companyName', customer.company_name || '');
+        setValue('tradeName', customer.trade_name || '');
+        setValue('stateRegistration', customer.state_registration || '');
+        setValue('municipalRegistration', customer.municipal_registration || '');
         setIsFormOpen(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -89,12 +132,22 @@ export default function Customers() {
     const onSubmit = async (data: CustomerForm) => {
         if (!user) return;
 
+        const { cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
+        const row = {
+            ...rest,
+            cnpj,
+            company_name: companyName,
+            trade_name: tradeName,
+            state_registration: stateRegistration,
+            municipal_registration: municipalRegistration,
+        };
+
         try {
             if (editingId) {
                 // Update existing customer
                 const { error } = await supabase
                     .from('customers')
-                    .update(data)
+                    .update(row)
                     .eq('id', editingId)
                     .eq('user_id', user.id);
 
@@ -104,7 +157,7 @@ export default function Customers() {
                 // Create new customer
                 const { error } = await supabase
                     .from('customers')
-                    .insert([{ ...data, user_id: user.id }]);
+                    .insert([{ ...row, user_id: user.id }]);
 
                 if (error) throw error;
                 toast.success('Cliente salvo com sucesso!');
@@ -181,6 +234,39 @@ export default function Customers() {
                             <Input label="Número" {...register('number')} error={errors.number?.message} />
                             <Input label="Complemento" {...register('complement')} error={errors.complement?.message} />
                         </div>
+
+                        <div className="pt-2 border-t border-gray-100">
+                            <div className="flex items-center gap-2 mb-3 pt-4">
+                                <Building2 className="w-4 h-4 text-primary-cyan" />
+                                <h4 className="text-sm font-semibold text-gray-700">Dados da Empresa (opcional)</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="md:col-span-2 flex gap-2 items-end">
+                                    <div className="flex-1">
+                                        <Input label="CNPJ" {...register('cnpj')} placeholder="00.000.000/0000-00" />
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isSearchingCnpj}
+                                        onClick={(e) => {
+                                            const form = (e.target as HTMLElement).closest('form');
+                                            const cnpjInput = form?.querySelector<HTMLInputElement>('input[name="cnpj"]');
+                                            if (cnpjInput?.value) handleCnpjSearch(cnpjInput.value);
+                                        }}
+                                    >
+                                        {isSearchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar CNPJ'}
+                                    </Button>
+                                </div>
+                                <Input label="Razão Social" {...register('companyName')} />
+                                <Input label="Nome Fantasia" {...register('tradeName')} />
+                                <Input label="Inscrição Estadual" {...register('stateRegistration')} placeholder="Preencha manualmente" />
+                                <Input label="Inscrição Municipal" {...register('municipalRegistration')} placeholder="Preencha manualmente" />
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">
+                                A busca preenche razão social, nome fantasia e endereço via Receita Federal. Inscrição estadual e municipal não têm API pública unificada — preencha manualmente.
+                            </p>
+                        </div>
                         <div className="flex justify-end gap-3 pt-4">
                             <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
                             <Button type="submit">{editingId ? 'Salvar Alterações' : 'Salvar Cliente'}</Button>
@@ -229,7 +315,7 @@ export default function Customers() {
                                                 </div>
                                                 <div>
                                                     <div className="font-semibold">{customer.name}</div>
-                                                    <div className="text-xs text-gray-500">{customer.cpf}</div>
+                                                    <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -287,7 +373,7 @@ export default function Customers() {
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="font-semibold text-gray-900 truncate">{customer.name}</div>
-                                            <div className="text-xs text-gray-500">{customer.cpf}</div>
+                                            <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>
                                         </div>
                                     </div>
                                     <DropdownMenu
