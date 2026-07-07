@@ -119,7 +119,7 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange }
                     <select
                         value={selectedServiceId}
                         onChange={(e) => handleSelectService(e.target.value)}
-                        className="flex-1 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                        className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
                     >
                         <option value="">Selecione um serviço...</option>
                         {catalog.map(s => (
