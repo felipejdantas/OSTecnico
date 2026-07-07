@@ -13,6 +13,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const customerSchema = z.object({
+    personType: z.enum(['fisica', 'juridica']),
     name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
     phone: z.string().min(10, 'Telefone inválido'),
     email: z.union([z.literal(''), z.string().email('E-mail inválido')]).optional(),
@@ -36,9 +37,11 @@ export default function Customers() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [customers, setCustomers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<CustomerForm>({
-        resolver: zodResolver(customerSchema)
+    const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<CustomerForm>({
+        resolver: zodResolver(customerSchema),
+        defaultValues: { personType: 'fisica' },
     });
+    const personType = watch('personType');
 
     useEffect(() => {
         if (user) fetchCustomers();
@@ -112,6 +115,7 @@ export default function Customers() {
 
     const handleEdit = (customer: any) => {
         setEditingId(customer.id);
+        setValue('personType', customer.person_type === 'juridica' ? 'juridica' : 'fisica');
         setValue('name', customer.name);
         setValue('phone', customer.phone);
         setValue('email', customer.email || '');
@@ -132,20 +136,22 @@ export default function Customers() {
     const handleCancel = () => {
         setIsFormOpen(false);
         setEditingId(null);
-        reset();
+        reset({ personType: 'fisica' });
     };
 
     const onSubmit = async (data: CustomerForm) => {
         if (!user) return;
 
-        const { cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
+        const { personType, cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
+        const isJuridica = personType === 'juridica';
         const row = {
             ...rest,
-            cnpj,
-            company_name: companyName,
-            trade_name: tradeName,
-            state_registration: stateRegistration,
-            municipal_registration: municipalRegistration,
+            person_type: personType,
+            cnpj: isJuridica ? cnpj : null,
+            company_name: isJuridica ? companyName : null,
+            trade_name: isJuridica ? tradeName : null,
+            state_registration: isJuridica ? stateRegistration : null,
+            municipal_registration: isJuridica ? municipalRegistration : null,
         };
 
         try {
@@ -223,9 +229,26 @@ export default function Customers() {
                         </h3>
                     </div>
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setValue('personType', 'fisica')}
+                                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'fisica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                Pessoa Física
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setValue('personType', 'juridica')}
+                                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'juridica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                Pessoa Jurídica
+                            </button>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
-                            <Input label="CPF" {...register('cpf')} error={errors.cpf?.message} />
+                            <Input label={personType === 'juridica' ? 'CPF do Responsável' : 'CPF'} {...register('cpf')} error={errors.cpf?.message} />
                             <Input label="Telefone (WhatsApp)" {...register('phone')} error={errors.phone?.message} />
                             <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
                             <Input
@@ -241,38 +264,40 @@ export default function Customers() {
                             <Input label="Complemento" {...register('complement')} error={errors.complement?.message} />
                         </div>
 
-                        <div className="pt-2 border-t border-gray-100">
-                            <div className="flex items-center gap-2 mb-3 pt-4">
-                                <Building2 className="w-4 h-4 text-primary-cyan" />
-                                <h4 className="text-sm font-semibold text-gray-700">Dados da Empresa (opcional)</h4>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="md:col-span-2 flex gap-2 items-end">
-                                    <div className="flex-1">
-                                        <Input label="CNPJ" {...register('cnpj')} placeholder="00.000.000/0000-00" />
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        disabled={isSearchingCnpj}
-                                        onClick={(e) => {
-                                            const form = (e.target as HTMLElement).closest('form');
-                                            const cnpjInput = form?.querySelector<HTMLInputElement>('input[name="cnpj"]');
-                                            if (cnpjInput?.value) handleCnpjSearch(cnpjInput.value);
-                                        }}
-                                    >
-                                        {isSearchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar CNPJ'}
-                                    </Button>
+                        {personType === 'juridica' && (
+                            <div className="pt-2 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="flex items-center gap-2 mb-3 pt-4">
+                                    <Building2 className="w-4 h-4 text-primary-cyan" />
+                                    <h4 className="text-sm font-semibold text-gray-700">Dados da Empresa</h4>
                                 </div>
-                                <Input label="Razão Social" {...register('companyName')} />
-                                <Input label="Nome Fantasia" {...register('tradeName')} />
-                                <Input label="Inscrição Estadual" {...register('stateRegistration')} placeholder="Preencha manualmente" />
-                                <Input label="Inscrição Municipal" {...register('municipalRegistration')} placeholder="Preencha manualmente" />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2 flex gap-2 items-end">
+                                        <div className="flex-1">
+                                            <Input label="CNPJ" {...register('cnpj')} placeholder="00.000.000/0000-00" />
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={isSearchingCnpj}
+                                            onClick={(e) => {
+                                                const form = (e.target as HTMLElement).closest('form');
+                                                const cnpjInput = form?.querySelector<HTMLInputElement>('input[name="cnpj"]');
+                                                if (cnpjInput?.value) handleCnpjSearch(cnpjInput.value);
+                                            }}
+                                        >
+                                            {isSearchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar CNPJ'}
+                                        </Button>
+                                    </div>
+                                    <Input label="Razão Social" {...register('companyName')} />
+                                    <Input label="Nome Fantasia" {...register('tradeName')} />
+                                    <Input label="Inscrição Estadual" {...register('stateRegistration')} placeholder="Preencha manualmente" />
+                                    <Input label="Inscrição Municipal" {...register('municipalRegistration')} placeholder="Preencha manualmente" />
+                                </div>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    A busca preenche razão social, nome fantasia e endereço via Receita Federal. Inscrição estadual e municipal não têm API pública unificada — preencha manualmente.
+                                </p>
                             </div>
-                            <p className="text-xs text-gray-400 mt-2">
-                                A busca preenche razão social, nome fantasia e endereço via Receita Federal. Inscrição estadual e municipal não têm API pública unificada — preencha manualmente.
-                            </p>
-                        </div>
+                        )}
                         <div className="flex justify-end gap-3 pt-4">
                             <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
                             <Button type="submit">{editingId ? 'Salvar Alterações' : 'Salvar Cliente'}</Button>
