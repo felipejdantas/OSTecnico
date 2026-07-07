@@ -87,15 +87,21 @@ export default function Customers() {
 
             setValue('companyName', data.razao_social || '');
             setValue('tradeName', data.nome_fantasia || '');
-            if (data.ddd_telefone_1) setValue('phone', data.ddd_telefone_1);
+
+            const phones = [data.ddd_telefone_1, data.ddd_telefone_2].filter(Boolean).join(' / ');
+            if (phones) setValue('phone', phones);
             if (data.email) setValue('email', data.email);
             if (data.cep) setValue('cep', data.cep);
             if (data.logradouro) {
                 setValue('address', `${data.logradouro}, ${data.bairro} - ${data.municipio}/${data.uf}`);
             }
             if (data.numero) setValue('number', data.numero);
+            if (data.complemento) setValue('complement', data.complemento);
 
             toast.success('Dados da empresa encontrados na Receita Federal!');
+            if (data.descricao_situacao_cadastral && data.descricao_situacao_cadastral !== 'ATIVA') {
+                toast.error(`Atenção: situação cadastral deste CNPJ é "${data.descricao_situacao_cadastral}".`, { duration: 6000 });
+            }
         } catch (error) {
             console.error('Erro ao buscar CNPJ', error);
             toast.error('Não foi possível encontrar esse CNPJ. Preencha os dados da empresa manualmente.');

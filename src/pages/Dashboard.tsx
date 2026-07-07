@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -29,7 +29,14 @@ export default function Dashboard() {
     const { user } = useAuth();
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isListOpen, setIsListOpen] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<'todos' | 'em_andamento' | OrderStatus>('todos');
     const navigate = useNavigate();
+
+    const openList = (filter: 'todos' | 'em_andamento' | OrderStatus) => {
+        setStatusFilter(filter);
+        setIsListOpen(true);
+    };
 
     useEffect(() => {
         if (user) fetchOrders();
@@ -257,6 +264,14 @@ export default function Dashboard() {
         entregue: orders.filter(o => o.status === 'entregue').length,
     };
 
+    const filteredOrders = orders.filter(o => {
+        if (statusFilter === 'todos') return true;
+        if (statusFilter === 'em_andamento') return !['pronto', 'entregue', 'cancelado'].includes(o.status);
+        return o.status === statusFilter;
+    });
+
+    const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
+
     return (
         <div className="space-y-4 sm:space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -271,7 +286,10 @@ export default function Dashboard() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
+                <Card
+                    className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openList('todos')}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs sm:text-sm text-gray-600">Total de OS</p>
@@ -281,7 +299,10 @@ export default function Dashboard() {
                     </div>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-blue-100/50 to-blue-50/30">
+                <Card
+                    className="bg-gradient-to-br from-blue-100/50 to-blue-50/30 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openList('em_andamento')}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs sm:text-sm text-gray-600">Em Andamento</p>
@@ -291,7 +312,10 @@ export default function Dashboard() {
                     </div>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-green-100/50 to-green-50/30">
+                <Card
+                    className="bg-gradient-to-br from-green-100/50 to-green-50/30 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openList('pronto')}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs sm:text-sm text-gray-600">Prontos p/ Retirada</p>
@@ -301,7 +325,10 @@ export default function Dashboard() {
                     </div>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-emerald-100/50 to-emerald-50/30">
+                <Card
+                    className="bg-gradient-to-br from-emerald-100/50 to-emerald-50/30 cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openList('entregue')}
+                >
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-xs sm:text-sm text-gray-600">Entregues</p>
@@ -314,15 +341,50 @@ export default function Dashboard() {
 
             {/* Orders List */}
             <Card>
-                <h3 className="font-semibold text-lg mb-4">Ordens de Serviço Recentes</h3>
+                <button
+                    type="button"
+                    onClick={() => setIsListOpen(!isListOpen)}
+                    className="flex items-center justify-between w-full"
+                >
+                    <h3 className="font-semibold text-lg">Ordens de Serviço {isListOpen ? `(${filteredOrders.length})` : ''}</h3>
+                    {isListOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                </button>
 
-                {loading ? (
-                    <p className="text-center text-gray-500 py-8">Carregando...</p>
-                ) : orders.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">Nenhuma ordem de serviço cadastrada</p>
+                {!isListOpen ? (
+                    <p className="text-sm text-gray-400 mt-2">Clique para ver as ordens de serviço, ou clique em um card acima para filtrar por status.</p>
                 ) : (
+                    <>
+                        {/* Status filter chips */}
+                        <div className="flex flex-wrap gap-2 mt-4 mb-4">
+                            <button
+                                type="button"
+                                onClick={() => setStatusFilter('todos')}
+                                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === 'todos' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            >
+                                Todos ({orders.length})
+                            </button>
+                            {allStatuses.map(s => {
+                                const count = orders.filter(o => o.status === s).length;
+                                return (
+                                    <button
+                                        key={s}
+                                        type="button"
+                                        onClick={() => setStatusFilter(s)}
+                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                        {STATUS_CONFIG[s].shortLabel} ({count})
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {loading ? (
+                            <p className="text-center text-gray-500 py-8">Carregando...</p>
+                        ) : filteredOrders.length === 0 ? (
+                            <p className="text-center text-gray-500 py-8">Nenhuma ordem de serviço encontrada</p>
+                        ) : (
                     <div className="space-y-3">
-                        {orders.map((order) => {
+                        {filteredOrders.map((order) => {
                             const statusConfig = getStatusConfig(order.status);
 
                             return (
@@ -454,6 +516,8 @@ export default function Dashboard() {
                             );
                         })}
                     </div>
+                        )}
+                    </>
                 )}
             </Card>
 

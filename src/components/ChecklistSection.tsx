@@ -1,4 +1,5 @@
-import { Check, X, HelpCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Check, X, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card } from './ui/Card';
 import { cn } from './ui/Button';
 
@@ -17,6 +18,8 @@ type ChecklistSectionProps = {
 };
 
 export default function ChecklistSection({ title, items, onUpdate }: ChecklistSectionProps) {
+    const [isOpen, setIsOpen] = useState(false);
+
     const updateItem = (index: number, field: 'status' | 'observation', value: string) => {
         const newItems = [...items];
         if (field === 'status') {
@@ -27,10 +30,27 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
         onUpdate(newItems);
     };
 
+    const defectCount = items.filter(i => i.status === 'defect').length;
+    const checkedCount = items.filter(i => i.status !== 'na').length;
+
     return (
         <Card className="mb-4">
-            <h3 className="font-semibold text-lg mb-4 text-primary-green">{title}</h3>
-            <div className="space-y-3">
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="flex items-center justify-between w-full"
+            >
+                <h3 className="font-semibold text-lg text-primary-green">{title}</h3>
+                <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">
+                        {checkedCount}/{items.length} preenchidos
+                        {defectCount > 0 && <span className="text-red-500 font-medium"> · {defectCount} defeito{defectCount > 1 ? 's' : ''}</span>}
+                    </span>
+                    {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                </div>
+            </button>
+            {isOpen && (
+            <div className="space-y-3 mt-4">
                 {items.map((item, index) => (
                     <div key={index} className="border-b border-gray-100 pb-3 last:border-0">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
@@ -91,6 +111,7 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
                     </div>
                 ))}
             </div>
+            )}
         </Card>
     );
 }

@@ -8,6 +8,7 @@ import Customers from './pages/Customers';
 import Technicians from './pages/Technicians';
 import Products from './pages/Products';
 import Services from './pages/Services';
+import Billing from './pages/Billing';
 import CompanySettings from './pages/CompanySettings';
 import ClientSignature from './pages/ClientSignature';
 import Login from './pages/Login';
@@ -70,6 +71,7 @@ function App() {
           <Route path="/tecnicos" element={<ProtectedRoute><Layout><Technicians /></Layout></ProtectedRoute>} />
           <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
+          <Route path="/faturamento" element={<ProtectedRoute><Layout><Billing /></Layout></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute><Layout><CompanySettings /></Layout></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
