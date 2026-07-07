@@ -8,6 +8,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
+import { ImageUpload } from '../components/ImageUpload';
+import { ImageViewer } from '../components/ImageViewer';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -25,7 +27,7 @@ const productSchema = z.object({
 type ProductFormInput = z.input<typeof productSchema>;
 type ProductForm = z.output<typeof productSchema>;
 
-type Product = ProductForm & { id: string };
+type Product = ProductForm & { id: string; photos?: string[] };
 
 export default function Products() {
     const { user } = useAuth();
@@ -33,6 +35,8 @@ export default function Products() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [newImages, setNewImages] = useState<File[]>([]);
+    const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<ProductFormInput, any, ProductForm>({
         resolver: zodResolver(productSchema),
         defaultValues: { unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0 },
@@ -65,6 +69,7 @@ export default function Products() {
         setValue('sale_price', product.sale_price);
         setValue('stock_quantity', product.stock_quantity);
         setValue('min_stock_alert', product.min_stock_alert);
+        setExistingPhotos(product.photos || []);
         setIsFormOpen(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -72,17 +77,33 @@ export default function Products() {
     const handleCancel = () => {
         setIsFormOpen(false);
         setEditingId(null);
+        setNewImages([]);
+        setExistingPhotos([]);
         reset({ unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0 });
+    };
+
+    const uploadFile = async (file: File) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage.from('os-images').upload(fileName, file);
+        if (uploadError) throw uploadError;
+
+        const { data } = supabase.storage.from('os-images').getPublicUrl(fileName);
+        return data.publicUrl;
     };
 
     const onSubmit = async (data: ProductForm) => {
         if (!user) return;
 
         try {
+            const newPhotoUrls = await Promise.all(newImages.map(uploadFile));
+            const photos = [...existingPhotos, ...newPhotoUrls];
+
             if (editingId) {
                 const { error } = await supabase
                     .from('products')
-                    .update(data)
+                    .update({ ...data, photos })
                     .eq('id', editingId)
                     .eq('user_id', user.id);
 
@@ -91,7 +112,7 @@ export default function Products() {
             } else {
                 const { error } = await supabase
                     .from('products')
-                    .insert([{ ...data, user_id: user.id }]);
+                    .insert([{ ...data, photos, user_id: user.id }]);
 
                 if (error) throw error;
                 toast.success('Produto salvo com sucesso!');
@@ -163,6 +184,17 @@ export default function Products() {
                             <Input label="Quantidade em Estoque" type="number" {...register('stock_quantity')} error={errors.stock_quantity?.message} />
                             <Input label="Alerta de Estoque Mínimo" type="number" {...register('min_stock_alert')} error={errors.min_stock_alert?.message} />
                         </div>
+
+                        <div>
+                            <label className="text-sm font-medium text-gray-600 mb-2 block">Fotos do Produto</label>
+                            {existingPhotos.length > 0 && (
+                                <div className="mb-3">
+                                    <ImageViewer images={existingPhotos} />
+                                </div>
+                            )}
+                            <ImageUpload onImagesChange={setNewImages} />
+                        </div>
+
                         <div className="flex justify-end gap-3 pt-4">
                             <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
                             <Button type="submit">{editingId ? 'Salvar Alterações' : 'Salvar Produto'}</Button>
@@ -207,9 +239,13 @@ export default function Products() {
                                     <tr key={product.id} className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
-                                                    <Package className="w-4 h-4" />
-                                                </div>
+                                                {product.photos && product.photos.length > 0 ? (
+                                                    <img src={product.photos[0]} alt={product.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
+                                                        <Package className="w-4 h-4" />
+                                                    </div>
+                                                )}
                                                 <div>
                                                     <div className="font-semibold">{product.name}</div>
                                                     <div className="text-xs text-gray-500">{product.sku}</div>
@@ -259,9 +295,13 @@ export default function Products() {
                             <div key={product.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 active:bg-gray-50 transition-colors">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
-                                            <Package className="w-5 h-5" />
-                                        </div>
+                                        {product.photos && product.photos.length > 0 ? (
+                                            <img src={product.photos[0]} alt={product.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
+                                                <Package className="w-5 h-5" />
+                                            </div>
+                                        )}
                                         <div className="min-w-0 flex-1">
                                             <div className="font-semibold text-gray-900 truncate">{product.name}</div>
                                             <div className="text-xs text-gray-500">{product.sku || product.category}</div>
