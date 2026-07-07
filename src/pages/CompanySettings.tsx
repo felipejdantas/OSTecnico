@@ -20,6 +20,7 @@ const settingsSchema = z.object({
     bank_details: z.string().optional(),
     warranty_days: z.coerce.number().int().min(0, 'Valor inválido'),
     warranty_text: z.string().optional(),
+    terms_text: z.string().optional(),
 });
 
 type SettingsFormInput = z.input<typeof settingsSchema>;
@@ -59,6 +60,7 @@ export default function CompanySettings() {
             setValue('bank_details', data.bank_details || '');
             setValue('warranty_days', data.warranty_days ?? 90);
             setValue('warranty_text', data.warranty_text || '');
+            setValue('terms_text', data.terms_text || '');
         }
         setLoading(false);
     };
@@ -137,6 +139,18 @@ export default function CompanySettings() {
                             />
                         </div>
                     </div>
+                </Card>
+
+                <Card>
+                    <h3 className="font-semibold text-base sm:text-lg mb-1">Cláusula de Serviço</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Escreva aqui os seus próprios termos (não copie de outra empresa). Aparece no final do PDF e da página de acompanhamento do cliente.
+                    </p>
+                    <textarea
+                        {...register('terms_text')}
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[140px] text-sm"
+                        placeholder="Ex: condições de aprovação de orçamento, prazos, responsabilidade sobre o equipamento, política de retirada..."
+                    />
                 </Card>
 
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 lg:static lg:bg-transparent lg:border-none lg:p-0 mt-6 z-20">

@@ -18,6 +18,7 @@ type AccessoriesData = {
 
 type OrderItemRow = { product_name: string; quantity: number; unit_price: number };
 type OrderServiceRow = { service_name: string; description?: string | null; quantity: number; price: number };
+type PhotoEntry = string | { url: string; date?: string | null };
 
 type CompanyInfo = {
     company_name?: string;
@@ -29,12 +30,22 @@ type CompanyInfo = {
     bank_details?: string | null;
     warranty_days?: number | null;
     warranty_text?: string | null;
+    terms_text?: string | null;
 };
+
+type CustomerInfo = {
+    name: string;
+    cpf?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    number?: string;
+} | any;
 
 type OSData = {
     os_number: number;
     created_at: string;
-    customer: { name: string; cpf?: string; phone?: string } | any;
+    customer: CustomerInfo;
     technician: { name: string } | any;
     equipment: string;
     serial_number?: string;
@@ -46,7 +57,8 @@ type OSData = {
     technician_observation?: string;
     status: string;
     client_signed_at?: string;
-    photos?: string[];
+    client_signature_url?: string;
+    photos?: PhotoEntry[];
     items?: OrderItemRow[];
     services?: OrderServiceRow[];
     discount_type?: DiscountType;
@@ -56,15 +68,26 @@ type OSData = {
     company?: CompanyInfo;
 };
 
+const brandColor = [0, 153, 255] as [number, number, number];
+
 export async function generateOSPDF(osData: OSData) {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
     let yPos = 20;
 
-    // Brand Color (Blue #0099ff -> [0, 153, 255])
-    const brandColor = [0, 153, 255] as [number, number, number];
+    const customer = Array.isArray(osData.customer) ? osData.customer[0] : osData.customer;
+    const technician = Array.isArray(osData.technician) ? osData.technician[0] : osData.technician;
+    const company = osData.company;
 
-    // Header with logo (if available)
+    const ensureSpace = (needed: number) => {
+        if (yPos + needed > pageHeight - 22) {
+            doc.addPage();
+            yPos = 20;
+        }
+    };
+
+    // ---- Header: logo + company block ----
     try {
         const logoImg = await loadImage('/logo-full.jpg');
         doc.addImage(logoImg.data, 'JPEG', 15, 10, 50, 20);
@@ -72,88 +95,90 @@ export async function generateOSPDF(osData: OSData) {
         console.log('Logo not found, skipping');
     }
 
-    // Company name
-    doc.setFontSize(20);
-    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]); // Blue
+    doc.setFontSize(18);
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
     doc.setFont('helvetica', 'bold');
-    doc.text((osData.company?.company_name || 'OSTECNICO').toUpperCase(), pageWidth - 15, 20, { align: 'right' });
+    doc.text((company?.company_name || 'OSTECNICO').toUpperCase(), pageWidth - 15, 18, { align: 'right' });
 
-    doc.setFontSize(12);
-    doc.setTextColor(100); // Grey
+    doc.setFontSize(10);
+    doc.setTextColor(100);
     doc.setFont('helvetica', 'normal');
-    doc.text('Ordem de Serviço', pageWidth - 15, 28, { align: 'right' });
+    doc.text('Ordem de Serviço', pageWidth - 15, 24, { align: 'right' });
 
-    let headerY = 34;
+    let headerY = 30;
     doc.setFontSize(8);
-    const companyLines = [osData.company?.cnpj && `CNPJ: ${osData.company.cnpj}`, osData.company?.phone, osData.company?.email]
-        .filter(Boolean) as string[];
+    const companyLines = [
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join('  ·  '),
+    ].filter(Boolean) as string[];
     for (const line of companyLines) {
-        doc.text(line, pageWidth - 15, headerY, { align: 'right' });
-        headerY += 4;
+        const wrapped = doc.splitTextToSize(line, 100);
+        doc.text(wrapped, pageWidth - 15, headerY, { align: 'right' });
+        headerY += wrapped.length * 4;
     }
 
-    yPos = Math.max(40, headerY + 6);
+    yPos = Math.max(38, headerY + 4);
+    doc.setDrawColor(220);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
 
-    // OS Number and Date
-    doc.setFontSize(10);
-    doc.setTextColor(0); // Black
+    // ---- OS number + date ----
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
-    doc.text(`OS Nº: ${osData.os_number || 'N/A'}`, 15, yPos);
-    doc.text(`Data: ${osData.created_at ? new Date(osData.created_at).toLocaleDateString('pt-BR') : 'N/A'}`, pageWidth - 15, yPos, { align: 'right' });
+    doc.text(`OS Nº ${osData.os_number || 'N/A'}`, 15, yPos);
 
+    doc.setTextColor(100);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+        `Data: ${osData.created_at ? new Date(osData.created_at).toLocaleDateString('pt-BR') : 'N/A'}`,
+        pageWidth - 15,
+        yPos,
+        { align: 'right' }
+    );
+    yPos += 4;
+    doc.setTextColor(80);
+    doc.setFontSize(10);
+    doc.text(String(osData.equipment || ''), 15, yPos + 3);
     yPos += 10;
 
-    // Customer and Technician Info
-    // Ensure data exists to avoid blank fields
-    // Debug: Log the data structure to understand what we're receiving
-    console.log('PDF Generator - Customer data:', osData.customer);
-    console.log('PDF Generator - Technician data:', osData.technician);
+    // ---- Client block / Equipment block (two columns) ----
+    const colWidth = (pageWidth - 30 - 10) / 2;
+    const clientLines = [
+        `Cliente: ${customer?.name || 'N/A'}`,
+        customer?.cpf && `CPF/CNPJ: ${customer.cpf}`,
+        customer?.phone && `Telefone: ${customer.phone}`,
+        customer?.email && `E-mail: ${customer.email}`,
+        customer?.address && `Endereço: ${customer.address}${customer?.number ? `, ${customer.number}` : ''}`,
+    ].filter(Boolean) as string[];
 
-    // Handle both array and object formats from Supabase
-    const customer = Array.isArray(osData.customer) ? osData.customer[0] : osData.customer;
-    const technician = Array.isArray(osData.technician) ? osData.technician[0] : osData.technician;
+    const equipmentLines = [
+        `Equipamento: ${osData.equipment || 'N/A'}`,
+        `Número de Série: ${osData.serial_number || 'N/A'}`,
+        `Técnico Responsável: ${technician?.name || 'N/A'}`,
+        `Status: ${getStatusLabel(osData.status)}`,
+    ];
 
-    const customerName = customer?.name || 'N/A';
-    const customerCpf = customer?.cpf || 'N/A';
-    const customerPhone = customer?.phone || 'N/A';
-    const technicianName = technician?.name || 'N/A';
+    const clientEndY = drawInfoBlock(doc, 15, yPos, colWidth, clientLines);
+    const equipEndY = drawInfoBlock(doc, 15 + colWidth + 10, yPos, colWidth, equipmentLines);
+    yPos = Math.max(clientEndY, equipEndY) + 6;
 
-    console.log('Extracted values:', { customerName, customerCpf, customerPhone, technicianName });
-
-    autoTable(doc, {
-        startY: yPos,
-        head: [['Informações Principais', '']], // Add empty column to match body columns
-        body: [
-            ['Cliente', String(customerName || '')],
-            ['CPF', String(customerCpf || '')],
-            ['Telefone', String(customerPhone || '')],
-            ['Técnico Responsável', String(technicianName || '')],
-            ['Equipamento', String(osData.equipment || 'N/A')],
-            ['Número de Série', String(osData.serial_number || 'N/A')],
-            ['Status', getStatusLabel(osData.status)],
-        ],
-        theme: 'grid',
-        headStyles: { fillColor: brandColor, textColor: 255 },
-        styles: { fontSize: 9 },
-    });
-
-    yPos = (doc as any).lastAutoTable.finalY + 10;
-
-    // Problem Description
+    // ---- Problem Description ----
+    ensureSpace(20);
+    doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
     doc.text('Problema Relatado:', 15, yPos);
     yPos += 5;
     doc.setFont('helvetica', 'normal');
     const problemLines = doc.splitTextToSize(osData.problem_description || 'Não informado', pageWidth - 30);
     doc.text(problemLines, 15, yPos);
-    yPos += problemLines.length * 5 + 10;
+    yPos += problemLines.length * 5 + 8;
 
-    // Accessories
-    if (yPos > 250) {
-        doc.addPage();
-        yPos = 20;
-    }
-
+    // ---- Accessories ----
+    ensureSpace(15);
     doc.setFont('helvetica', 'bold');
     doc.text('Acessórios Recebidos:', 15, yPos);
     yPos += 5;
@@ -166,79 +191,48 @@ export async function generateOSPDF(osData: OSData) {
     doc.text(accessories.length > 0 ? accessories.join(', ') : 'Nenhum', 15, yPos);
     yPos += 10;
 
-    // Checklists
-    if (yPos > 240) {
-        doc.addPage();
-        yPos = 20;
-    }
+    // ---- Checklist: only problems, to keep it emphatic ----
+    ensureSpace(15);
+    const checklistGroups: [string, ChecklistItem[]][] = [
+        ['Estado Físico', osData.physical_condition],
+        ['Condição de Funcionamento', osData.operating_condition],
+        ['Testes Técnicos', osData.technical_tests],
+    ];
+    const anyDefect = checklistGroups.some(([, items]) => (items || []).some(i => i.status === 'defect'));
 
-    // Physical Condition
-    if (osData.physical_condition?.length > 0) {
-        autoTable(doc, {
-            startY: yPos,
-            head: [['Estado Físico', 'Status', 'Observação']],
-            body: osData.physical_condition.map(item => [
-                item.label,
-                getStatusIcon(item.status),
-                item.observation || '-'
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: brandColor },
-            styles: { fontSize: 8 },
-        });
-        yPos = (doc as any).lastAutoTable.finalY + 10;
-    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text('Problemas Identificados no Checklist', 15, yPos);
+    yPos += 6;
 
-    // Operating Condition
-    if (yPos > 240) {
-        doc.addPage();
-        yPos = 20;
-    }
-
-    if (osData.operating_condition?.length > 0) {
-        autoTable(doc, {
-            startY: yPos,
-            head: [['Condição de Funcionamento', 'Status', 'Observação']],
-            body: osData.operating_condition.map(item => [
-                item.label,
-                getStatusIcon(item.status),
-                item.observation || '-'
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: brandColor },
-            styles: { fontSize: 8 },
-        });
-        yPos = (doc as any).lastAutoTable.finalY + 10;
-    }
-
-    // Technical Tests
-    if (yPos > 240) {
-        doc.addPage();
-        yPos = 20;
-    }
-
-    if (osData.technical_tests?.length > 0) {
-        autoTable(doc, {
-            startY: yPos,
-            head: [['Testes Técnicos Iniciais', 'Status', 'Observação']],
-            body: osData.technical_tests.map(item => [
-                item.label,
-                getStatusIcon(item.status),
-                item.observation || '-'
-            ]),
-            theme: 'striped',
-            headStyles: { fillColor: brandColor },
-            styles: { fontSize: 8 },
-        });
-        yPos = (doc as any).lastAutoTable.finalY + 10;
-    }
-
-    // Services performed
-    if (osData.services && osData.services.length > 0) {
-        if (yPos > 240) {
-            doc.addPage();
-            yPos = 20;
+    if (!anyDefect) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(0, 128, 0);
+        doc.text('Nenhum problema identificado no checklist de entrada.', 15, yPos);
+        doc.setTextColor(0);
+        yPos += 10;
+    } else {
+        for (const [title, items] of checklistGroups) {
+            const defects = (items || []).filter(i => i.status === 'defect');
+            if (defects.length === 0) continue;
+            ensureSpace(20);
+            autoTable(doc, {
+                startY: yPos,
+                head: [[title, 'Observação']],
+                body: defects.map(item => [item.label, item.observation || '-']),
+                theme: 'striped',
+                headStyles: { fillColor: [220, 53, 69] },
+                styles: { fontSize: 8 },
+            });
+            yPos = (doc as any).lastAutoTable.finalY + 8;
         }
+    }
+
+    // ---- Services performed ----
+    if (osData.services && osData.services.length > 0) {
+        ensureSpace(20);
         autoTable(doc, {
             startY: yPos,
             head: [['Serviços Realizados', 'Qtd', 'Preço', 'Total']],
@@ -255,12 +249,9 @@ export async function generateOSPDF(osData: OSData) {
         yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Parts used
+    // ---- Parts used ----
     if (osData.items && osData.items.length > 0) {
-        if (yPos > 240) {
-            doc.addPage();
-            yPos = 20;
-        }
+        ensureSpace(20);
         autoTable(doc, {
             startY: yPos,
             head: [['Peças Utilizadas', 'Qtd', 'Preço Unit.', 'Total']],
@@ -277,7 +268,7 @@ export async function generateOSPDF(osData: OSData) {
         yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Financial summary
+    // ---- Financial summary ----
     const itemsTotal = (osData.items || []).reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
     const servicesTotal = (osData.services || []).reduce((sum, s) => sum + s.quantity * s.price, 0);
     const hasFinance = itemsTotal > 0 || servicesTotal > 0 || (osData.freight || 0) > 0 || (osData.urgency_fee || 0) > 0 || (osData.discount_value || 0) > 0;
@@ -292,11 +283,7 @@ export async function generateOSPDF(osData: OSData) {
             urgencyFee: osData.urgency_fee || 0,
         });
 
-        if (yPos > 240) {
-            doc.addPage();
-            yPos = 20;
-        }
-
+        ensureSpace(30);
         const financeRows: string[][] = [['Subtotal', formatCurrency(subtotal)]];
         if (discountAmount > 0) financeRows.push(['Desconto', `- ${formatCurrency(discountAmount)}`]);
         if ((osData.freight || 0) > 0) financeRows.push(['Frete', formatCurrency(osData.freight || 0)]);
@@ -319,35 +306,38 @@ export async function generateOSPDF(osData: OSData) {
         yPos = (doc as any).lastAutoTable.finalY + 10;
     }
 
-    // Payment & warranty info
-    if (osData.company?.pix_key || osData.company?.bank_details || osData.company?.warranty_text) {
-        if (yPos > 250) {
-            doc.addPage();
-            yPos = 20;
-        }
-        if (osData.company?.pix_key || osData.company?.bank_details) {
+    // ---- Payment & warranty info ----
+    if (company?.pix_key || company?.bank_details || company?.warranty_text || company?.warranty_days) {
+        ensureSpace(20);
+        if (company?.pix_key || company?.bank_details) {
             doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10);
+            doc.setTextColor(0);
             doc.text('Pagamento:', 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
-            if (osData.company?.pix_key) {
-                doc.text(`PIX: ${osData.company.pix_key}`, 15, yPos);
+            doc.setFontSize(9);
+            if (company?.pix_key) {
+                doc.text(`PIX: ${company.pix_key}`, 15, yPos);
                 yPos += 5;
             }
-            if (osData.company?.bank_details) {
-                const bankLines = doc.splitTextToSize(osData.company.bank_details, pageWidth - 30);
+            if (company?.bank_details) {
+                const bankLines = doc.splitTextToSize(company.bank_details, pageWidth - 30);
                 doc.text(bankLines, 15, yPos);
                 yPos += bankLines.length * 5;
             }
             yPos += 5;
         }
-        if (osData.company?.warranty_text || osData.company?.warranty_days) {
+        if (company?.warranty_text || company?.warranty_days) {
+            ensureSpace(15);
             doc.setFont('helvetica', 'bold');
-            doc.text(`Garantia${osData.company?.warranty_days ? ` (${osData.company.warranty_days} dias)` : ''}:`, 15, yPos);
+            doc.setFontSize(10);
+            doc.text(`Garantia${company?.warranty_days ? ` (${company.warranty_days} dias)` : ''}:`, 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
-            if (osData.company?.warranty_text) {
-                const warrantyLines = doc.splitTextToSize(osData.company.warranty_text, pageWidth - 30);
+            doc.setFontSize(9);
+            if (company?.warranty_text) {
+                const warrantyLines = doc.splitTextToSize(company.warranty_text, pageWidth - 30);
                 doc.text(warrantyLines, 15, yPos);
                 yPos += warrantyLines.length * 5;
             }
@@ -355,118 +345,172 @@ export async function generateOSPDF(osData: OSData) {
         }
     }
 
-    // Technician Observation
+    // ---- Technician Observation ----
     if (osData.technician_observation) {
-        if (yPos > 250) {
-            doc.addPage();
-            yPos = 20;
-        }
-
+        ensureSpace(20);
         doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
         doc.text('Observação do Técnico:', 15, yPos);
         yPos += 5;
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
         const obsLines = doc.splitTextToSize(osData.technician_observation, pageWidth - 30);
         doc.text(obsLines, 15, yPos);
         yPos += obsLines.length * 5 + 10;
     }
 
-    // Photos
-    if (osData.photos && osData.photos.length > 0) {
+    // ---- Client signature (before photos) ----
+    if (osData.client_signature_url) {
+        ensureSpace(45);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Assinatura do Cliente:', 15, yPos);
+        yPos += 4;
+        try {
+            const sigImg = await loadImage(osData.client_signature_url);
+            const sigHeight = 25;
+            const sigWidth = Math.min(70, sigHeight * (sigImg.width / sigImg.height));
+            doc.addImage(sigImg.data, 'PNG', 15, yPos, sigWidth, sigHeight);
+            yPos += sigHeight + 2;
+        } catch (error) {
+            console.error('Error loading signature image:', error);
+            yPos += 25;
+        }
+        doc.setDrawColor(150);
+        doc.line(15, yPos, 90, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(customer?.name || '', 15, yPos);
+        if (osData.client_signed_at) {
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            doc.text(`Assinado em ${new Date(osData.client_signed_at).toLocaleString('pt-BR')}`, 15, yPos + 4);
+            doc.setTextColor(0);
+        }
+        yPos += 12;
+    }
+
+    // ---- Photos, each tagged with its date ----
+    const photos = (osData.photos || []).map(p => (typeof p === 'string' ? { url: p } : p));
+    if (photos.length > 0) {
         doc.addPage();
         yPos = 20;
 
         doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
         doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
         doc.text('Fotos do Equipamento:', 15, yPos);
-        yPos += 15;
+        yPos += 12;
 
         const photoWidth = 80;
         const photoHeight = 60;
         const gap = 10;
         let xPos = 15;
 
-        for (const photoUrl of osData.photos) {
+        for (const photo of photos) {
             try {
-                // Ensure we're using a proxy or the url is accessible
-                // For Supabase public URLs, they should be accessible directly if CORS is configured
-                const photoImg = await loadImage(photoUrl);
+                const photoImg = await loadImage(photo.url);
 
                 if (xPos + photoWidth > pageWidth - 15) {
                     xPos = 15;
-                    yPos += photoHeight + gap;
+                    yPos += photoHeight + 14;
                 }
 
-                if (yPos + photoHeight > doc.internal.pageSize.getHeight() - 20) {
+                if (yPos + photoHeight + 8 > pageHeight - 20) {
                     doc.addPage();
                     yPos = 20;
                     xPos = 15;
                 }
 
-                // Add image to PDF preserving aspect ratio
-                const maxWidth = 80;
-                const maxHeight = 60;
-
-                let finalWidth = maxWidth;
-                let finalHeight = maxHeight;
+                let finalWidth = photoWidth;
+                let finalHeight = photoHeight;
                 const ratio = photoImg.width / photoImg.height;
 
-                if (ratio > maxWidth / maxHeight) {
-                    // Wider than box
-                    finalHeight = maxWidth / ratio;
+                if (ratio > photoWidth / photoHeight) {
+                    finalHeight = photoWidth / ratio;
                 } else {
-                    // Taller than box
-                    finalWidth = maxHeight * ratio;
+                    finalWidth = photoHeight * ratio;
                 }
 
-                // Center the image in the box
-                const xOffset = (maxWidth - finalWidth) / 2;
-                const yOffset = (maxHeight - finalHeight) / 2;
+                const xOffset = (photoWidth - finalWidth) / 2;
+                const yOffset = (photoHeight - finalHeight) / 2;
 
                 doc.addImage(photoImg.data, 'JPEG', xPos + xOffset, yPos + yOffset, finalWidth, finalHeight);
-                xPos += maxWidth + gap;
+
+                if (photo.date) {
+                    doc.setFontSize(7);
+                    doc.setTextColor(120);
+                    doc.text(new Date(photo.date).toLocaleDateString('pt-BR'), xPos + photoWidth / 2, yPos + photoHeight + 5, { align: 'center' });
+                    doc.setTextColor(0);
+                }
+
+                xPos += photoWidth + gap;
             } catch (error) {
                 console.error('Error loading photo for PDF:', error);
-                // Draw a placeholder if image fails
                 doc.setDrawColor(200);
                 doc.rect(xPos, yPos, photoWidth, photoHeight);
                 doc.setFontSize(8);
                 doc.setTextColor(150);
                 doc.text('Erro ao carregar imagem', xPos + 5, yPos + photoHeight / 2);
+                doc.setTextColor(0);
                 xPos += photoWidth + gap;
             }
         }
     }
 
-    // Footer
+    // ---- Custom service clause (written by the shop, not auto-generated) ----
+    if (company?.terms_text) {
+        doc.addPage();
+        yPos = 20;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+        doc.text('Cláusula de Serviço', 15, yPos);
+        yPos += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(0);
+        const termsLines = doc.splitTextToSize(company.terms_text, pageWidth - 30);
+        doc.text(termsLines, 15, yPos);
+    }
+
+    // ---- Footer on every page ----
     const pageCount = doc.getNumberOfPages();
+    const footerParts = [
+        company?.company_name,
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join(' · '),
+    ].filter(Boolean) as string[];
+
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text(
-            `Página ${i} de ${pageCount}`,
-            pageWidth / 2,
-            doc.internal.pageSize.getHeight() - 10,
-            { align: 'center' }
-        );
+        doc.setDrawColor(220);
+        doc.line(15, pageHeight - 18, pageWidth - 15, pageHeight - 18);
+        doc.setFontSize(7);
+        doc.setTextColor(120);
+        doc.setFont('helvetica', 'normal');
+        doc.text(footerParts.join('  |  '), 15, pageHeight - 13);
+        doc.text(`Página ${i} de ${pageCount}`, pageWidth - 15, pageHeight - 13, { align: 'right' });
     }
 
     // Save PDF
-    doc.save(`OS_${osData.os_number || '000'}_${(osData.customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
+    doc.save(`OS_${osData.os_number || '000'}_${(customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
 }
 
-function getStatusIcon(status: string): string {
-    switch (status) {
-        case 'ok':
-            return 'OK';
-        case 'defect':
-            return 'Defeito';
-        case 'na':
-            return 'N/V'; // Não Verificado
-        default:
-            return 'N/V';
+function drawInfoBlock(doc: jsPDF, x: number, y: number, maxWidth: number, lines: string[]): number {
+    let curY = y;
+    doc.setFontSize(9);
+    for (const [index, line] of lines.entries()) {
+        doc.setFont('helvetica', index === 0 ? 'bold' : 'normal');
+        doc.setTextColor(index === 0 ? 0 : 90);
+        const wrapped = doc.splitTextToSize(line, maxWidth);
+        doc.text(wrapped, x, curY);
+        curY += wrapped.length * 4.5;
     }
+    doc.setTextColor(0);
+    return curY;
 }
 
 function getStatusLabel(status: string): string {

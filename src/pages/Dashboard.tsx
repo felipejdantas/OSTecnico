@@ -173,7 +173,7 @@ export default function Dashboard() {
                     .from('service_orders')
                     .select(`
           *,
-          customers (name, cpf, phone),
+          customers (name, cpf, phone, email, address, number),
           technicians (name)
         `)
                     .eq('id', orderId)
@@ -201,6 +201,7 @@ export default function Dashboard() {
                 technician_observation: data.technician_observation,
                 status: data.status,
                 client_signed_at: data.client_signed_at,
+                client_signature_url: data.client_signature_url,
                 photos: data.photos || [], // Pass photos to PDF generator
                 items: itemsData || [],
                 services: servicesData || [],

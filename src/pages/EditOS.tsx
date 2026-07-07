@@ -65,7 +65,7 @@ export default function EditOS() {
     const [customers, setCustomers] = useState<any[]>([]);
     const [technicians, setTechnicians] = useState<any[]>([]);
     const [newImages, setNewImages] = useState<File[]>([]);
-    const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
+    const [existingPhotos, setExistingPhotos] = useState<{ url: string; date?: string }[]>([]);
     const [items, setItems] = useState<OrderItem[]>([]);
     const [serviceLines, setServiceLines] = useState<OrderServiceLine[]>([]);
     const [discountType, setDiscountType] = useState<DiscountType>('fixed');
@@ -191,7 +191,8 @@ export default function EditOS() {
 
             // Upload New Images
             const newImageUrls = await Promise.all(newImages.map(uploadFile));
-            const allPhotos = [...existingPhotos, ...newImageUrls];
+            const uploadDate = new Date().toISOString();
+            const allPhotos = [...existingPhotos, ...newImageUrls.map(url => ({ url, date: uploadDate }))];
 
             // Update OS
             const { error } = await supabase

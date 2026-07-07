@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Check, X, Minus } from 'lucide-react';
+import { CheckCircle, AlertCircle, X, MapPin, Phone, Mail, Calendar, FileText } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
@@ -10,21 +10,21 @@ import { PublicBudget } from '../components/PublicBudget';
 import { supabase } from '../lib/supabase';
 import { getStatusConfig } from '../lib/orderStatus';
 
-// Helper component for checklist items
+// Only surfaces items with a problem, so the client's attention goes straight
+// to what actually needs fixing instead of a long list of "OK" rows.
 const ChecklistView = ({ title, items }: { title: string, items: any[] }) => {
-    if (!items || items.length === 0) return null;
+    const problems = (items || []).filter((item: any) => item.status === 'defect');
+    if (problems.length === 0) return null;
     return (
         <div className="mb-4">
             <h4 className="font-medium text-gray-700 mb-2">{title}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {items.map((item: any, index: number) => (
-                    <div key={index} className="flex items-center gap-2 text-sm p-2 bg-gray-50 rounded-lg">
-                        {item.status === 'ok' && <Check className="w-4 h-4 text-green-500" />}
-                        {item.status === 'defect' && <X className="w-4 h-4 text-red-500" />}
-                        {item.status === 'na' && <Minus className="w-4 h-4 text-gray-400" />}
-                        <span className="text-gray-700">{item.label}</span>
+                {problems.map((item: any, index: number) => (
+                    <div key={index} className="flex items-center gap-2 text-sm p-2 bg-red-50 border border-red-100 rounded-lg">
+                        <X className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <span className="text-red-800 font-medium">{item.label}</span>
                         {item.observation && (
-                            <span className="text-xs text-gray-500 italic ml-auto">({item.observation})</span>
+                            <span className="text-xs text-red-600/80 italic ml-auto">({item.observation})</span>
                         )}
                     </div>
                 ))}
@@ -316,34 +316,47 @@ export default function ClientSignature() {
 
                 {/* OS Details */}
                 <Card>
-                    <h2 className="text-xl font-bold text-dark mb-4 border-b pb-2">Detalhes da Ordem de Serviço</h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div className="space-y-3 text-sm">
-                            <h3 className="font-semibold text-gray-900">Informações Gerais</h3>
-                            <div className="flex justify-between border-b border-gray-100 pb-1">
-                                <span className="text-gray-600">Nº OS:</span>
-                                <span className="font-bold text-primary-cyan">#{os.os_number}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-100 pb-1">
-                                <span className="text-gray-600">Cliente:</span>
-                                <span className="font-medium">{os.customer_name}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-100 pb-1">
-                                <span className="text-gray-600">Data:</span>
-                                <span className="font-medium">{new Date(os.created_at).toLocaleDateString('pt-BR')}</span>
+                    {/* Provider + date */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b pb-4 mb-4">
+                        <div>
+                            <h2 className="font-bold text-lg text-dark">{os.company_name || 'Prestador de Serviço'}</h2>
+                            {os.company_cnpj && <p className="text-xs text-gray-500">CNPJ: {os.company_cnpj}</p>}
+                            {os.company_address && (
+                                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin className="w-3 h-3 flex-shrink-0" /> {os.company_address}
+                                </p>
+                            )}
+                            <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
+                                {os.company_phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{os.company_phone}</span>}
+                                {os.company_email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{os.company_email}</span>}
                             </div>
                         </div>
+                        <div className="flex items-center gap-1 text-xs text-gray-500 flex-shrink-0">
+                            <Calendar className="w-3.5 h-3.5" /> {new Date(os.created_at).toLocaleDateString('pt-BR')}
+                        </div>
+                    </div>
 
-                        <div className="space-y-3 text-sm">
-                            <h3 className="font-semibold text-gray-900">Equipamento</h3>
-                            <div className="flex justify-between border-b border-gray-100 pb-1">
-                                <span className="text-gray-600">Modelo:</span>
-                                <span className="font-medium">{os.equipment}</span>
-                            </div>
-                            <div className="flex justify-between border-b border-gray-100 pb-1">
-                                <span className="text-gray-600">Série:</span>
-                                <span className="font-medium">{os.serial_number || 'N/A'}</span>
+                    {/* OS number + equipment */}
+                    <div className="mb-4">
+                        <h3 className="font-bold text-primary-cyan text-xl">OS #{os.os_number}</h3>
+                        <p className="text-gray-600 text-sm">{os.equipment}{os.serial_number ? ` · Série: ${os.serial_number}` : ''}</p>
+                    </div>
+
+                    {/* Client */}
+                    <div className="mb-6 pb-4 border-b border-gray-100">
+                        <h3 className="font-semibold text-gray-900 text-sm mb-1">Cliente: {os.customer_name}</h3>
+                        <div className="text-xs text-gray-600 space-y-0.5">
+                            {os.customer_cpf && <p>CPF/CNPJ: {os.customer_cpf}</p>}
+                            {os.customer_address && (
+                                <p className="flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 flex-shrink-0" />
+                                    {os.customer_address}{os.customer_number ? `, ${os.customer_number}` : ''}
+                                    {os.customer_cep ? ` - CEP ${os.customer_cep}` : ''}
+                                </p>
+                            )}
+                            <div className="flex flex-wrap gap-3">
+                                {os.customer_phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{os.customer_phone}</span>}
+                                {os.customer_email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{os.customer_email}</span>}
                             </div>
                         </div>
                     </div>
@@ -356,10 +369,20 @@ export default function ClientSignature() {
                     </div>
 
                     <div className="border-t pt-4">
-                        <h3 className="font-semibold text-lg text-dark mb-4">Checklist de Entrada</h3>
-                        <ChecklistView title="Estado Físico" items={os.physical_condition} />
-                        <ChecklistView title="Condição de Funcionamento" items={os.operating_condition} />
-                        <ChecklistView title="Testes Técnicos" items={os.technical_tests} />
+                        <h3 className="font-semibold text-lg text-dark mb-4">Problemas Identificados no Checklist</h3>
+                        {[os.physical_condition, os.operating_condition, os.technical_tests].every(
+                            (list: any[]) => !(list || []).some((i: any) => i.status === 'defect')
+                        ) ? (
+                            <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
+                                Nenhum problema identificado no checklist de entrada.
+                            </p>
+                        ) : (
+                            <>
+                                <ChecklistView title="Estado Físico" items={os.physical_condition} />
+                                <ChecklistView title="Condição de Funcionamento" items={os.operating_condition} />
+                                <ChecklistView title="Testes Técnicos" items={os.technical_tests} />
+                            </>
+                        )}
                     </div>
 
                     {os.accessories_received && (
@@ -374,6 +397,17 @@ export default function ClientSignature() {
                         </div>
                     )}
 
+                    {os.client_signature_url && (
+                        <div className="border-t pt-4 mb-4">
+                            <h3 className="font-semibold text-gray-900 mb-2">Assinatura do Cliente</h3>
+                            <img src={os.client_signature_url} alt="Assinatura do cliente" className="h-24 border-b border-gray-300 mb-1" />
+                            <p className="text-sm text-gray-700">{os.customer_name}</p>
+                            {os.client_signed_at && (
+                                <p className="text-xs text-gray-400">Assinado em {new Date(os.client_signed_at).toLocaleString('pt-BR')}</p>
+                            )}
+                        </div>
+                    )}
+
                     {os.photos && os.photos.length > 0 && (
                         <div className="border-t pt-4">
                             <h3 className="font-semibold text-gray-900 mb-2">Fotos do Equipamento</h3>
@@ -381,6 +415,16 @@ export default function ClientSignature() {
                         </div>
                     )}
                 </Card>
+
+                {os.company_terms_text && (
+                    <Card>
+                        <h2 className="text-xl font-bold text-dark mb-3 border-b pb-2 flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-primary-cyan" />
+                            Cláusula de Serviço
+                        </h2>
+                        <p className="text-sm text-gray-600 whitespace-pre-line">{os.company_terms_text}</p>
+                    </Card>
+                )}
             </div>
         </div>
     );

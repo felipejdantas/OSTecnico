@@ -146,6 +146,8 @@ export default function NewOS() {
 
             // Upload Images
             const imageUrls = await Promise.all(images.map(uploadFile));
+            const uploadDate = new Date().toISOString();
+            const photos = imageUrls.map(url => ({ url, date: uploadDate }));
 
             // Upload Signature
             let signatureUrl = null;
@@ -171,7 +173,7 @@ export default function NewOS() {
                 accessories_received: accessories,
                 technician_observation: data.technicianObservation,
                 signature_url: signatureUrl,
-                photos: imageUrls,
+                photos,
                 status: data.status,
                 discount_type: discountType,
                 discount_value: discountValue,
