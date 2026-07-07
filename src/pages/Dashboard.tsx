@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail } from '../lib/shareLinks';
+import { PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
 
 type ServiceOrder = {
     id: string;
@@ -18,6 +19,7 @@ type ServiceOrder = {
     created_at: string;
     equipment: string;
     status: OrderStatus;
+    payment_status: PaymentStatus;
     customers: { name: string; phone: string | null; email: string | null } | null;
     technicians: { name: string } | null;
     is_pinned: boolean;
@@ -54,6 +56,7 @@ export default function Dashboard() {
           created_at,
           equipment,
           status,
+          payment_status,
           is_pinned,
           signature_token,
           client_signed_at,
@@ -237,6 +240,22 @@ export default function Dashboard() {
         }
     };
 
+    const togglePaymentStatus = async (orderId: string, currentStatus: PaymentStatus) => {
+        const newStatus: PaymentStatus = currentStatus === 'pago' ? 'nao_pago' : 'pago';
+        try {
+            const { error } = await supabase
+                .from('service_orders')
+                .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
+                .eq('id', orderId);
+
+            if (error) throw error;
+            toast.success(newStatus === 'pago' ? 'Marcado como Faturado!' : 'Marcado como A Receber!');
+            fetchOrders();
+        } catch (error: any) {
+            toast.error('Erro ao atualizar pagamento: ' + error.message);
+        }
+    };
+
     const shareViaWhatsApp = (order: ServiceOrder) => {
         if (!order.customers?.phone) {
             toast.error('Cliente sem telefone cadastrado');
@@ -412,6 +431,14 @@ export default function Dashboard() {
                                                     ))}
                                                     <option value="cancelado">{STATUS_CONFIG.cancelado.shortLabel}</option>
                                                 </select>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => togglePaymentStatus(order.id, order.payment_status)}
+                                                    className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].color}`}
+                                                    title="Clique para alternar entre Faturado / A Receber"
+                                                >
+                                                    {PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].label}
+                                                </button>
                                                 {order.is_pinned && (
                                                     <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                                 )}

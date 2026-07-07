@@ -19,3 +19,10 @@ export function calculateOrderTotal({ itemsTotal, servicesTotal, discountType, d
 export function formatCurrency(value: number) {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
+
+export type PaymentStatus = 'pago' | 'nao_pago';
+
+export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string }> = {
+    pago: { label: 'Faturado', color: 'bg-green-100 text-green-700' },
+    nao_pago: { label: 'A Receber', color: 'bg-amber-100 text-amber-700' },
+};
