@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
 import { PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
+import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
 
 type ServiceOrder = {
     id: string;
@@ -30,12 +31,16 @@ type ServiceOrder = {
     budget_approved_at: string | null;
 };
 
+type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
+
 export default function Dashboard() {
     const { user } = useAuth();
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [isListOpen, setIsListOpen] = useState(false);
     const [statusFilter, setStatusFilter] = useState<'todos' | 'em_andamento' | OrderStatus>('todos');
+    const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
+    const [showOverdueAlert, setShowOverdueAlert] = useState(false);
     const navigate = useNavigate();
 
     const openList = (filter: 'todos' | 'em_andamento' | OrderStatus) => {
@@ -46,6 +51,52 @@ export default function Dashboard() {
     useEffect(() => {
         if (user) fetchOrders();
     }, [user]);
+
+    // Flags OS's still "Em Diagnóstico" for longer than the 24-business-hour
+    // deadline to send a budget, so the shop sees it the moment it opens the app.
+    const checkBudgetDeadlines = async (allOrders: ServiceOrder[]) => {
+        const inDiagnosis = allOrders.filter(o => o.status === 'em_diagnostico');
+        if (inDiagnosis.length === 0) {
+            setOverdueBudgets([]);
+            return;
+        }
+
+        const { data, error } = await supabase
+            .from('status_history')
+            .select('service_order_id, created_at')
+            .eq('status', 'em_diagnostico')
+            .in('service_order_id', inDiagnosis.map(o => o.id))
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error checking budget deadlines:', error);
+            return;
+        }
+
+        const latestEntryByOrder = new Map<string, string>();
+        for (const row of data || []) {
+            if (!latestEntryByOrder.has(row.service_order_id)) {
+                latestEntryByOrder.set(row.service_order_id, row.created_at);
+            }
+        }
+
+        const overdue: OverdueBudget[] = [];
+        for (const order of inDiagnosis) {
+            const enteredAt = latestEntryByOrder.get(order.id);
+            if (!enteredAt) continue;
+            const diagnosisStartedAt = new Date(enteredAt);
+            if (isBudgetOverdue(diagnosisStartedAt)) {
+                overdue.push({
+                    order,
+                    diagnosisStartedAt,
+                    hoursOverdue: Math.floor(elapsedBusinessHours(diagnosisStartedAt, new Date()) - BUDGET_SLA_BUSINESS_HOURS),
+                });
+            }
+        }
+
+        setOverdueBudgets(overdue);
+        if (overdue.length > 0) setShowOverdueAlert(true);
+    };
 
     const fetchOrders = async () => {
         if (!user) return;
@@ -74,7 +125,9 @@ export default function Dashboard() {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setOrders((data as any) || []);
+            const fetchedOrders = (data as any) || [];
+            setOrders(fetchedOrders);
+            await checkBudgetDeadlines(fetchedOrders);
         } catch (error) {
             console.error('Error fetching orders:', error);
         } finally {
@@ -305,10 +358,50 @@ export default function Dashboard() {
         return o.status === statusFilter;
     });
 
-    const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
+    // Dashboard chips only surface the active workflow stages the shop actually
+    // triages day to day; "entregue" moves to Faturamento and "cancelado" is rare.
+    const dashboardStatuses: OrderStatus[] = ['recebido', 'em_diagnostico', 'aguardando_aprovacao', 'aguardando_peca', 'em_reparo', 'pronto'];
 
     return (
         <div className="space-y-4 sm:space-y-6">
+            {showOverdueAlert && overdueBudgets.length > 0 && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                    <Card className="max-w-lg w-full border-2 border-amber-300">
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-bold text-lg text-dark">Prazo de orçamento estourado</h3>
+                                <p className="text-sm text-gray-500">
+                                    {overdueBudgets.length === 1 ? 'Esta OS está' : `Estas ${overdueBudgets.length} OS's estão`} há mais de {BUDGET_SLA_BUSINESS_HOURS}h úteis em diagnóstico sem orçamento enviado.
+                                </p>
+                            </div>
+                            <button onClick={() => setShowOverdueAlert(false)} className="p-1 hover:bg-gray-100 rounded-lg flex-shrink-0">
+                                <X className="w-5 h-5 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                            {overdueBudgets.map(({ order, hoursOverdue }) => (
+                                <button
+                                    key={order.id}
+                                    onClick={() => { setShowOverdueAlert(false); navigate(`/editar-os/${order.id}`); }}
+                                    className="w-full text-left p-3 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                                >
+                                    <p className="font-semibold text-dark">OS #{order.os_number} · {order.customers?.name || 'Cliente'}</p>
+                                    <p className="text-xs text-amber-700">{hoursOverdue}h úteis além do prazo</p>
+                                </button>
+                            ))}
+                        </div>
+
+                        <Button variant="outline" className="w-full mt-4" onClick={() => setShowOverdueAlert(false)}>
+                            Fechar
+                        </Button>
+                    </Card>
+                </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl sm:text-2xl font-bold text-dark">Dashboard</h2>
@@ -398,7 +491,7 @@ export default function Dashboard() {
                             >
                                 Todos ({orders.length})
                             </button>
-                            {allStatuses.map(s => {
+                            {dashboardStatuses.map(s => {
                                 const count = orders.filter(o => o.status === s).length;
                                 return (
                                     <button
