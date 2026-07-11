@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X, Search } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -23,7 +23,10 @@ type ServiceOrder = {
     equipment_type: string | null;
     status: OrderStatus;
     payment_status: PaymentStatus;
-    customers: { name: string; phone: string | null; email: string | null } | null;
+    customers: {
+        name: string; phone: string | null; email: string | null;
+        cpf: string | null; cnpj: string | null; company_name: string | null; trade_name: string | null;
+    } | null;
     technicians: { name: string } | null;
     is_pinned: boolean;
     signature_token: string;
@@ -39,6 +42,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [isListOpen, setIsListOpen] = useState(false);
     const [statusFilter, setStatusFilter] = useState<'todos' | 'em_andamento' | OrderStatus>('todos');
+    const [searchTerm, setSearchTerm] = useState('');
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
     const navigate = useNavigate();
@@ -51,6 +55,12 @@ export default function Dashboard() {
     useEffect(() => {
         if (user) fetchOrders();
     }, [user]);
+
+    // Reveals the list automatically once the shop starts typing a search,
+    // so they don't have to click "expand" first to see results.
+    useEffect(() => {
+        if (searchTerm.trim()) setIsListOpen(true);
+    }, [searchTerm]);
 
     // Flags OS's still "Em Diagnóstico" for longer than the 24-business-hour
     // deadline to send a budget, so the shop sees it the moment it opens the app.
@@ -117,7 +127,7 @@ export default function Dashboard() {
           signature_token,
           client_signed_at,
           budget_approved_at,
-          customers (name, phone, email),
+          customers (name, phone, email, cpf, cnpj, company_name, trade_name),
           technicians (name)
         `)
                 .eq('user_id', user.id)
@@ -345,10 +355,36 @@ export default function Dashboard() {
         openEmail(order.customers.email, order.os_number, message);
     };
 
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const searchDigits = searchTerm.replace(/\D/g, '');
+
     const filteredOrders = orders.filter(o => {
-        if (statusFilter === 'todos') return true;
-        if (statusFilter === 'em_andamento') return !['pronto', 'entregue', 'cancelado'].includes(o.status);
-        return o.status === statusFilter;
+        if (statusFilter === 'em_andamento') {
+            if (['pronto', 'entregue', 'cancelado'].includes(o.status)) return false;
+        } else if (statusFilter !== 'todos' && o.status !== statusFilter) {
+            return false;
+        }
+
+        if (!normalizedSearch) return true;
+
+        const customer = o.customers;
+        const haystack = [
+            o.equipment, o.brand, o.equipment_type,
+            customer?.name, customer?.company_name, customer?.trade_name,
+            o.technicians?.name,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        if (haystack.includes(normalizedSearch)) return true;
+        if (String(o.os_number).includes(normalizedSearch)) return true;
+
+        if (searchDigits) {
+            const cpfDigits = customer?.cpf?.replace(/\D/g, '') || '';
+            const cnpjDigits = customer?.cnpj?.replace(/\D/g, '') || '';
+            if (cpfDigits.includes(searchDigits) || cnpjDigits.includes(searchDigits)) return true;
+            if (String(o.os_number).includes(searchDigits)) return true;
+        }
+
+        return false;
     });
 
     const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
@@ -439,6 +475,22 @@ export default function Dashboard() {
                     <h3 className="font-semibold text-lg">Ordens de Serviço {isListOpen ? `(${filteredOrders.length})` : ''}</h3>
                     {isListOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                 </button>
+
+                <div className="flex items-center gap-3 mt-4 px-4 py-2 rounded-xl border border-gray-200 bg-gray-50/50">
+                    <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por cliente, CPF/CNPJ, nº da OS, equipamento ou técnico..."
+                        className="bg-transparent border-none focus:outline-none w-full text-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                        <button type="button" onClick={() => setSearchTerm('')} className="flex-shrink-0">
+                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                        </button>
+                    )}
+                </div>
 
                 {!isListOpen ? (
                     <p className="text-sm text-gray-400 mt-2">Clique para ver as ordens de serviço, ou clique em um card acima para filtrar por status.</p>
