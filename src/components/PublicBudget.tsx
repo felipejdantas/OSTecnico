@@ -42,7 +42,9 @@ export function PublicBudget({
 
             {services.length > 0 && (
                 <div className="mb-4">
-                    <h3 className="font-semibold text-gray-900 mb-2 text-sm">Serviços</h3>
+                    <div className="bg-gray-100 -mx-6 px-6 py-2 mb-3">
+                        <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wide">Serviços</h3>
+                    </div>
                     <div className="space-y-2">
                         {services.map((s, i) => (
                             <div key={i} className="flex justify-between text-sm bg-gray-50 p-2 rounded-lg">
@@ -59,7 +61,9 @@ export function PublicBudget({
 
             {items.length > 0 && (
                 <div className="mb-4">
-                    <h3 className="font-semibold text-gray-900 mb-2 text-sm">Peças</h3>
+                    <div className="bg-gray-100 -mx-6 px-6 py-2 mb-3">
+                        <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wide">Peças</h3>
+                    </div>
                     <div className="space-y-2">
                         {items.map((it, i) => (
                             <div key={i} className="flex justify-between text-sm bg-gray-50 p-2 rounded-lg">
@@ -101,8 +105,10 @@ export function PublicBudget({
             </div>
 
             {(pixKey || bankDetails) && (
-                <div className="mt-4 pt-4 border-t border-gray-100 text-sm">
-                    <h3 className="font-semibold text-gray-900 mb-1">Pagamento</h3>
+                <div className="mt-4 text-sm">
+                    <div className="bg-gray-100 -mx-6 px-6 py-2 mb-3">
+                        <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wide">Pagamento</h3>
+                    </div>
                     {pixKey && <p className="text-gray-600">PIX: <span className="font-medium text-gray-800">{pixKey}</span></p>}
                     {bankDetails && <p className="text-gray-600 whitespace-pre-line">{bankDetails}</p>}
                     {companyPhone && <p className="text-gray-500 text-xs mt-1">Dúvidas: {companyPhone}</p>}
@@ -110,11 +116,16 @@ export function PublicBudget({
             )}
 
             {(warrantyDays || warrantyText) && (
-                <div className="mt-4 pt-4 border-t border-gray-100 text-sm flex gap-2">
-                    <ShieldCheck className="w-4 h-4 text-primary-cyan flex-shrink-0 mt-0.5" />
-                    <div>
-                        <span className="font-semibold text-gray-900">Garantia{warrantyDays ? ` de ${warrantyDays} dias` : ''}</span>
-                        {warrantyText && <p className="text-gray-600 text-xs mt-0.5">{warrantyText}</p>}
+                <div className="mt-4 text-sm">
+                    <div className="bg-gray-100 -mx-6 px-6 py-2 mb-3">
+                        <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wide">Garantia</h3>
+                    </div>
+                    <div className="flex gap-2">
+                        <ShieldCheck className="w-4 h-4 text-primary-cyan flex-shrink-0 mt-0.5" />
+                        <div>
+                            <span className="font-semibold text-gray-900">{warrantyDays ? `${warrantyDays} dias corridos` : 'Condições da garantia'}</span>
+                            {warrantyText && <p className="text-gray-600 text-xs mt-0.5">{warrantyText}</p>}
+                        </div>
                     </div>
                 </div>
             )}

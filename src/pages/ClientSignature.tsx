@@ -295,26 +295,7 @@ export default function ClientSignature() {
                     <StatusTimeline currentStatus={os.status} history={history} />
                 </Card>
 
-                {/* Budget */}
-                <PublicBudget
-                    items={os.items || []}
-                    services={os.services || []}
-                    discountType={os.discount_type || 'fixed'}
-                    discountValue={os.discount_value || 0}
-                    freight={os.freight || 0}
-                    urgencyFee={os.urgency_fee || 0}
-                    budgetApprovedAt={os.budget_approved_at}
-                    canApprove={os.status === 'aguardando_aprovacao' && !os.budget_approved_at}
-                    isApproving={isApproving}
-                    onApprove={approveBudget}
-                    pixKey={os.company_pix_key}
-                    bankDetails={os.company_bank_details}
-                    companyPhone={os.company_phone}
-                    warrantyDays={os.company_warranty_days}
-                    warrantyText={os.company_warranty_text}
-                />
-
-                {/* OS Details */}
+                {/* Equipment & Client Info */}
                 <Card>
                     {/* Provider + date */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b pb-4 mb-4">
@@ -336,13 +317,10 @@ export default function ClientSignature() {
                         </div>
                     </div>
 
-                    {/* OS number + equipment */}
-                    <div className="mb-4">
+                    {/* Title bar */}
+                    <div className="bg-gray-100 -mx-6 px-6 py-3 mb-4">
                         <h3 className="font-bold text-primary-cyan text-xl">OS #{os.os_number}</h3>
-                        <p className="text-gray-600 text-sm">
-                            {[os.equipment_type, os.brand, os.equipment].filter(Boolean).join(' · ')}
-                            {os.serial_number ? ` · Série: ${os.serial_number}` : ''}
-                        </p>
+                        {os.equipment_type && <p className="text-gray-500 text-sm">{os.equipment_type}</p>}
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                             {os.entry_date && <span>Entrada: {new Date(os.entry_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
                             {os.estimated_completion_date && <span>Previsão: {new Date(os.estimated_completion_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
@@ -351,7 +329,7 @@ export default function ClientSignature() {
                     </div>
 
                     {/* Client */}
-                    <div className="mb-6 pb-4 border-b border-gray-100">
+                    <div className="mb-4 pb-4 border-b border-gray-100">
                         <h3 className="font-semibold text-gray-900 text-sm mb-1">
                             Cliente: {os.customer_trade_name || os.customer_company_name || os.customer_name}
                         </h3>
@@ -375,14 +353,62 @@ export default function ClientSignature() {
                         </div>
                     </div>
 
-                    <div className="mb-6">
-                        <h3 className="font-semibold text-gray-900 mb-2">Descrição do Problema</h3>
-                        <div className="bg-gray-50 p-3 rounded-lg text-sm text-gray-700">
-                            {os.problem_description}
+                    {/* Informações Básicas */}
+                    <div className={os.technician_observation ? 'mb-4' : ''}>
+                        <div className="bg-gray-100 -mx-6 px-6 py-2 mb-3">
+                            <h3 className="font-bold text-gray-800 text-xs uppercase tracking-wide">Informações Básicas</h3>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium mb-0.5">Marca</p>
+                                <p className="text-gray-800">{os.brand || '-'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium mb-0.5">Modelo</p>
+                                <p className="text-gray-800">{os.equipment || '-'}{os.serial_number ? ` (Série: ${os.serial_number})` : ''}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium mb-0.5">Equipamento</p>
+                                <p className="text-gray-800">{os.equipment_type || '-'}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium mb-0.5">Defeito</p>
+                                <p className="text-gray-800">{os.problem_description}</p>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="border-t pt-4">
+                    {/* Observações */}
+                    {os.technician_observation && (
+                        <div>
+                            <h3 className="font-semibold text-gray-900 text-sm mb-2">Observações</h3>
+                            <p className="text-sm text-gray-700 whitespace-pre-line">{os.technician_observation}</p>
+                        </div>
+                    )}
+                </Card>
+
+                {/* Budget: Serviços / Peças / Pagamento / Garantia */}
+                <PublicBudget
+                    items={os.items || []}
+                    services={os.services || []}
+                    discountType={os.discount_type || 'fixed'}
+                    discountValue={os.discount_value || 0}
+                    freight={os.freight || 0}
+                    urgencyFee={os.urgency_fee || 0}
+                    budgetApprovedAt={os.budget_approved_at}
+                    canApprove={os.status === 'aguardando_aprovacao' && !os.budget_approved_at}
+                    isApproving={isApproving}
+                    onApprove={approveBudget}
+                    pixKey={os.company_pix_key}
+                    bankDetails={os.company_bank_details}
+                    companyPhone={os.company_phone}
+                    warrantyDays={os.company_warranty_days}
+                    warrantyText={os.company_warranty_text}
+                />
+
+                {/* Checklist, Accessories, Signature, Photos */}
+                <Card>
+                    <div>
                         <h3 className="font-semibold text-lg text-dark mb-4">Problemas Identificados no Checklist</h3>
                         {[os.physical_condition, os.operating_condition, os.technical_tests].every(
                             (list: any[]) => !(list || []).some((i: any) => i.status === 'defect')

@@ -133,29 +133,32 @@ export async function generateOSPDF(osData: OSData) {
     doc.line(15, yPos, pageWidth - 15, yPos);
     yPos += 8;
 
-    // ---- OS number + date ----
+    // ---- Title bar: OS number + equipment type + date ----
+    const formatDate = (d?: string | null) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : null;
+
+    doc.setFillColor(240, 240, 240);
+    doc.rect(15, yPos, pageWidth - 30, osData.equipment_type ? 16 : 11, 'F');
     doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
     doc.setFontSize(15);
     doc.setFont('helvetica', 'bold');
-    doc.text(`OS Nº ${osData.os_number || 'N/A'}`, 15, yPos);
-
+    doc.text(`OS Nº ${osData.os_number || 'N/A'}`, 18, yPos + 7);
+    if (osData.equipment_type) {
+        doc.setTextColor(100);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(osData.equipment_type, 18, yPos + 13);
+    }
     doc.setTextColor(100);
     doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
     doc.text(
         `Data: ${osData.created_at ? new Date(osData.created_at).toLocaleDateString('pt-BR') : 'N/A'}`,
-        pageWidth - 15,
-        yPos,
+        pageWidth - 18,
+        yPos + 7,
         { align: 'right' }
     );
-    yPos += 4;
-    doc.setTextColor(80);
-    doc.setFontSize(10);
-    doc.text([osData.equipment_type, osData.brand, osData.equipment].filter(Boolean).join(' · '), 15, yPos + 3);
-    yPos += 10;
+    yPos += (osData.equipment_type ? 16 : 11) + 8;
 
-    // ---- Client block / Equipment block (two columns) ----
-    const colWidth = (pageWidth - 30 - 10) / 2;
+    // ---- Client block (full width) ----
     const clientLines = [
         `Cliente: ${customer?.trade_name || customer?.company_name || customer?.name || 'N/A'}`,
         customer?.company_name && customer?.trade_name && `Razão Social: ${customer.company_name}`,
@@ -167,36 +170,43 @@ export async function generateOSPDF(osData: OSData) {
         customer?.email && `E-mail: ${customer.email}`,
         customer?.address && `Endereço: ${customer.address}${customer?.number ? `, ${customer.number}` : ''}`,
     ].filter(Boolean) as string[];
+    yPos = drawInfoBlock(doc, 15, yPos, pageWidth - 30, clientLines) + 6;
 
-    const formatDate = (d?: string | null) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : null;
+    // ---- Informações Básicas (gray bar + 2-column grid) ----
+    ensureSpace(40);
+    yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Informações Básicas');
+    const basicFields: [string, string][] = [
+        ['Marca', osData.brand || '-'],
+        ['Modelo', osData.equipment || '-'],
+        ['Equipamento', osData.equipment_type || '-'],
+        ['Defeito', osData.problem_description || 'Não informado'],
+    ];
+    yPos = drawFieldGrid(doc, 15, yPos, (pageWidth - 30 - 10) / 2, basicFields);
 
-    const equipmentLines = [
-        osData.equipment_type && `Tipo de Equipamento: ${osData.equipment_type}`,
-        osData.brand && `Marca: ${osData.brand}`,
-        `Modelo: ${osData.equipment || 'N/A'}`,
-        `Número de Série: ${osData.serial_number || 'N/A'}`,
+    const extraLines = [
+        osData.serial_number && `Número de Série: ${osData.serial_number}`,
         `Técnico Responsável: ${technician?.name || 'N/A'}`,
         `Status: ${getStatusLabel(osData.status)}`,
         osData.entry_date && `Data de Entrada: ${formatDate(osData.entry_date)}`,
         osData.estimated_completion_date && `Previsão de Conclusão: ${formatDate(osData.estimated_completion_date)}`,
         osData.completed_date && `Concluído em: ${formatDate(osData.completed_date)}`,
     ].filter(Boolean) as string[];
+    yPos = drawInfoBlock(doc, 15, yPos, pageWidth - 30, extraLines) + 6;
 
-    const clientEndY = drawInfoBlock(doc, 15, yPos, colWidth, clientLines);
-    const equipEndY = drawInfoBlock(doc, 15 + colWidth + 10, yPos, colWidth, equipmentLines);
-    yPos = Math.max(clientEndY, equipEndY) + 6;
-
-    // ---- Problem Description ----
-    ensureSpace(20);
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('Problema Relatado:', 15, yPos);
-    yPos += 5;
-    doc.setFont('helvetica', 'normal');
-    const problemLines = doc.splitTextToSize(osData.problem_description || 'Não informado', pageWidth - 30);
-    doc.text(problemLines, 15, yPos);
-    yPos += problemLines.length * 5 + 8;
+    // ---- Observações (technician's freeform notes) ----
+    if (osData.technician_observation) {
+        ensureSpace(20);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Observações:', 15, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const obsLines = doc.splitTextToSize(osData.technician_observation, pageWidth - 30);
+        doc.text(obsLines, 15, yPos);
+        yPos += obsLines.length * 5 + 8;
+    }
 
     // ---- Accessories ----
     ensureSpace(15);
@@ -253,10 +263,11 @@ export async function generateOSPDF(osData: OSData) {
 
     // ---- Services performed ----
     if (osData.services && osData.services.length > 0) {
-        ensureSpace(20);
+        ensureSpace(25);
+        yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Serviços');
         autoTable(doc, {
             startY: yPos,
-            head: [['Serviços Realizados', 'Qtd', 'Preço', 'Total']],
+            head: [['Descrição', 'Qtd', 'Preço', 'Total']],
             body: osData.services.map(s => [
                 s.description ? `${s.service_name}\n${s.description}` : s.service_name,
                 String(s.quantity),
@@ -272,10 +283,11 @@ export async function generateOSPDF(osData: OSData) {
 
     // ---- Parts used ----
     if (osData.items && osData.items.length > 0) {
-        ensureSpace(20);
+        ensureSpace(25);
+        yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Peças');
         autoTable(doc, {
             startY: yPos,
-            head: [['Peças Utilizadas', 'Qtd', 'Preço Unit.', 'Total']],
+            head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total']],
             body: osData.items.map(i => [
                 i.product_name,
                 String(i.quantity),
@@ -329,15 +341,12 @@ export async function generateOSPDF(osData: OSData) {
 
     // ---- Payment & warranty info ----
     if (company?.pix_key || company?.bank_details || company?.warranty_text || company?.warranty_days) {
-        ensureSpace(20);
         if (company?.pix_key || company?.bank_details) {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(10);
-            doc.setTextColor(0);
-            doc.text('Pagamento:', 15, yPos);
-            yPos += 5;
+            ensureSpace(25);
+            yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Pagamento');
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(9);
+            doc.setTextColor(0);
             if (company?.pix_key) {
                 doc.text(`PIX: ${company.pix_key}`, 15, yPos);
                 yPos += 5;
@@ -350,13 +359,14 @@ export async function generateOSPDF(osData: OSData) {
             yPos += 5;
         }
         if (company?.warranty_text || company?.warranty_days) {
-            ensureSpace(15);
+            ensureSpace(20);
+            yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Garantia');
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(10);
-            doc.text(`Garantia${company?.warranty_days ? ` (${company.warranty_days} dias)` : ''}:`, 15, yPos);
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            doc.text(`Condições da garantia${company?.warranty_days ? ` (${company.warranty_days} dias)` : ''}:`, 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
             if (company?.warranty_text) {
                 const warrantyLines = doc.splitTextToSize(company.warranty_text, pageWidth - 30);
                 doc.text(warrantyLines, 15, yPos);
@@ -364,20 +374,6 @@ export async function generateOSPDF(osData: OSData) {
             }
             yPos += 5;
         }
-    }
-
-    // ---- Technician Observation ----
-    if (osData.technician_observation) {
-        ensureSpace(20);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text('Observação do Técnico:', 15, yPos);
-        yPos += 5;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        const obsLines = doc.splitTextToSize(osData.technician_observation, pageWidth - 30);
-        doc.text(obsLines, 15, yPos);
-        yPos += obsLines.length * 5 + 10;
     }
 
     // ---- Client signature (before photos) ----
@@ -518,6 +514,41 @@ export async function generateOSPDF(osData: OSData) {
 
     // Save PDF
     doc.save(`OS_${osData.os_number || '000'}_${(customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
+}
+
+function drawSectionBar(doc: jsPDF, x: number, width: number, y: number, title: string): number {
+    doc.setFillColor(240, 240, 240);
+    doc.rect(x, y, width, 7, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(60);
+    doc.text(title.toUpperCase(), x + 3, y + 5);
+    doc.setTextColor(0);
+    return y + 7 + 5;
+}
+
+function drawFieldGrid(doc: jsPDF, x: number, y: number, colWidth: number, fields: [string, string][]): number {
+    let curY = y;
+    for (let i = 0; i < fields.length; i += 2) {
+        const rowFields = fields.slice(i, i + 2);
+        const wrappedPerCol = rowFields.map(([, value]) => doc.splitTextToSize(value || '-', colWidth - 4));
+        const maxLines = Math.max(...wrappedPerCol.map(w => w.length));
+
+        rowFields.forEach(([label], idx) => {
+            const colX = x + idx * (colWidth + 10);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(120);
+            doc.text(label.toUpperCase(), colX, curY);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9.5);
+            doc.setTextColor(30);
+            doc.text(wrappedPerCol[idx], colX, curY + 4.5);
+        });
+        curY += 4.5 + maxLines * 4.5 + 3;
+    }
+    doc.setTextColor(0);
+    return curY + 2;
 }
 
 function drawInfoBlock(doc: jsPDF, x: number, y: number, maxWidth: number, lines: string[]): number {
