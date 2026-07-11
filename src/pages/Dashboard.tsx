@@ -345,22 +345,17 @@ export default function Dashboard() {
         openEmail(order.customers.email, order.os_number, message);
     };
 
-    const stats = {
-        total: orders.length,
-        emAndamento: orders.filter(o => !['pronto', 'entregue', 'cancelado'].includes(o.status)).length,
-        pronto: orders.filter(o => o.status === 'pronto').length,
-        entregue: orders.filter(o => o.status === 'entregue').length,
-    };
-
     const filteredOrders = orders.filter(o => {
         if (statusFilter === 'todos') return true;
         if (statusFilter === 'em_andamento') return !['pronto', 'entregue', 'cancelado'].includes(o.status);
         return o.status === statusFilter;
     });
 
-    // Dashboard chips only surface the active workflow stages the shop actually
-    // triages day to day; "entregue" moves to Faturamento and "cancelado" is rare.
-    const dashboardStatuses: OrderStatus[] = ['recebido', 'em_diagnostico', 'aguardando_aprovacao', 'aguardando_peca', 'em_reparo', 'pronto'];
+    const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
+
+    // Top summary cards only surface the active workflow stages the shop
+    // triages day to day; the filter chips below still cover every status.
+    const topStatuses: OrderStatus[] = ['recebido', 'em_diagnostico', 'aguardando_aprovacao', 'aguardando_peca', 'em_reparo', 'pronto'];
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -412,59 +407,26 @@ export default function Dashboard() {
                 </Button>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <Card
-                    className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => openList('todos')}
-                >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Total de OS</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-primary-cyan">{stats.total}</p>
-                        </div>
-                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-primary-cyan opacity-50" />
-                    </div>
-                </Card>
-
-                <Card
-                    className="bg-gradient-to-br from-blue-100/50 to-blue-50/30 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => openList('em_andamento')}
-                >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Em Andamento</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-blue-700">{stats.emAndamento}</p>
-                        </div>
-                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-blue-600 opacity-50" />
-                    </div>
-                </Card>
-
-                <Card
-                    className="bg-gradient-to-br from-green-100/50 to-green-50/30 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => openList('pronto')}
-                >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Prontos p/ Retirada</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-green-700">{stats.pronto}</p>
-                        </div>
-                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-green-600 opacity-50" />
-                    </div>
-                </Card>
-
-                <Card
-                    className="bg-gradient-to-br from-emerald-100/50 to-emerald-50/30 cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => openList('entregue')}
-                >
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs sm:text-sm text-gray-600">Entregues</p>
-                            <p className="text-2xl sm:text-3xl font-bold text-emerald-700">{stats.entregue}</p>
-                        </div>
-                        <FileText className="w-8 h-8 sm:w-10 sm:h-10 text-emerald-600 opacity-50" />
-                    </div>
-                </Card>
+            {/* Stats Cards: only the statuses the shop actively triages day to day */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+                {topStatuses.map(s => {
+                    const count = orders.filter(o => o.status === s).length;
+                    return (
+                        <Card
+                            key={s}
+                            className="cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => openList(s)}
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs sm:text-sm text-gray-600">{STATUS_CONFIG[s].shortLabel}</p>
+                                    <p className="text-2xl sm:text-3xl font-bold text-dark">{count}</p>
+                                </div>
+                                <span className={`w-3 h-3 rounded-full flex-shrink-0 ${STATUS_CONFIG[s].dot}`} />
+                            </div>
+                        </Card>
+                    );
+                })}
             </div>
 
             {/* Orders List */}
@@ -491,7 +453,7 @@ export default function Dashboard() {
                             >
                                 Todos ({orders.length})
                             </button>
-                            {dashboardStatuses.map(s => {
+                            {allStatuses.map(s => {
                                 const count = orders.filter(o => o.status === s).length;
                                 return (
                                     <button
