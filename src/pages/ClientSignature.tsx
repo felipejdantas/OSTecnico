@@ -231,56 +231,9 @@ export default function ClientSignature() {
                 )}
 
                 {needsSignature && !justSigned && (
-                    !isVerified ? (
-                        <Card>
-                            <h2 className="text-xl font-bold text-dark mb-4">Verificação de Identidade</h2>
-                            <p className="text-gray-600 mb-6">
-                                Para assinar a ordem de serviço, por favor confirme seu CPF.
-                            </p>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-600 mb-1 block">CPF</label>
-                                    <input
-                                        type="text"
-                                        value={cpf}
-                                        onChange={(e) => setCpf(e.target.value)}
-                                        placeholder="000.000.000-00"
-                                        maxLength={14}
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 bg-white text-lg"
-                                    />
-                                </div>
-
-                                {error && (
-                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                                        {error}
-                                    </div>
-                                )}
-
-                                <Button onClick={verifyCPF} size="lg" className="w-full" disabled={isVerifying}>
-                                    {isVerifying ? 'Verificando...' : 'Verificar CPF'}
-                                </Button>
-                            </div>
-                        </Card>
-                    ) : (
-                        <Card>
-                            <h2 className="text-xl font-bold text-dark mb-4">Sua Assinatura</h2>
-                            <p className="text-gray-600 mb-4 text-sm">
-                                Declaro que as informações abaixo conferem com o estado do equipamento entregue e autorizo a realização do serviço.
-                            </p>
-                            <SignaturePad ref={sigPadRef} />
-
-                            {error && (
-                                <div className="p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                                    {error}
-                                </div>
-                            )}
-
-                            <Button onClick={handleSubmit} size="lg" className="w-full mt-4" disabled={isSubmitting}>
-                                {isSubmitting ? 'Salvando...' : 'Confirmar Assinatura'}
-                            </Button>
-                        </Card>
-                    )
+                    <Card className="bg-primary-cyan/5 border-primary-cyan/20 text-sm text-gray-700">
+                        Revise abaixo os dados da sua Ordem de Serviço. No final desta página, confirme sua assinatura para dar continuidade ao atendimento.
+                    </Card>
                 )}
 
                 {/* Current status */}
@@ -475,6 +428,60 @@ export default function ClientSignature() {
                         </h2>
                         <p className="text-sm text-gray-600 whitespace-pre-line">{os.company_terms_text}</p>
                     </Card>
+                )}
+
+                {/* Signature: only after the client has reviewed everything above */}
+                {needsSignature && !justSigned && (
+                    !isVerified ? (
+                        <Card>
+                            <h2 className="text-xl font-bold text-dark mb-4">Verificação de Identidade</h2>
+                            <p className="text-gray-600 mb-6">
+                                Para assinar a ordem de serviço, por favor confirme seu CPF.
+                            </p>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-600 mb-1 block">CPF</label>
+                                    <input
+                                        type="text"
+                                        value={cpf}
+                                        onChange={(e) => setCpf(e.target.value)}
+                                        placeholder="000.000.000-00"
+                                        maxLength={14}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 bg-white text-lg"
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                                        {error}
+                                    </div>
+                                )}
+
+                                <Button onClick={verifyCPF} size="lg" className="w-full" disabled={isVerifying}>
+                                    {isVerifying ? 'Verificando...' : 'Verificar CPF'}
+                                </Button>
+                            </div>
+                        </Card>
+                    ) : (
+                        <Card>
+                            <h2 className="text-xl font-bold text-dark mb-4">Sua Assinatura</h2>
+                            <p className="text-gray-600 mb-4 text-sm">
+                                Declaro que as informações acima conferem com o estado do equipamento entregue e autorizo a realização do serviço.
+                            </p>
+                            <SignaturePad ref={sigPadRef} />
+
+                            {error && (
+                                <div className="p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                                    {error}
+                                </div>
+                            )}
+
+                            <Button onClick={handleSubmit} size="lg" className="w-full mt-4" disabled={isSubmitting}>
+                                {isSubmitting ? 'Salvando...' : 'Confirmar Assinatura'}
+                            </Button>
+                        </Card>
+                    )
                 )}
             </div>
         </div>

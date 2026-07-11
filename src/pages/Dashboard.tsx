@@ -10,7 +10,7 @@ import { generateOSPDF } from '../lib/pdfGenerator';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
-import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail } from '../lib/shareLinks';
+import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
 import { PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
 
 type ServiceOrder = {
@@ -27,6 +27,7 @@ type ServiceOrder = {
     is_pinned: boolean;
     signature_token: string;
     client_signed_at: string | null;
+    budget_approved_at: string | null;
 };
 
 export default function Dashboard() {
@@ -64,6 +65,7 @@ export default function Dashboard() {
           is_pinned,
           signature_token,
           client_signed_at,
+          budget_approved_at,
           customers (name, phone, email),
           technicians (name)
         `)
@@ -262,13 +264,21 @@ export default function Dashboard() {
         }
     };
 
+    // The message invites the client to the specific action the OS still needs
+    // from them (approve the budget, then sign), falling back to plain tracking.
+    const trackingContextFor = (order: ServiceOrder): TrackingMessageContext => {
+        if (order.status === 'aguardando_aprovacao' && !order.budget_approved_at) return 'approval';
+        if (!order.client_signed_at) return 'signature';
+        return 'tracking';
+    };
+
     const shareViaWhatsApp = (order: ServiceOrder) => {
         if (!order.customers?.phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
         const link = buildTrackingLink(order.signature_token);
-        const message = buildTrackingMessage(order.customers.name, order.os_number, link);
+        const message = buildTrackingMessage(order.customers.name, order.os_number, link, trackingContextFor(order));
         openWhatsApp(order.customers.phone, message);
     };
 
@@ -278,7 +288,7 @@ export default function Dashboard() {
             return;
         }
         const link = buildTrackingLink(order.signature_token);
-        const message = buildTrackingMessage(order.customers.name, order.os_number, link);
+        const message = buildTrackingMessage(order.customers.name, order.os_number, link, trackingContextFor(order));
         openEmail(order.customers.email, order.os_number, message);
     };
 

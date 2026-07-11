@@ -2,7 +2,15 @@ export function buildTrackingLink(token: string) {
     return `${window.location.origin}/assinar/${token}`;
 }
 
-export function buildTrackingMessage(customerName: string, osNumber: number, link: string) {
+export type TrackingMessageContext = 'approval' | 'signature' | 'tracking';
+
+export function buildTrackingMessage(customerName: string, osNumber: number, link: string, context: TrackingMessageContext = 'tracking') {
+    if (context === 'approval') {
+        return `Olá ${customerName}! O orçamento da sua Ordem de Serviço #${osNumber} está pronto. Por favor, acesse o link para revisar e aprovar: ${link}`;
+    }
+    if (context === 'signature') {
+        return `Olá ${customerName}! Por favor, acesse o link para revisar e assinar sua Ordem de Serviço #${osNumber}: ${link}`;
+    }
     return `Olá ${customerName}! Você pode acompanhar o andamento da sua Ordem de Serviço #${osNumber} pelo link: ${link}`;
 }
 
