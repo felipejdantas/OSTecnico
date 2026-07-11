@@ -18,6 +18,8 @@ type ServiceOrder = {
     os_number: number;
     created_at: string;
     equipment: string;
+    brand: string | null;
+    equipment_type: string | null;
     status: OrderStatus;
     payment_status: PaymentStatus;
     customers: { name: string; phone: string | null; email: string | null } | null;
@@ -55,6 +57,8 @@ export default function Dashboard() {
           os_number,
           created_at,
           equipment,
+          brand,
+          equipment_type,
           status,
           payment_status,
           is_pinned,
@@ -205,6 +209,8 @@ export default function Dashboard() {
                 customer: data.customers, // This should be an object {name, cpf, phone}
                 technician: data.technicians, // This should be an object {name}
                 equipment: data.equipment,
+                brand: data.brand,
+                equipment_type: data.equipment_type,
                 serial_number: data.serial_number,
                 problem_description: data.problem_description,
                 physical_condition: data.physical_condition || [],
@@ -455,7 +461,9 @@ export default function Dashboard() {
                                                 <span className="font-semibold text-dark text-base">{order.customers?.name || 'N/A'}</span>
                                             </div>
 
-                                            <p className="text-sm text-gray-600 mb-1">{order.equipment}</p>
+                                            <p className="text-sm text-gray-600 mb-1">
+                                                {[order.equipment_type, order.brand, order.equipment].filter(Boolean).join(' · ')}
+                                            </p>
 
                                             <div className="flex items-center gap-2 text-xs text-gray-500">
                                                 <Calendar className="w-3 h-3" />

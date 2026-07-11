@@ -55,6 +55,8 @@ type OSData = {
     completed_date?: string | null;
     customer: CustomerInfo;
     technician: { name: string } | any;
+    brand?: string | null;
+    equipment_type?: string | null;
     equipment: string;
     serial_number?: string;
     problem_description: string;
@@ -149,7 +151,7 @@ export async function generateOSPDF(osData: OSData) {
     yPos += 4;
     doc.setTextColor(80);
     doc.setFontSize(10);
-    doc.text(String(osData.equipment || ''), 15, yPos + 3);
+    doc.text([osData.equipment_type, osData.brand, osData.equipment].filter(Boolean).join(' · '), 15, yPos + 3);
     yPos += 10;
 
     // ---- Client block / Equipment block (two columns) ----
@@ -169,7 +171,9 @@ export async function generateOSPDF(osData: OSData) {
     const formatDate = (d?: string | null) => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : null;
 
     const equipmentLines = [
-        `Equipamento: ${osData.equipment || 'N/A'}`,
+        osData.equipment_type && `Tipo de Equipamento: ${osData.equipment_type}`,
+        osData.brand && `Marca: ${osData.brand}`,
+        `Modelo: ${osData.equipment || 'N/A'}`,
         `Número de Série: ${osData.serial_number || 'N/A'}`,
         `Técnico Responsável: ${technician?.name || 'N/A'}`,
         `Status: ${getStatusLabel(osData.status)}`,

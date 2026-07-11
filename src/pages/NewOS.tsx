@@ -22,7 +22,9 @@ const osSchema = z.object({
     osNumber: z.string().optional(), // Allow manual OS number
     customerId: z.string().min(1, 'Selecione um cliente'),
     technicianId: z.string().min(1, 'Selecione um técnico'),
-    equipment: z.string().min(3, 'Equipamento obrigatório'),
+    equipmentType: z.string().optional(),
+    brand: z.string().optional(),
+    equipment: z.string().min(2, 'Modelo obrigatório'),
     serialNumber: z.string().optional(),
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
     status: z.string(),
@@ -32,6 +34,8 @@ const osSchema = z.object({
 });
 
 type OSForm = z.infer<typeof osSchema>;
+
+export const EQUIPMENT_TYPES = ['Notebook', 'Desktop', 'All-in-One', 'Tablet', 'Celular', 'Console', 'Impressora', 'Placa-mãe', 'Outro'];
 
 // Checklist items based on provided images
 const PHYSICAL_CONDITION_ITEMS = [
@@ -167,6 +171,8 @@ export default function NewOS() {
                 user_id: user.id,
                 customer_id: data.customerId,
                 technician_id: data.technicianId,
+                equipment_type: data.equipmentType,
+                brand: data.brand,
                 equipment: data.equipment,
                 serial_number: data.serialNumber,
                 problem_description: data.problemDescription,
@@ -328,11 +334,29 @@ export default function NewOS() {
                                     {errors.status && <p className="text-xs text-red-500">{errors.status.message}</p>}
                                 </div>
 
-                                <Input label="Equipamento / Modelo" {...register('equipment')} error={errors.equipment?.message} />
-                                <Input label="Número de Série" {...register('serialNumber')} />
-
                                 <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />
                                 <Input label="Previsão de Conclusão" type="date" {...register('estimatedCompletionDate')} />
+                            </div>
+                        </Card>
+
+                        <Card>
+                            <h3 className="font-semibold text-base sm:text-lg mb-4">Informações do Equipamento</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-600">Tipo de Equipamento</label>
+                                    <select
+                                        {...register('equipmentType')}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {EQUIPMENT_TYPES.map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <Input label="Marca" {...register('brand')} placeholder="Ex: Dell, Acer, Samsung..." />
+                                <Input label="Modelo" {...register('equipment')} error={errors.equipment?.message} placeholder="Ex: Inspiron 15 P66F" />
+                                <Input label="Número de Série" {...register('serialNumber')} />
 
                                 <div className="sm:col-span-2">
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">Descrição do Problema</label>

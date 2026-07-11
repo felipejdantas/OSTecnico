@@ -339,7 +339,10 @@ export default function ClientSignature() {
                     {/* OS number + equipment */}
                     <div className="mb-4">
                         <h3 className="font-bold text-primary-cyan text-xl">OS #{os.os_number}</h3>
-                        <p className="text-gray-600 text-sm">{os.equipment}{os.serial_number ? ` · Série: ${os.serial_number}` : ''}</p>
+                        <p className="text-gray-600 text-sm">
+                            {[os.equipment_type, os.brand, os.equipment].filter(Boolean).join(' · ')}
+                            {os.serial_number ? ` · Série: ${os.serial_number}` : ''}
+                        </p>
                         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-500">
                             {os.entry_date && <span>Entrada: {new Date(os.entry_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
                             {os.estimated_completion_date && <span>Previsão: {new Date(os.estimated_completion_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
