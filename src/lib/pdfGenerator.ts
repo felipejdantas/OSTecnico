@@ -31,6 +31,7 @@ type CompanyInfo = {
     warranty_days?: number | null;
     warranty_text?: string | null;
     terms_text?: string | null;
+    default_technician_signature_url?: string | null;
 };
 
 type CustomerInfo = {
@@ -79,6 +80,7 @@ type OSData = {
 };
 
 const brandColor = [0, 153, 255] as [number, number, number];
+const darkGray = [90, 90, 90] as [number, number, number];
 
 export async function generateOSPDF(osData: OSData) {
     const doc = new jsPDF();
@@ -240,11 +242,12 @@ export async function generateOSPDF(osData: OSData) {
     if (!anyDefect) {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
-        doc.setTextColor(0, 128, 0);
+        doc.setTextColor(90);
         doc.text('Nenhum problema identificado no checklist de entrada.', 15, yPos);
         doc.setTextColor(0);
         yPos += 10;
     } else {
+        const labelColWidth = 75;
         for (const [title, items] of checklistGroups) {
             const defects = (items || []).filter(i => i.status === 'defect');
             if (defects.length === 0) continue;
@@ -254,8 +257,9 @@ export async function generateOSPDF(osData: OSData) {
                 head: [[title, 'Observação']],
                 body: defects.map(item => [item.label, item.observation || '-']),
                 theme: 'striped',
-                headStyles: { fillColor: [220, 53, 69] },
+                headStyles: { fillColor: darkGray, textColor: 255 },
                 styles: { fontSize: 8 },
+                columnStyles: { 0: { cellWidth: labelColWidth } },
             });
             yPos = (doc as any).lastAutoTable.finalY + 8;
         }
@@ -275,7 +279,7 @@ export async function generateOSPDF(osData: OSData) {
                 formatCurrency(s.quantity * s.price),
             ]),
             theme: 'striped',
-            headStyles: { fillColor: brandColor },
+            headStyles: { fillColor: darkGray, textColor: 255 },
             styles: { fontSize: 8 },
         });
         yPos = (doc as any).lastAutoTable.finalY + 10;
@@ -295,7 +299,7 @@ export async function generateOSPDF(osData: OSData) {
                 formatCurrency(i.quantity * i.unit_price),
             ]),
             theme: 'striped',
-            headStyles: { fillColor: brandColor },
+            headStyles: { fillColor: darkGray, textColor: 255 },
             styles: { fontSize: 8 },
         });
         yPos = (doc as any).lastAutoTable.finalY + 10;
@@ -328,11 +332,12 @@ export async function generateOSPDF(osData: OSData) {
             head: [['Resumo Financeiro', '']],
             body: financeRows,
             theme: 'grid',
-            headStyles: { fillColor: brandColor, textColor: 255 },
+            headStyles: { fillColor: darkGray, textColor: 255 },
             styles: { fontSize: 9 },
             didParseCell: (data) => {
                 if (data.row.index === financeRows.length - 1) {
                     data.cell.styles.fontStyle = 'bold';
+                    if (data.column.index === 1) data.cell.styles.textColor = brandColor;
                 }
             },
         });
@@ -376,36 +381,28 @@ export async function generateOSPDF(osData: OSData) {
         }
     }
 
-    // ---- Client signature (before photos) ----
-    if (osData.client_signature_url) {
+    // ---- Signatures: Client + Technician (side by side) ----
+    const hasClientSig = !!osData.client_signature_url;
+    const hasTechSig = !!company?.default_technician_signature_url;
+    if (hasClientSig || hasTechSig) {
         ensureSpace(45);
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text('Assinatura do Cliente:', 15, yPos);
-        yPos += 4;
-        try {
-            const sigImg = await loadImage(osData.client_signature_url);
-            const sigHeight = 25;
-            const sigWidth = Math.min(70, sigHeight * (sigImg.width / sigImg.height));
-            doc.addImage(sigImg.data, 'PNG', 15, yPos, sigWidth, sigHeight);
-            yPos += sigHeight + 2;
-        } catch (error) {
-            console.error('Error loading signature image:', error);
-            yPos += 25;
+        const sigColWidth = (pageWidth - 30 - 10) / 2;
+        let clientEndY = yPos;
+        let techEndY = yPos;
+
+        if (hasClientSig) {
+            clientEndY = await drawSignatureBlock(
+                doc, 15, yPos, sigColWidth,
+                'Assinatura do Cliente:', osData.client_signature_url!, customer?.name || '', osData.client_signed_at
+            );
         }
-        doc.setDrawColor(150);
-        doc.line(15, yPos, 90, yPos);
-        yPos += 5;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text(customer?.name || '', 15, yPos);
-        if (osData.client_signed_at) {
-            doc.setFontSize(8);
-            doc.setTextColor(120);
-            doc.text(`Assinado em ${new Date(osData.client_signed_at).toLocaleString('pt-BR')}`, 15, yPos + 4);
-            doc.setTextColor(0);
+        if (hasTechSig) {
+            techEndY = await drawSignatureBlock(
+                doc, 15 + sigColWidth + 10, yPos, sigColWidth,
+                'Assinatura do Técnico Responsável:', company!.default_technician_signature_url!, technician?.name || ''
+            );
         }
-        yPos += 12;
+        yPos = Math.max(clientEndY, techEndY) + 4;
     }
 
     // ---- Photos, each tagged with its date ----
@@ -551,6 +548,46 @@ function drawFieldGrid(doc: jsPDF, x: number, y: number, colWidth: number, field
     return curY + 2;
 }
 
+async function drawSignatureBlock(
+    doc: jsPDF, x: number, y: number, maxWidth: number,
+    label: string, imageUrl: string, name: string, signedAt?: string
+): Promise<number> {
+    let curY = y;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+    doc.text(label, x, curY);
+    curY += 4;
+
+    const sigHeight = 25;
+    let lineWidth = Math.min(maxWidth, 75);
+    try {
+        const sigImg = await loadImage(imageUrl);
+        const sigWidth = Math.min(maxWidth, sigHeight * (sigImg.width / sigImg.height));
+        doc.addImage(sigImg.data, 'PNG', x, curY, sigWidth, sigHeight);
+        lineWidth = Math.min(maxWidth, Math.max(sigWidth, 60));
+    } catch (error) {
+        console.error('Error loading signature image:', error);
+    }
+    curY += sigHeight + 2;
+
+    doc.setDrawColor(150);
+    doc.line(x, curY, x + lineWidth, curY);
+    curY += 5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    doc.text(name, x, curY);
+    if (signedAt) {
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text(`Assinado em ${new Date(signedAt).toLocaleString('pt-BR')}`, x, curY + 4);
+        doc.setTextColor(0);
+        curY += 4;
+    }
+    return curY + 8;
+}
+
 function drawInfoBlock(doc: jsPDF, x: number, y: number, maxWidth: number, lines: string[]): number {
     let curY = y;
     doc.setFontSize(9);
@@ -585,6 +622,10 @@ function loadImage(url: string): Promise<{ data: string; width: number; height: 
             canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             if (ctx) {
+                // Fill white first: JPEG has no alpha channel, so transparent
+                // pixels (e.g. signature PNGs) would otherwise render as black.
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.drawImage(img, 0, 0);
                 resolve({
                     data: canvas.toDataURL('image/jpeg', 0.9), // 0.9 quality

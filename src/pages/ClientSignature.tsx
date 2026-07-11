@@ -20,11 +20,11 @@ const ChecklistView = ({ title, items }: { title: string, items: any[] }) => {
             <h4 className="font-medium text-gray-700 mb-2">{title}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {problems.map((item: any, index: number) => (
-                    <div key={index} className="flex items-center gap-2 text-sm p-2 bg-red-50 border border-red-100 rounded-lg">
-                        <X className="w-4 h-4 text-red-500 flex-shrink-0" />
-                        <span className="text-red-800 font-medium">{item.label}</span>
+                    <div key={index} className="flex items-center gap-2 text-sm p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        <X className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        <span className="text-gray-800 font-medium">{item.label}</span>
                         {item.observation && (
-                            <span className="text-xs text-red-600/80 italic ml-auto">({item.observation})</span>
+                            <span className="text-xs text-gray-500 italic ml-auto">({item.observation})</span>
                         )}
                     </div>
                 ))}
@@ -413,7 +413,7 @@ export default function ClientSignature() {
                         {[os.physical_condition, os.operating_condition, os.technical_tests].every(
                             (list: any[]) => !(list || []).some((i: any) => i.status === 'defect')
                         ) ? (
-                            <p className="text-sm text-green-700 bg-green-50 border border-green-100 rounded-lg p-3">
+                            <p className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
                                 Nenhum problema identificado no checklist de entrada.
                             </p>
                         ) : (
@@ -429,21 +429,32 @@ export default function ClientSignature() {
                         <div className="border-t pt-4 mb-4">
                             <h3 className="font-semibold text-gray-900 mb-2">Acessórios Recebidos</h3>
                             <div className="flex flex-wrap gap-2">
-                                {os.accessories_received.fonte && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">Fonte</span>}
-                                {os.accessories_received.cabo && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">Cabo de Força</span>}
-                                {os.accessories_received.mochila && <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">Mochila/Case</span>}
+                                {os.accessories_received.fonte && <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">Fonte</span>}
+                                {os.accessories_received.cabo && <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">Cabo de Força</span>}
+                                {os.accessories_received.mochila && <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">Mochila/Case</span>}
                                 {os.accessories_received.outro && <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{os.accessories_received.outro}</span>}
                             </div>
                         </div>
                     )}
 
-                    {os.client_signature_url && (
-                        <div className="border-t pt-4 mb-4">
-                            <h3 className="font-semibold text-gray-900 mb-2">Assinatura do Cliente</h3>
-                            <img src={os.client_signature_url} alt="Assinatura do cliente" className="h-24 border-b border-gray-300 mb-1" />
-                            <p className="text-sm text-gray-700">{os.customer_name}</p>
-                            {os.client_signed_at && (
-                                <p className="text-xs text-gray-400">Assinado em {new Date(os.client_signed_at).toLocaleString('pt-BR')}</p>
+                    {(os.client_signature_url || os.company_technician_signature_url) && (
+                        <div className="border-t pt-4 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {os.client_signature_url && (
+                                <div>
+                                    <h3 className="font-semibold text-gray-900 mb-2">Assinatura do Cliente</h3>
+                                    <img src={os.client_signature_url} alt="Assinatura do cliente" className="h-24 border-b border-gray-300 mb-1" />
+                                    <p className="text-sm text-gray-700">{os.customer_name}</p>
+                                    {os.client_signed_at && (
+                                        <p className="text-xs text-gray-400">Assinado em {new Date(os.client_signed_at).toLocaleString('pt-BR')}</p>
+                                    )}
+                                </div>
+                            )}
+                            {os.company_technician_signature_url && (
+                                <div>
+                                    <h3 className="font-semibold text-gray-900 mb-2">Assinatura do Técnico Responsável</h3>
+                                    <img src={os.company_technician_signature_url} alt="Assinatura do técnico" className="h-24 border-b border-gray-300 mb-1" />
+                                    <p className="text-sm text-gray-700">{os.technician_name}</p>
+                                </div>
                             )}
                         </div>
                     )}

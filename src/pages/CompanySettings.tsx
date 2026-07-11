@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, Building2 } from 'lucide-react';
+import { Save, Building2, Upload, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -26,13 +26,21 @@ const settingsSchema = z.object({
 type SettingsFormInput = z.input<typeof settingsSchema>;
 type SettingsForm = z.output<typeof settingsSchema>;
 
+// Pre-filled per the Código de Defesa do Consumidor (Lei 8.078/90, art. 26, II) so a
+// new account already has a legally coherent warranty clause instead of a blank field.
+const DEFAULT_WARRANTY_TEXT = 'A garantia prevista cobre exclusivamente o defeito relacionado ao serviço executado e/ou à peça substituída nesta Ordem de Serviço, contada a partir da data de entrega do equipamento, conforme o Código de Defesa do Consumidor (Lei nº 8.078/90, art. 26, inciso II). Não estão cobertos: danos decorrentes de mau uso, quedas, impactos, oxidação ou contato com líquidos; violação do lacre ou intervenção técnica de terceiros após a entrega; defeitos não relacionados ao reparo original; ou desgaste natural de outros componentes do equipamento. Constatada a reincidência do defeito coberto dentro do prazo de garantia, o reparo será refeito sem cobrança de mão de obra. Esta garantia contratual complementa, e não substitui, a garantia legal prevista no Código de Defesa do Consumidor.';
+
 export default function CompanySettings() {
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+    const [signatureFile, setSignatureFile] = useState<File | null>(null);
+    const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
+    const signatureInputRef = useRef<HTMLInputElement>(null);
     const { register, handleSubmit, setValue, formState: { errors } } = useForm<SettingsFormInput, any, SettingsForm>({
         resolver: zodResolver(settingsSchema),
-        defaultValues: { warranty_days: 90 },
+        defaultValues: { warranty_days: 90, warranty_text: DEFAULT_WARRANTY_TEXT },
     });
 
     useEffect(() => {
@@ -59,10 +67,24 @@ export default function CompanySettings() {
             setValue('pix_key', data.pix_key || '');
             setValue('bank_details', data.bank_details || '');
             setValue('warranty_days', data.warranty_days ?? 90);
-            setValue('warranty_text', data.warranty_text || '');
+            setValue('warranty_text', data.warranty_text || DEFAULT_WARRANTY_TEXT);
             setValue('terms_text', data.terms_text || '');
+            setSignatureUrl(data.default_technician_signature_url || null);
         }
         setLoading(false);
+    };
+
+    const handleSignatureSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setSignatureFile(file);
+        setSignaturePreview(URL.createObjectURL(file));
+    };
+
+    const removeSignature = () => {
+        setSignatureFile(null);
+        setSignaturePreview(null);
+        setSignatureUrl(null);
     };
 
     const onSubmit = async (data: SettingsForm) => {
@@ -70,11 +92,25 @@ export default function CompanySettings() {
 
         try {
             setIsSubmitting(true);
+
+            let technicianSignatureUrl = signatureUrl;
+            if (signatureFile) {
+                const fileExt = signatureFile.name.split('.').pop();
+                const fileName = `signature-${Math.random()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage.from('os-images').upload(fileName, signatureFile);
+                if (uploadError) throw uploadError;
+                const { data: urlData } = supabase.storage.from('os-images').getPublicUrl(fileName);
+                technicianSignatureUrl = urlData.publicUrl;
+            }
+
             const { error } = await supabase
                 .from('company_settings')
-                .upsert([{ ...data, user_id: user.id }], { onConflict: 'user_id' });
+                .upsert([{ ...data, default_technician_signature_url: technicianSignatureUrl, user_id: user.id }], { onConflict: 'user_id' });
 
             if (error) throw error;
+            setSignatureUrl(technicianSignatureUrl);
+            setSignatureFile(null);
+            setSignaturePreview(null);
             toast.success('Configurações salvas com sucesso!');
         } catch (error: any) {
             toast.error('Erro ao salvar configurações: ' + error.message);
@@ -139,6 +175,46 @@ export default function CompanySettings() {
                             />
                         </div>
                     </div>
+                </Card>
+
+                <Card>
+                    <h3 className="font-semibold text-base sm:text-lg mb-1">Assinatura Padrão do Técnico</h3>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Aparece automaticamente em todas as Ordens de Serviço, ao lado da assinatura do cliente.
+                    </p>
+                    <input
+                        type="file"
+                        ref={signatureInputRef}
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleSignatureSelect}
+                    />
+                    {(signaturePreview || signatureUrl) ? (
+                        <div className="flex items-center gap-4">
+                            <img
+                                src={signaturePreview || signatureUrl || ''}
+                                alt="Assinatura do técnico"
+                                className="h-20 border border-gray-200 rounded-lg bg-white px-3"
+                            />
+                            <div className="flex flex-col gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => signatureInputRef.current?.click()}>
+                                    Alterar
+                                </Button>
+                                <Button type="button" variant="outline" size="sm" onClick={removeSignature}>
+                                    <X className="w-4 h-4 mr-1" /> Remover
+                                </Button>
+                            </div>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={() => signatureInputRef.current?.click()}
+                            className="w-full border-2 border-dashed border-gray-200 hover:border-primary-green/50 rounded-2xl p-6 text-center text-gray-400 transition-colors"
+                        >
+                            <Upload className="w-6 h-6 mx-auto mb-2" />
+                            <span className="font-semibold text-primary-green">Clique para enviar</span> uma imagem da sua assinatura
+                        </button>
+                    )}
                 </Card>
 
                 <Card>

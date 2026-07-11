@@ -81,7 +81,7 @@ export function PublicBudget({
                     <span>{formatCurrency(subtotal)}</span>
                 </div>
                 {discountAmount > 0 && (
-                    <div className="flex justify-between text-red-600">
+                    <div className="flex justify-between text-gray-600">
                         <span>Desconto</span>
                         <span>- {formatCurrency(discountAmount)}</span>
                     </div>
@@ -131,8 +131,8 @@ export function PublicBudget({
             )}
 
             {budgetApprovedAt ? (
-                <div className="mt-4 flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl p-3 text-sm">
-                    <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                <div className="mt-4 flex items-center gap-2 text-gray-700 bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm">
+                    <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-gray-500" />
                     Orçamento aprovado em {new Date(budgetApprovedAt).toLocaleString('pt-BR')}
                 </div>
             ) : canApprove ? (
