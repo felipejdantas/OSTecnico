@@ -163,6 +163,8 @@ export default function Customers() {
             return;
         }
 
+        if (editingId && !confirm('Tem certeza que deseja atualizar os dados deste cliente?')) return;
+
         const row = {
             ...rest,
             person_type: personType,
@@ -367,9 +369,14 @@ export default function Customers() {
                                     <tr key={customer.id} className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
+                                                <button
+                                                    type="button"
+                                                    title="Clique para atualizar"
+                                                    onClick={() => handleEdit(customer)}
+                                                    className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0 hover:bg-primary-cyan/20 transition-colors cursor-pointer"
+                                                >
                                                     <User className="w-4 h-4" />
-                                                </div>
+                                                </button>
                                                 <div>
                                                     <div className="font-semibold">{customer.name}</div>
                                                     <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>
@@ -425,9 +432,14 @@ export default function Customers() {
                             <div key={customer.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 active:bg-gray-50 transition-colors">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
+                                        <button
+                                            type="button"
+                                            title="Toque para atualizar"
+                                            onClick={() => handleEdit(customer)}
+                                            className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0 hover:bg-primary-cyan/20 transition-colors cursor-pointer"
+                                        >
                                             <User className="w-5 h-5" />
-                                        </div>
+                                        </button>
                                         <div className="min-w-0 flex-1">
                                             <div className="font-semibold text-gray-900 truncate">{customer.name}</div>
                                             <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>

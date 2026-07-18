@@ -95,6 +95,7 @@ export default function Products() {
 
     const onSubmit = async (data: ProductForm) => {
         if (!user) return;
+        if (editingId && !confirm('Tem certeza que deseja atualizar este produto?')) return;
 
         try {
             const newPhotoUrls = await Promise.all(newImages.map(uploadFile));
@@ -239,13 +240,20 @@ export default function Products() {
                                     <tr key={product.id} className="bg-white border-b hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">
                                             <div className="flex items-center gap-3">
-                                                {product.photos && product.photos.length > 0 ? (
-                                                    <img src={product.photos[0]} alt={product.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                                                ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
-                                                        <Package className="w-4 h-4" />
-                                                    </div>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    title="Clique para atualizar"
+                                                    onClick={() => handleEdit(product)}
+                                                    className="flex-shrink-0 cursor-pointer"
+                                                >
+                                                    {product.photos && product.photos.length > 0 ? (
+                                                        <img src={product.photos[0]} alt={product.name} className="w-8 h-8 rounded-full object-cover hover:opacity-80 transition-opacity" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center hover:bg-primary-cyan/20 transition-colors">
+                                                            <Package className="w-4 h-4" />
+                                                        </div>
+                                                    )}
+                                                </button>
                                                 <div>
                                                     <div className="font-semibold">{product.name}</div>
                                                     <div className="text-xs text-gray-500">{product.sku}</div>
@@ -295,13 +303,20 @@ export default function Products() {
                             <div key={product.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 active:bg-gray-50 transition-colors">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                                        {product.photos && product.photos.length > 0 ? (
-                                            <img src={product.photos[0]} alt={product.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
-                                        ) : (
-                                            <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
-                                                <Package className="w-5 h-5" />
-                                            </div>
-                                        )}
+                                        <button
+                                            type="button"
+                                            title="Toque para atualizar"
+                                            onClick={() => handleEdit(product)}
+                                            className="flex-shrink-0 cursor-pointer"
+                                        >
+                                            {product.photos && product.photos.length > 0 ? (
+                                                <img src={product.photos[0]} alt={product.name} className="w-10 h-10 rounded-full object-cover hover:opacity-80 transition-opacity" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center hover:bg-primary-cyan/20 transition-colors">
+                                                    <Package className="w-5 h-5" />
+                                                </div>
+                                            )}
+                                        </button>
                                         <div className="min-w-0 flex-1">
                                             <div className="font-semibold text-gray-900 truncate">{product.name}</div>
                                             <div className="text-xs text-gray-500">{product.sku || product.category}</div>
