@@ -139,11 +139,30 @@ export default function Customers() {
         reset({ personType: 'fisica' });
     };
 
+    const normalizeDoc = (v?: string | null) => (v || '').replace(/\D/g, '');
+
     const onSubmit = async (data: CustomerForm) => {
         if (!user) return;
 
         const { personType, cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
         const isJuridica = personType === 'juridica';
+
+        // Catch duplicate CPF/CNPJ before hitting the DB, so the error names the
+        // conflicting customer instead of a generic constraint-violation message.
+        const cpfDigits = normalizeDoc(rest.cpf);
+        const cnpjDigits = isJuridica ? normalizeDoc(cnpj) : '';
+        const duplicate = customers.find(c => {
+            if (c.id === editingId) return false;
+            if (cpfDigits && normalizeDoc(c.cpf) === cpfDigits) return true;
+            if (cnpjDigits && normalizeDoc(c.cnpj) === cnpjDigits) return true;
+            return false;
+        });
+        if (duplicate) {
+            const field = cnpjDigits && normalizeDoc(duplicate.cnpj) === cnpjDigits ? 'CNPJ' : 'CPF';
+            toast.error(`Já existe um cliente cadastrado com esse ${field}: ${duplicate.name}`);
+            return;
+        }
+
         const row = {
             ...rest,
             person_type: personType,
@@ -178,7 +197,12 @@ export default function Customers() {
             handleCancel();
             fetchCustomers();
         } catch (error: any) {
-            toast.error('Erro ao salvar cliente: ' + error.message);
+            if (error.code === '23505') {
+                const field = error.message?.includes('cnpj') ? 'CNPJ' : 'CPF';
+                toast.error(`Já existe um cliente cadastrado com esse ${field}.`);
+            } else {
+                toast.error('Erro ao salvar cliente: ' + error.message);
+            }
         }
     };
 
