@@ -3,12 +3,136 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, Building2, Upload, X } from 'lucide-react';
+import { Save, Building2, Upload, X, Users, UserPlus, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+
+type TeamMember = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    created_at: string;
+};
+
+function TeamSection() {
+    const { user } = useAuth();
+    const [members, setMembers] = useState<TeamMember[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isAdding, setIsAdding] = useState(false);
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    useEffect(() => {
+        if (user) fetchMembers();
+    }, [user]);
+
+    const fetchMembers = async () => {
+        const { data, error } = await supabase
+            .from('team_members')
+            .select('id, name, email, created_at')
+            .order('created_at');
+        if (error) console.error('Error fetching team members:', error);
+        else setMembers(data || []);
+        setLoading(false);
+    };
+
+    const handleCreate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!email || !password) return;
+        if (!confirm(`Criar acesso ao sistema para "${email}"? Essa pessoa vai poder ver e editar todos os clientes, produtos, OS e estoque.`)) return;
+
+        setIsAdding(true);
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const { data, error } = await supabase.functions.invoke('create-team-user', {
+                body: { name, email, password },
+                headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
+            });
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
+
+            toast.success('Usuário criado com sucesso!');
+            setName('');
+            setEmail('');
+            setPassword('');
+            fetchMembers();
+        } catch (error: any) {
+            toast.error('Erro ao criar usuário: ' + error.message);
+        } finally {
+            setIsAdding(false);
+        }
+    };
+
+    const handleRemove = async (member: TeamMember) => {
+        if (!confirm(`Remover o acesso de "${member.name || member.email}"? Essa pessoa não vai conseguir mais entrar no sistema.`)) return;
+
+        try {
+            const { error } = await supabase.from('team_members').delete().eq('id', member.id);
+            if (error) throw error;
+            toast.success('Acesso removido com sucesso!');
+            fetchMembers();
+        } catch (error: any) {
+            toast.error('Erro ao remover acesso: ' + error.message);
+        }
+    };
+
+    return (
+        <Card>
+            <div className="flex items-center gap-2 mb-1">
+                <Users className="w-5 h-5 text-primary-cyan" />
+                <h3 className="font-semibold text-base sm:text-lg">Usuários da Equipe</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+                Crie logins para outras pessoas acessarem este mesmo sistema (clientes, produtos, OS e estoque).
+            </p>
+
+            {loading ? (
+                <p className="text-sm text-gray-400">Carregando...</p>
+            ) : (
+                <div className="space-y-2 mb-4">
+                    {members.length === 0 ? (
+                        <p className="text-sm text-gray-400">Nenhum usuário adicional cadastrado ainda.</p>
+                    ) : (
+                        members.map((m) => (
+                            <div key={m.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl text-sm">
+                                <div>
+                                    <div className="font-medium text-dark">{m.name || m.email}</div>
+                                    <div className="text-xs text-gray-500">{m.email}</div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemove(m)}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Remover acesso"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            <form onSubmit={handleCreate} className="space-y-3 pt-4 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: João (técnico)" />
+                    <Input label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    <Input label="Senha provisória" type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
+                </div>
+                <div className="flex justify-end">
+                    <Button type="submit" disabled={isAdding}>
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        {isAdding ? 'Criando...' : 'Criar Usuário'}
+                    </Button>
+                </div>
+            </form>
+        </Card>
+    );
+}
 
 const settingsSchema = z.object({
     company_name: z.string().min(2, 'Informe o nome da empresa'),
@@ -216,6 +340,8 @@ export default function CompanySettings() {
                         </button>
                     )}
                 </Card>
+
+                <TeamSection />
 
                 <Card>
                     <h3 className="font-semibold text-base sm:text-lg mb-1">Cláusula de Serviço</h3>
