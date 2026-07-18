@@ -7,6 +7,7 @@ import EditOS from './pages/EditOS';
 import Customers from './pages/Customers';
 import Technicians from './pages/Technicians';
 import Products from './pages/Products';
+import Stock from './pages/Stock';
 import Services from './pages/Services';
 import Billing from './pages/Billing';
 import CompanySettings from './pages/CompanySettings';
@@ -70,6 +71,7 @@ function App() {
           <Route path="/clientes" element={<ProtectedRoute><Layout><Customers /></Layout></ProtectedRoute>} />
           <Route path="/tecnicos" element={<ProtectedRoute><Layout><Technicians /></Layout></ProtectedRoute>} />
           <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
+          <Route path="/estoque" element={<ProtectedRoute><Layout><Stock /></Layout></ProtectedRoute>} />
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
           <Route path="/faturamento" element={<ProtectedRoute><Layout><Billing /></Layout></ProtectedRoute>} />
           <Route path="/configuracoes" element={<ProtectedRoute><Layout><CompanySettings /></Layout></ProtectedRoute>} />
