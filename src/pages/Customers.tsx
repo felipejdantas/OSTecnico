@@ -224,11 +224,13 @@ export default function Customers() {
         }
     };
 
-    const filteredCustomers = customers.filter(customer =>
-        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.cpf?.includes(searchTerm) ||
-        customer.phone?.includes(searchTerm)
-    );
+    const filteredCustomers = customers
+        .filter(customer =>
+            customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            customer.cpf?.includes(searchTerm) ||
+            customer.phone?.includes(searchTerm)
+        )
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
 
     return (
         <div className="space-y-6">
