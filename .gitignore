@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Variáveis de ambiente (não versionar, mesmo que hoje só tenham chave pública)
+.env
+.env.local
+.env.*.local
+
 # Backups de banco de dados (contêm dados reais de clientes - CPF, endereço, etc.)
 backups/
 
