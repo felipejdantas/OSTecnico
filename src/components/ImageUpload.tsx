@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Camera, Upload, X, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Camera, Upload, X, Loader2, RotateCcw, Check } from 'lucide-react';
 import { Button } from './ui/Button';
 import { cn } from './ui/Button';
 import { compressImages } from '../lib/imageCompression';
@@ -13,13 +13,48 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
     const [files, setFiles] = useState<File[]>([]);
     const [isCompressing, setIsCompressing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const fallbackCaptureInputRef = useRef<HTMLInputElement>(null);
     const [isDragging, setIsDragging] = useState(false);
+
+    // In-page camera: capturing the photo without ever leaving this page avoids
+    // the native camera app suspending/reloading the tab on some Android devices,
+    // which used to wipe the whole form and drop the photo before it could attach.
+    const [isCameraOpen, setIsCameraOpen] = useState(false);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+    const [capturedPreviewUrl, setCapturedPreviewUrl] = useState<string | null>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream]);
+
+    useEffect(() => {
+        if (!capturedBlob) {
+            setCapturedPreviewUrl(null);
+            return;
+        }
+        const url = URL.createObjectURL(capturedBlob);
+        setCapturedPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [capturedBlob]);
+
+    useEffect(() => {
+        // Make sure the camera is released if the component unmounts mid-capture
+        return () => {
+            stream?.getTracks().forEach(track => track.stop());
+        };
+    }, [stream]);
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const newFiles = Array.from(e.target.files);
             await addFiles(newFiles);
         }
+        e.target.value = '';
     };
 
     const addFiles = async (newFiles: File[]) => {
@@ -54,6 +89,50 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
         onImagesChange(updatedFiles);
     };
 
+    const openCamera = async () => {
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: false,
+            });
+            setStream(mediaStream);
+            setCapturedBlob(null);
+            setIsCameraOpen(true);
+        } catch (error) {
+            console.error('Camera unavailable, falling back to native capture:', error);
+            fallbackCaptureInputRef.current?.click();
+        }
+    };
+
+    const closeCamera = () => {
+        stream?.getTracks().forEach(track => track.stop());
+        setStream(null);
+        setIsCameraOpen(false);
+        setCapturedBlob(null);
+    };
+
+    const capturePhoto = () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) return;
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            if (blob) setCapturedBlob(blob);
+        }, 'image/jpeg', 0.9);
+    };
+
+    const confirmCapture = async () => {
+        if (!capturedBlob) return;
+        const file = new File([capturedBlob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        closeCamera();
+        await addFiles([file]);
+    };
+
     return (
         <div className="space-y-4">
             <div
@@ -80,7 +159,15 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
                     multiple
                     accept="image/*"
                     onChange={handleFileSelect}
+                />
+                {/* Only used if the in-page camera can't start (old browser, permission blocked, etc.) */}
+                <input
+                    type="file"
+                    ref={fallbackCaptureInputRef}
+                    className="hidden"
+                    accept="image/*"
                     capture="environment"
+                    onChange={handleFileSelect}
                 />
 
                 <div className="flex flex-col items-center gap-3 text-gray-400">
@@ -122,13 +209,72 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
                     type="button"
                     variant="outline"
                     className="h-full min-h-[100px] flex flex-col gap-2 border-dashed touch-manipulation"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={openCamera}
                     disabled={isCompressing}
                 >
                     <Camera className="w-6 h-6" />
                     <span className="text-xs">Tirar Foto</span>
                 </Button>
             </div>
+
+            {isCameraOpen && (
+                <div className="fixed inset-0 z-50 bg-black flex flex-col">
+                    <canvas ref={canvasRef} className="hidden" />
+
+                    <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+                        {capturedPreviewUrl ? (
+                            <img
+                                src={capturedPreviewUrl}
+                                alt="Foto capturada"
+                                className="max-w-full max-h-full object-contain"
+                            />
+                        ) : (
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="max-w-full max-h-full object-contain"
+                            />
+                        )}
+
+                        <button
+                            type="button"
+                            onClick={closeCamera}
+                            className="absolute top-4 right-4 p-2.5 bg-black/60 text-white rounded-full touch-manipulation"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+                    </div>
+
+                    <div className="p-6 flex items-center justify-center gap-6 bg-black">
+                        {capturedBlob ? (
+                            <>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="touch-manipulation border-white text-white hover:bg-white/10"
+                                    onClick={() => setCapturedBlob(null)}
+                                >
+                                    <RotateCcw className="w-5 h-5 mr-2" />
+                                    Tirar novamente
+                                </Button>
+                                <Button type="button" className="touch-manipulation" onClick={confirmCapture}>
+                                    <Check className="w-5 h-5 mr-2" />
+                                    Usar esta foto
+                                </Button>
+                            </>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={capturePhoto}
+                                aria-label="Capturar foto"
+                                className="w-16 h-16 rounded-full bg-white border-4 border-gray-300 touch-manipulation active:scale-95 transition-transform"
+                            />
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
