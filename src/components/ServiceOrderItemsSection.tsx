@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { SearchableSelect } from './ui/SearchableSelect';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -105,18 +106,17 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange }: P
             </h3>
 
             <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                <select
+                <SearchableSelect
+                    className="flex-1 min-w-0"
                     value={selectedProductId}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
-                    className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
-                >
-                    <option value="">Selecione um produto...</option>
-                    {products.map(p => (
-                        <option key={p.id} value={p.id}>
-                            {p.name} (estoque: {p.stock_quantity} {p.unit}) - R$ {p.sale_price.toFixed(2)}
-                        </option>
-                    ))}
-                </select>
+                    onChange={setSelectedProductId}
+                    placeholder="Buscar produto..."
+                    options={products.map(p => ({
+                        value: p.id,
+                        label: p.name,
+                        sublabel: `Estoque: ${p.stock_quantity} ${p.unit} · R$ ${p.sale_price.toFixed(2)}`,
+                    }))}
+                />
                 <input
                     type="number"
                     min={1}

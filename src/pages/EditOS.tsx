@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Save, ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 
@@ -82,7 +83,7 @@ export default function EditOS() {
     const [originalStatus, setOriginalStatus] = useState<string>('');
 
     // const sigPadRef = useRef<SignaturePadRef>(null);
-    const { register, handleSubmit, formState: { errors }, setValue } = useForm<OSForm>({
+    const { register, handleSubmit, control, formState: { errors }, setValue } = useForm<OSForm>({
         resolver: zodResolver(osSchema),
     });
 
@@ -303,15 +304,23 @@ export default function EditOS() {
 
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                    <select
-                                        {...register('customerId')}
-                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
-                                    >
-                                        <option value="">Selecione...</option>
-                                        {customers.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
+                                    <Controller
+                                        name="customerId"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <SearchableSelect
+                                                value={field.value || ''}
+                                                onChange={field.onChange}
+                                                placeholder="Buscar por nome, CPF/CNPJ..."
+                                                error={errors.customerId?.message}
+                                                options={customers.map(c => ({
+                                                    value: c.id,
+                                                    label: c.name,
+                                                    sublabel: c.cpf || c.cnpj || c.phone || undefined,
+                                                }))}
+                                            />
+                                        )}
+                                    />
                                 </div>
 
                                 <div className="space-y-1">
