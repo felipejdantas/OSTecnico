@@ -32,9 +32,12 @@ const osSchema = z.object({
     technicianObservation: z.string().optional(),
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
+    warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
+    warrantyNotes: z.string().optional(),
 });
 
-type OSForm = z.infer<typeof osSchema>;
+type OSFormInput = z.input<typeof osSchema>;
+type OSForm = z.output<typeof osSchema>;
 
 export const EQUIPMENT_TYPES = ['Notebook', 'Desktop', 'All-in-One', 'Tablet', 'Celular', 'Console', 'Impressora', 'Placa-mãe', 'Outro'];
 
@@ -94,6 +97,7 @@ export default function NewOS() {
 
     const [customers, setCustomers] = useState<any[]>([]);
     const [technicians, setTechnicians] = useState<any[]>([]);
+    const [defaultWarrantyDays, setDefaultWarrantyDays] = useState<number | undefined>(undefined);
     const [images, setImages] = useState<File[]>([]);
     const [items, setItems] = useState<OrderItem[]>([]);
     const [serviceLines, setServiceLines] = useState<OrderServiceLine[]>([]);
@@ -104,7 +108,7 @@ export default function NewOS() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const sigPadRef = useRef<SignaturePadRef>(null);
-    const { register, handleSubmit, control, formState: { errors }, reset } = useForm<OSForm>({
+    const { register, handleSubmit, control, formState: { errors }, reset, setValue } = useForm<OSFormInput, any, OSForm>({
         resolver: zodResolver(osSchema),
         defaultValues: {
             status: 'recebido',
@@ -121,9 +125,15 @@ export default function NewOS() {
 
         const { data: customersData } = await supabase.from('customers').select('*').eq('user_id', user.id).order('name');
         const { data: techniciansData } = await supabase.from('technicians').select('*').eq('user_id', user.id).order('name');
+        const { data: companyData } = await supabase.from('company_settings').select('warranty_days').eq('user_id', user.id).maybeSingle();
 
         if (customersData) setCustomers(customersData);
         if (techniciansData) setTechnicians(techniciansData);
+        // Pre-fill with the shop's default warranty so the technician doesn't retype it every OS
+        if (companyData?.warranty_days != null) {
+            setDefaultWarrantyDays(companyData.warranty_days);
+            setValue('warrantyDays', companyData.warranty_days);
+        }
     };
 
     const uploadFile = async (file: File) => {
@@ -187,6 +197,8 @@ export default function NewOS() {
                 status: data.status,
                 entry_date: data.entryDate,
                 estimated_completion_date: data.estimatedCompletionDate || null,
+                warranty_days: data.warrantyDays ?? null,
+                warranty_notes: data.warrantyNotes || null,
                 discount_type: discountType,
                 discount_value: discountValue,
                 freight: freight,
@@ -242,6 +254,7 @@ export default function NewOS() {
 
             // Reset form
             reset();
+            if (defaultWarrantyDays != null) setValue('warrantyDays', defaultWarrantyDays);
             setPhysicalCondition(PHYSICAL_CONDITION_ITEMS.map(label => ({ label, status: 'na', observation: '' })));
             setOperatingCondition(OPERATING_CONDITION_ITEMS.map(label => ({ label, status: 'na', observation: '' })));
             setTechnicalTests(TECHNICAL_TESTS_ITEMS.map(label => ({ label, status: 'na', observation: '' })));
@@ -405,6 +418,30 @@ export default function NewOS() {
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base"
                                 placeholder="Observações adicionais do técnico sobre o equipamento ou serviço..."
                             />
+                        </Card>
+
+                        <Card>
+                            <h3 className="font-semibold text-base sm:text-lg mb-4">Garantia</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Input
+                                    label="Dias de Garantia"
+                                    type="number"
+                                    {...register('warrantyDays')}
+                                    error={errors.warrantyDays?.message}
+                                    placeholder="Ex: 90"
+                                />
+                                <div className="sm:col-span-2">
+                                    <label className="text-sm font-medium text-gray-600 mb-1 block">Observação da Garantia</label>
+                                    <textarea
+                                        {...register('warrantyNotes')}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[80px] text-sm sm:text-base"
+                                        placeholder="Ex: garantia cobre apenas a peça trocada, não cobre mau uso..."
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">
+                                A contagem da garantia começa quando a OS é marcada como "Pronto" ou "Entregue".
+                            </p>
                         </Card>
 
                         <Card>

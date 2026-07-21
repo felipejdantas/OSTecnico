@@ -4,6 +4,7 @@ import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, 
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
+import { WarrantyBadge } from '../components/WarrantyBadge';
 
 import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
@@ -23,6 +24,8 @@ type ServiceOrder = {
     equipment_type: string | null;
     status: OrderStatus;
     payment_status: PaymentStatus;
+    completed_date: string | null;
+    warranty_days: number | null;
     customers: {
         name: string; phone: string | null; email: string | null;
         cpf: string | null; cnpj: string | null; company_name: string | null; trade_name: string | null;
@@ -123,6 +126,8 @@ export default function Dashboard() {
           equipment_type,
           status,
           payment_status,
+          completed_date,
+          warranty_days,
           is_pinned,
           signature_token,
           client_signed_at,
@@ -570,6 +575,7 @@ export default function Dashboard() {
                                                         Assinado
                                                     </span>
                                                 )}
+                                                <WarrantyBadge completedDate={order.completed_date} warrantyDays={order.warranty_days} />
                                             </div>
 
                                             {/* Customer name highlighted */}

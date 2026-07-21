@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
+import { WarrantyBadge } from '../components/WarrantyBadge';
 import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 
@@ -36,9 +37,12 @@ const osSchema = z.object({
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
     completedDate: z.string().optional(),
+    warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
+    warrantyNotes: z.string().optional(),
 });
 
-type OSForm = z.infer<typeof osSchema>;
+type OSFormInput = z.input<typeof osSchema>;
+type OSForm = z.output<typeof osSchema>;
 
 // Checklist items (same as NewOS)
 const PHYSICAL_CONDITION_ITEMS = [
@@ -83,9 +87,12 @@ export default function EditOS() {
     const [originalStatus, setOriginalStatus] = useState<string>('');
 
     // const sigPadRef = useRef<SignaturePadRef>(null);
-    const { register, handleSubmit, control, formState: { errors }, setValue } = useForm<OSForm>({
+    const { register, handleSubmit, control, formState: { errors }, setValue, watch } = useForm<OSFormInput, any, OSForm>({
         resolver: zodResolver(osSchema),
     });
+
+    const watchedCompletedDate = watch('completedDate');
+    const watchedWarrantyDays = watch('warrantyDays') as number | undefined;
 
     useEffect(() => {
         if (user) fetchData();
@@ -126,6 +133,8 @@ export default function EditOS() {
             setValue('entryDate', os.entry_date || '');
             setValue('estimatedCompletionDate', os.estimated_completion_date || '');
             setValue('completedDate', os.completed_date || '');
+            setValue('warrantyDays', os.warranty_days ?? undefined);
+            setValue('warrantyNotes', os.warranty_notes || '');
             setOriginalStatus(os.status);
             setDiscountType((os.discount_type as DiscountType) || 'fixed');
             setDiscountValue(os.discount_value || 0);
@@ -228,6 +237,8 @@ export default function EditOS() {
                     entry_date: data.entryDate,
                     estimated_completion_date: data.estimatedCompletionDate || null,
                     completed_date: data.completedDate || null,
+                    warranty_days: data.warrantyDays ?? null,
+                    warranty_notes: data.warrantyNotes || null,
                     discount_type: discountType,
                     discount_value: discountValue,
                     freight: freight,
@@ -268,7 +279,10 @@ export default function EditOS() {
                             Voltar
                         </Button>
                         <div>
-                            <h2 className="text-xl sm:text-2xl font-bold text-dark">Editar Ordem de Serviço</h2>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h2 className="text-xl sm:text-2xl font-bold text-dark">Editar Ordem de Serviço</h2>
+                                <WarrantyBadge completedDate={watchedCompletedDate} warrantyDays={watchedWarrantyDays} />
+                            </div>
                             <p className="text-sm text-gray-500">Edite todas as informações da OS</p>
                         </div>
                     </div>
@@ -397,6 +411,33 @@ export default function EditOS() {
                                 {...register('technicianObservation')}
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base"
                             />
+                        </Card>
+
+                        <Card>
+                            <div className="flex items-center gap-2 mb-4 flex-wrap">
+                                <h3 className="font-semibold text-base sm:text-lg">Garantia</h3>
+                                <WarrantyBadge completedDate={watchedCompletedDate} warrantyDays={watchedWarrantyDays} />
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Input
+                                    label="Dias de Garantia"
+                                    type="number"
+                                    {...register('warrantyDays')}
+                                    error={errors.warrantyDays?.message}
+                                    placeholder="Ex: 90"
+                                />
+                                <div className="sm:col-span-2">
+                                    <label className="text-sm font-medium text-gray-600 mb-1 block">Observação da Garantia</label>
+                                    <textarea
+                                        {...register('warrantyNotes')}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[80px] text-sm sm:text-base"
+                                        placeholder="Ex: garantia cobre apenas a peça trocada, não cobre mau uso..."
+                                    />
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-2">
+                                A contagem da garantia começa na "Data de Finalização" acima.
+                            </p>
                         </Card>
 
                         <Card>
