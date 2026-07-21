@@ -579,10 +579,15 @@ export default function Dashboard() {
                                             </div>
 
                                             {/* Customer name highlighted */}
-                                            <div className="flex items-center gap-2 mb-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => navigate(`/editar-os/${order.id}`)}
+                                                title="Clique para atualizar a OS"
+                                                className="flex items-center gap-2 mb-1 hover:underline text-left"
+                                            >
                                                 <User className="w-4 h-4 text-primary-cyan" />
                                                 <span className="font-semibold text-dark text-base">{order.customers?.name || 'N/A'}</span>
-                                            </div>
+                                            </button>
 
                                             <p className="text-sm text-gray-600 mb-1">
                                                 {[order.equipment_type, order.brand, order.equipment].filter(Boolean).join(' · ')}
