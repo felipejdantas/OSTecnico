@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X, FileText, Package, Wrench } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, FileText, Package, Wrench, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getStatusConfig } from '../lib/orderStatus';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from '../lib/orderFinance';
@@ -29,6 +30,7 @@ interface Props {
 }
 
 export function CustomerHistoryModal({ customerId, customerName, onClose }: Props) {
+    const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState<OrderRow[]>([]);
     const [itemsByOrder, setItemsByOrder] = useState<Record<string, OrderItemRow[]>>({});
@@ -134,7 +136,13 @@ export function CustomerHistoryModal({ customerId, customerName, onClose }: Prop
                                 const items = itemsByOrder[order.id] || [];
                                 const services = servicesByOrder[order.id] || [];
                                 return (
-                                    <div key={order.id} className="border border-gray-200 rounded-xl p-3">
+                                    <button
+                                        type="button"
+                                        key={order.id}
+                                        onClick={() => navigate(`/editar-os/${order.id}`)}
+                                        title="Clique para abrir e editar esta OS"
+                                        className="w-full text-left border border-gray-200 rounded-xl p-3 hover:border-primary-cyan hover:bg-primary-cyan/5 transition-colors touch-manipulation"
+                                    >
                                         <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
                                             <div className="flex items-center gap-2">
                                                 <FileText className="w-4 h-4 text-primary-cyan" />
@@ -143,7 +151,10 @@ export function CustomerHistoryModal({ customerId, customerName, onClose }: Prop
                                                     {statusConfig.shortLabel}
                                                 </span>
                                             </div>
-                                            <span className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                <span className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                                            </div>
                                         </div>
                                         <p className="text-sm text-gray-600 mb-2">
                                             {[order.equipment_type, order.brand, order.equipment].filter(Boolean).join(' · ')}
@@ -169,7 +180,7 @@ export function CustomerHistoryModal({ customerId, customerName, onClose }: Prop
                                         <div className="text-right font-semibold text-sm text-dark">
                                             {formatCurrency(orderTotal(order))}
                                         </div>
-                                    </div>
+                                    </button>
                                 );
                             })}
                         </div>
