@@ -203,8 +203,19 @@ export default function ClientSignature() {
                 client_signed_at: os.client_signed_at,
                 client_signature_url: os.client_signature_url,
                 photos: os.photos || [],
-                items: os.items || [],
-                services: os.services || [],
+                // The public RPC returns items/services with a plain "name" field;
+                // the PDF generator expects product_name/service_name.
+                items: (os.items || []).map((i: any) => ({
+                    product_name: i.name,
+                    quantity: i.quantity,
+                    unit_price: i.unit_price,
+                })),
+                services: (os.services || []).map((s: any) => ({
+                    service_name: s.name,
+                    description: s.description,
+                    quantity: s.quantity,
+                    price: s.price,
+                })),
                 discount_type: os.discount_type || 'fixed',
                 discount_value: os.discount_value || 0,
                 freight: os.freight || 0,
