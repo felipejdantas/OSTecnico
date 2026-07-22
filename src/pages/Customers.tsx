@@ -3,12 +3,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, MapPin, Phone, User, Edit2, Search, Trash2, Building2, Loader2 } from 'lucide-react';
+import { Plus, MapPin, Phone, User, Edit2, Search, Trash2, Building2, Loader2, History } from 'lucide-react';
 import axios from 'axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
+import { CustomerHistoryModal } from '../components/CustomerHistoryModal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,6 +38,7 @@ export default function Customers() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [customers, setCustomers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [historyCustomer, setHistoryCustomer] = useState<{ id: string; name: string } | null>(null);
     const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<CustomerForm>({
         resolver: zodResolver(customerSchema),
         defaultValues: { personType: 'fisica' },
@@ -398,21 +400,32 @@ export default function Customers() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <DropdownMenu
-                                                items={[
-                                                    {
-                                                        label: 'Atualizar',
-                                                        icon: <Edit2 className="w-4 h-4" />,
-                                                        onClick: () => handleEdit(customer),
-                                                    },
-                                                    {
-                                                        label: 'Excluir',
-                                                        icon: <Trash2 className="w-4 h-4" />,
-                                                        onClick: () => handleDelete(customer.id, customer.name),
-                                                        variant: 'danger' as const,
-                                                    },
-                                                ]}
-                                            />
+                                            <div className="flex items-center justify-end gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => setHistoryCustomer({ id: customer.id, name: customer.name })}
+                                                    className="touch-manipulation"
+                                                >
+                                                    <History className="w-4 h-4 mr-1" />
+                                                    Histórico
+                                                </Button>
+                                                <DropdownMenu
+                                                    items={[
+                                                        {
+                                                            label: 'Atualizar',
+                                                            icon: <Edit2 className="w-4 h-4" />,
+                                                            onClick: () => handleEdit(customer),
+                                                        },
+                                                        {
+                                                            label: 'Excluir',
+                                                            icon: <Trash2 className="w-4 h-4" />,
+                                                            onClick: () => handleDelete(customer.id, customer.name),
+                                                            variant: 'danger' as const,
+                                                        },
+                                                    ]}
+                                                />
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -472,11 +485,29 @@ export default function Customers() {
                                         <span className="line-clamp-2">{customer.address}, {customer.number}</span>
                                     </div>
                                 </div>
+
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setHistoryCustomer({ id: customer.id, name: customer.name })}
+                                    className="w-full touch-manipulation"
+                                >
+                                    <History className="w-4 h-4 mr-1" />
+                                    Histórico
+                                </Button>
                             </div>
                         ))
                     )}
                 </div>
             </Card>
+
+            {historyCustomer && (
+                <CustomerHistoryModal
+                    customerId={historyCustomer.id}
+                    customerName={historyCustomer.name}
+                    onClose={() => setHistoryCustomer(null)}
+                />
+            )}
         </div>
     );
 }
