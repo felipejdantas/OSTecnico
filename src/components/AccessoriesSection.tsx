@@ -10,9 +10,10 @@ export type AccessoriesData = {
 type AccessoriesSectionProps = {
     value: AccessoriesData;
     onChange: (value: AccessoriesData) => void;
+    disabled?: boolean;
 };
 
-export default function AccessoriesSection({ value, onChange }: AccessoriesSectionProps) {
+export default function AccessoriesSection({ value, onChange, disabled }: AccessoriesSectionProps) {
     const handleCheckboxChange = (field: 'fonte' | 'cabo' | 'mochila') => {
         onChange({
             ...value,
@@ -32,36 +33,39 @@ export default function AccessoriesSection({ value, onChange }: AccessoriesSecti
             <h3 className="font-semibold text-lg mb-4 text-primary-green">Acessórios Recebidos</h3>
 
             <div className="space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer group">
+                <label className={`flex items-center gap-3 group ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         checked={value.fonte}
                         onChange={() => handleCheckboxChange('fonte')}
-                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <span className="text-sm font-medium text-dark group-hover:text-primary-green transition-colors">
                         Fonte
                     </span>
                 </label>
 
-                <label className="flex items-center gap-3 cursor-pointer group">
+                <label className={`flex items-center gap-3 group ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         checked={value.cabo}
                         onChange={() => handleCheckboxChange('cabo')}
-                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <span className="text-sm font-medium text-dark group-hover:text-primary-green transition-colors">
                         Cabo
                     </span>
                 </label>
 
-                <label className="flex items-center gap-3 cursor-pointer group">
+                <label className={`flex items-center gap-3 group ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
                     <input
                         type="checkbox"
+                        disabled={disabled}
                         checked={value.mochila}
                         onChange={() => handleCheckboxChange('mochila')}
-                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer"
+                        className="w-5 h-5 rounded border-gray-300 text-primary-green focus:ring-primary-green/50 cursor-pointer disabled:cursor-not-allowed"
                     />
                     <span className="text-sm font-medium text-dark group-hover:text-primary-green transition-colors">
                         Mochila
@@ -74,10 +78,11 @@ export default function AccessoriesSection({ value, onChange }: AccessoriesSecti
                     </label>
                     <input
                         type="text"
+                        disabled={disabled}
                         value={value.outro}
                         onChange={(e) => handleOutroChange(e.target.value)}
                         placeholder="Descreva outro acessório..."
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                     />
                 </div>
             </div>

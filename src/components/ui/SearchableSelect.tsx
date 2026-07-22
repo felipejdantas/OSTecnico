@@ -20,6 +20,7 @@ interface SearchableSelectProps {
     placeholder?: string;
     error?: string;
     className?: string;
+    disabled?: boolean;
 }
 
 function normalize(text: string) {
@@ -29,7 +30,7 @@ function normalize(text: string) {
         .replace(/[̀-ͯ]/g, '');
 }
 
-export function SearchableSelect({ options, value, onChange, placeholder = 'Selecione...', error, className }: SearchableSelectProps) {
+export function SearchableSelect({ options, value, onChange, placeholder = 'Selecione...', error, className, disabled }: SearchableSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
     const containerRef = useRef<HTMLDivElement>(null);
@@ -63,6 +64,7 @@ export function SearchableSelect({ options, value, onChange, placeholder = 'Sele
                 <input
                     ref={inputRef}
                     type="text"
+                    disabled={disabled}
                     value={isOpen ? query : (selected?.label || '')}
                     onChange={(e) => {
                         setQuery(e.target.value);
@@ -75,6 +77,7 @@ export function SearchableSelect({ options, value, onChange, placeholder = 'Sele
                     placeholder={placeholder}
                     className={cn(
                         'w-full pl-9 pr-9 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base',
+                        'disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50',
                         error && 'border-red-500 focus:ring-red-200'
                     )}
                 />

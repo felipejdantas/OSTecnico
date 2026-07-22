@@ -28,9 +28,10 @@ type Props = {
     orderId?: string;
     lines: OrderServiceLine[];
     onChange: (lines: OrderServiceLine[]) => void;
+    disabled?: boolean;
 };
 
-export default function ServiceOrderServicesSection({ orderId, lines, onChange }: Props) {
+export default function ServiceOrderServicesSection({ orderId, lines, onChange, disabled }: Props) {
     const { user } = useAuth();
     const [catalog, setCatalog] = useState<ServiceCatalogEntry[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -118,8 +119,9 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange }
                 <div className="flex flex-col sm:flex-row gap-2">
                     <select
                         value={selectedServiceId}
+                        disabled={disabled}
                         onChange={(e) => handleSelectService(e.target.value)}
-                        className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                        className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                     >
                         <option value="">Selecione um serviço...</option>
                         {catalog.map(s => (
@@ -129,21 +131,23 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange }
                     <input
                         type="number"
                         min={1}
+                        disabled={disabled}
                         value={quantity}
                         onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                        className="w-full sm:w-20 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                        className="w-full sm:w-20 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                         title="Quantidade"
                     />
                     <input
                         type="number"
                         min={0}
                         step="0.01"
+                        disabled={disabled}
                         value={customPrice}
                         onChange={(e) => setCustomPrice(parseFloat(e.target.value) || 0)}
-                        className="w-full sm:w-28 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                        className="w-full sm:w-28 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                         title="Preço"
                     />
-                    <Button type="button" onClick={addLine} disabled={!selectedServiceId} className="touch-manipulation">
+                    <Button type="button" onClick={addLine} disabled={disabled || !selectedServiceId} className="touch-manipulation">
                         <Plus className="w-4 h-4 mr-1" /> Adicionar
                     </Button>
                 </div>
@@ -151,9 +155,10 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange }
                 {selectedServiceId && (
                     <textarea
                         value={customDescription}
+                        disabled={disabled}
                         onChange={(e) => setCustomDescription(e.target.value)}
                         placeholder="Descrição técnica do serviço (aparece no orçamento)..."
-                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-gray-50 min-h-[60px]"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-gray-50 min-h-[60px] disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                 )}
             </div>
@@ -173,8 +178,9 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange }
                             </div>
                             <button
                                 type="button"
+                                disabled={disabled}
                                 onClick={() => removeLine(index)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation flex-shrink-0"
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>

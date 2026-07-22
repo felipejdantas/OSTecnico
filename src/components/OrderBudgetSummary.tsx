@@ -13,11 +13,12 @@ type Props = {
     onDiscountValueChange: (value: number) => void;
     onFreightChange: (value: number) => void;
     onUrgencyFeeChange: (value: number) => void;
+    disabled?: boolean;
 };
 
 export default function OrderBudgetSummary({
     itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
-    onDiscountTypeChange, onDiscountValueChange, onFreightChange, onUrgencyFeeChange,
+    onDiscountTypeChange, onDiscountValueChange, onFreightChange, onUrgencyFeeChange, disabled,
 }: Props) {
     const { subtotal, discountAmount, total } = calculateOrderTotal({
         itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
@@ -36,8 +37,9 @@ export default function OrderBudgetSummary({
                     <div className="flex gap-1">
                         <select
                             value={discountType}
+                            disabled={disabled}
                             onChange={(e) => onDiscountTypeChange(e.target.value as DiscountType)}
-                            className="px-2 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                            className="px-2 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                         >
                             <option value="fixed">R$</option>
                             <option value="percent">%</option>
@@ -46,9 +48,10 @@ export default function OrderBudgetSummary({
                             type="number"
                             min={0}
                             step="0.01"
+                            disabled={disabled}
                             value={discountValue}
                             onChange={(e) => onDiscountValueChange(parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                         />
                     </div>
                 </div>
@@ -59,9 +62,10 @@ export default function OrderBudgetSummary({
                         type="number"
                         min={0}
                         step="0.01"
+                        disabled={disabled}
                         value={freight}
                         onChange={(e) => onFreightChange(parseFloat(e.target.value) || 0)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                         placeholder="Uber/motoboy"
                     />
                 </div>
@@ -72,9 +76,10 @@ export default function OrderBudgetSummary({
                         type="number"
                         min={0}
                         step="0.01"
+                        disabled={disabled}
                         value={urgencyFee}
                         onChange={(e) => onUrgencyFeeChange(parseFloat(e.target.value) || 0)}
-                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
+                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                     />
                 </div>
             </div>

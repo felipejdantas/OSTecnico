@@ -6,9 +6,10 @@ import { compressImages } from '../lib/imageCompression';
 
 interface ImageUploadProps {
     onImagesChange: (files: File[]) => void;
+    disabled?: boolean;
 }
 
-export function ImageUpload({ onImagesChange }: ImageUploadProps) {
+export function ImageUpload({ onImagesChange, disabled }: ImageUploadProps) {
     const [previews, setPreviews] = useState<string[]>([]);
     const [files, setFiles] = useState<File[]>([]);
     const [isCompressing, setIsCompressing] = useState(false);
@@ -139,18 +140,18 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
                 className={cn(
                     "border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center transition-colors cursor-pointer",
                     isDragging ? "border-primary-green bg-primary-green/5" : "border-gray-200 hover:border-primary-green/50",
-                    isCompressing && "opacity-50 pointer-events-none"
+                    (isCompressing || disabled) && "opacity-50 pointer-events-none"
                 )}
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => {
                     e.preventDefault();
                     setIsDragging(false);
-                    if (e.dataTransfer.files) {
+                    if (!disabled && e.dataTransfer.files) {
                         addFiles(Array.from(e.dataTransfer.files));
                     }
                 }}
-                onClick={() => !isCompressing && fileInputRef.current?.click()}
+                onClick={() => !isCompressing && !disabled && fileInputRef.current?.click()}
             >
                 <input
                     type="file"
@@ -158,6 +159,7 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
                     className="hidden"
                     multiple
                     accept="image/*"
+                    disabled={disabled}
                     onChange={handleFileSelect}
                 />
                 {/* Only used if the in-page camera can't start (old browser, permission blocked, etc.) */}
@@ -210,7 +212,7 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
                     variant="outline"
                     className="h-full min-h-[100px] flex flex-col gap-2 border-dashed touch-manipulation"
                     onClick={openCamera}
-                    disabled={isCompressing}
+                    disabled={isCompressing || disabled}
                 >
                     <Camera className="w-6 h-6" />
                     <span className="text-xs">Tirar Foto</span>

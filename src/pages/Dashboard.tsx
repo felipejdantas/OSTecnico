@@ -174,8 +174,15 @@ export default function Dashboard() {
         toast.success('Link de assinatura copiado!');
     };
 
-    const deleteOS = async (orderId: string, osNumber: number) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir a OS #${osNumber}?`)) return;
+    const deleteOS = async (orderId: string, osNumber: number, status: string) => {
+        if (!user) return;
+
+        if (status === 'pronto' || status === 'entregue') {
+            toast.error('OS finalizada — mude o status antes de excluir, para evitar exclusões acidentais.');
+            return;
+        }
+
+        if (!confirm(`Tem certeza que deseja excluir a OS #${osNumber}?`)) return;
 
         try {
             const { error } = await supabase
@@ -668,7 +675,7 @@ export default function Dashboard() {
                                                 {
                                                     label: 'Excluir',
                                                     icon: <Trash2 className="w-4 h-4" />,
-                                                    onClick: () => deleteOS(order.id, order.os_number),
+                                                    onClick: () => deleteOS(order.id, order.os_number, order.status),
                                                     variant: 'danger' as const,
                                                 },
                                             ]}

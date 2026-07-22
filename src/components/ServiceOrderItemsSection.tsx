@@ -29,9 +29,10 @@ type Props = {
     orderId?: string;
     items: OrderItem[];
     onChange: (items: OrderItem[]) => void;
+    disabled?: boolean;
 };
 
-export default function ServiceOrderItemsSection({ orderId, items, onChange }: Props) {
+export default function ServiceOrderItemsSection({ orderId, items, onChange, disabled }: Props) {
     const { user } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductId, setSelectedProductId] = useState('');
@@ -111,6 +112,7 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange }: P
                     value={selectedProductId}
                     onChange={setSelectedProductId}
                     placeholder="Buscar produto..."
+                    disabled={disabled}
                     options={products.map(p => ({
                         value: p.id,
                         label: p.name,
@@ -120,11 +122,12 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange }: P
                 <input
                     type="number"
                     min={1}
+                    disabled={disabled}
                     value={quantity}
                     onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                    className="w-full sm:w-24 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                    className="w-full sm:w-24 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                 />
-                <Button type="button" onClick={addItem} disabled={!selectedProductId} className="touch-manipulation">
+                <Button type="button" onClick={addItem} disabled={disabled || !selectedProductId} className="touch-manipulation">
                     <Plus className="w-4 h-4 mr-1" /> Adicionar
                 </Button>
             </div>
@@ -150,8 +153,9 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange }: P
                             </div>
                             <button
                                 type="button"
+                                disabled={disabled}
                                 onClick={() => removeItem(index)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                             >
                                 <Trash2 className="w-4 h-4" />
                             </button>

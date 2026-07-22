@@ -15,9 +15,10 @@ type ChecklistSectionProps = {
     title: string;
     items: ChecklistItem[];
     onUpdate: (items: ChecklistItem[]) => void;
+    disabled?: boolean;
 };
 
-export default function ChecklistSection({ title, items, onUpdate }: ChecklistSectionProps) {
+export default function ChecklistSection({ title, items, onUpdate, disabled }: ChecklistSectionProps) {
     const [isOpen, setIsOpen] = useState(false);
 
     const updateItem = (index: number, field: 'status' | 'observation', value: string) => {
@@ -59,9 +60,10 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
                             <div className="flex gap-1">
                                 <button
                                     type="button"
+                                    disabled={disabled}
                                     onClick={() => updateItem(index, 'status', 'ok')}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1",
+                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed",
                                         item.status === 'ok'
                                             ? "bg-green-500 text-white shadow-sm"
                                             : "bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-600"
@@ -73,9 +75,10 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
 
                                 <button
                                     type="button"
+                                    disabled={disabled}
                                     onClick={() => updateItem(index, 'status', 'defect')}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1",
+                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed",
                                         item.status === 'defect'
                                             ? "bg-red-500 text-white shadow-sm"
                                             : "bg-gray-100 text-gray-600 hover:bg-red-50 hover:text-red-600"
@@ -87,9 +90,10 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
 
                                 <button
                                     type="button"
+                                    disabled={disabled}
                                     onClick={() => updateItem(index, 'status', 'na')}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1",
+                                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed",
                                         item.status === 'na'
                                             ? "bg-gray-500 text-white shadow-sm"
                                             : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -103,10 +107,11 @@ export default function ChecklistSection({ title, items, onUpdate }: ChecklistSe
 
                         <input
                             type="text"
+                            disabled={disabled}
                             placeholder="Obs..."
                             value={item.observation}
                             onChange={(e) => updateItem(index, 'observation', e.target.value)}
-                            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-gray-50"
+                            className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
                         />
                     </div>
                 ))}

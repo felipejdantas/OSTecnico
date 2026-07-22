@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Lock } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -19,7 +19,7 @@ import ServiceOrderServicesSection, { type OrderServiceLine } from '../component
 import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
 import { EQUIPMENT_TYPES } from './NewOS';
 
@@ -93,6 +93,11 @@ export default function EditOS() {
 
     const watchedCompletedDate = watch('completedDate');
     const watchedWarrantyDays = watch('warrantyDays') as number | undefined;
+    const watchedStatus = watch('status');
+    // Once an OS is finished (pronto/entregue), everything except the status field itself
+    // becomes read-only, to avoid accidental edits to a job that's already done. Changing
+    // the status back is the only way to unlock it again.
+    const isLocked = watchedStatus === 'pronto' || watchedStatus === 'entregue';
 
     useEffect(() => {
         if (user) fetchData();
@@ -292,6 +297,13 @@ export default function EditOS() {
                     </Button>
                 </div>
 
+                {isLocked && (
+                    <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                        <Lock className="w-4 h-4 flex-shrink-0" />
+                        OS finalizada ({getStatusConfig(watchedStatus).label}) — edição bloqueada para evitar mudanças acidentais. Para editar novamente, altere o status abaixo.
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                     {/* Main Info */}
                     <div className="lg:col-span-2 space-y-4 sm:space-y-6">
@@ -300,7 +312,7 @@ export default function EditOS() {
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-sm font-medium text-gray-600">Número da OS</label>
-                                    <Input type="number" {...register('osNumber')} />
+                                    <Input type="number" disabled={isLocked} {...register('osNumber')} />
                                 </div>
 
                                 <div className="space-y-1">
@@ -327,6 +339,7 @@ export default function EditOS() {
                                                 onChange={field.onChange}
                                                 placeholder="Buscar por nome, CPF/CNPJ..."
                                                 error={errors.customerId?.message}
+                                                disabled={isLocked}
                                                 options={customers.map(c => ({
                                                     value: c.id,
                                                     label: c.name,
@@ -341,7 +354,8 @@ export default function EditOS() {
                                     <label className="text-sm font-medium text-gray-600">Técnico Responsável</label>
                                     <select
                                         {...register('technicianId')}
-                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
+                                        disabled={isLocked}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                                     >
                                         <option value="">Selecione...</option>
                                         {technicians.map(t => (
@@ -350,9 +364,9 @@ export default function EditOS() {
                                     </select>
                                 </div>
 
-                                <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />
-                                <Input label="Previsão de Conclusão" type="date" {...register('estimatedCompletionDate')} />
-                                <Input label="Data de Finalização" type="date" {...register('completedDate')} />
+                                <Input label="Data de Entrada" type="date" disabled={isLocked} {...register('entryDate')} error={errors.entryDate?.message} />
+                                <Input label="Previsão de Conclusão" type="date" disabled={isLocked} {...register('estimatedCompletionDate')} />
+                                <Input label="Data de Finalização" type="date" disabled={isLocked} {...register('completedDate')} />
                             </div>
                         </Card>
 
@@ -363,7 +377,8 @@ export default function EditOS() {
                                     <label className="text-sm font-medium text-gray-600">Tipo de Equipamento</label>
                                     <select
                                         {...register('equipmentType')}
-                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base"
+                                        disabled={isLocked}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                                     >
                                         <option value="">Selecione...</option>
                                         {EQUIPMENT_TYPES.map(t => (
@@ -371,45 +386,50 @@ export default function EditOS() {
                                         ))}
                                     </select>
                                 </div>
-                                <Input label="Marca" {...register('brand')} placeholder="Ex: Dell, Acer, Samsung..." />
-                                <Input label="Modelo" {...register('equipment')} error={errors.equipment?.message} placeholder="Ex: Inspiron 15 P66F" />
-                                <Input label="Número de Série" {...register('serialNumber')} />
+                                <Input label="Marca" disabled={isLocked} {...register('brand')} placeholder="Ex: Dell, Acer, Samsung..." />
+                                <Input label="Modelo" disabled={isLocked} {...register('equipment')} error={errors.equipment?.message} placeholder="Ex: Inspiron 15 P66F" />
+                                <Input label="Número de Série" disabled={isLocked} {...register('serialNumber')} />
 
                                 <div className="sm:col-span-2">
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">Descrição do Problema</label>
                                     <textarea
                                         {...register('problemDescription')}
-                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[100px] text-sm sm:text-base"
+                                        disabled={isLocked}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[100px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                                     />
                                 </div>
                             </div>
                         </Card>
 
-                        <AccessoriesSection value={accessories} onChange={setAccessories} />
+                        <AccessoriesSection value={accessories} onChange={setAccessories} disabled={isLocked} />
 
                         <ChecklistSection
                             title="1. Estado Físico"
                             items={physicalCondition}
                             onUpdate={setPhysicalCondition}
+                            disabled={isLocked}
                         />
 
                         <ChecklistSection
                             title="2. Condição de Funcionamento"
                             items={operatingCondition}
                             onUpdate={setOperatingCondition}
+                            disabled={isLocked}
                         />
 
                         <ChecklistSection
                             title="3. Testes Técnicos Iniciais"
                             items={technicalTests}
                             onUpdate={setTechnicalTests}
+                            disabled={isLocked}
                         />
 
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4 text-primary-green">Observação do Técnico</h3>
                             <textarea
                                 {...register('technicianObservation')}
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base"
+                                disabled={isLocked}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                             />
                         </Card>
 
@@ -422,6 +442,7 @@ export default function EditOS() {
                                 <Input
                                     label="Dias de Garantia"
                                     type="number"
+                                    disabled={isLocked}
                                     {...register('warrantyDays')}
                                     error={errors.warrantyDays?.message}
                                     placeholder="Ex: 90"
@@ -430,7 +451,8 @@ export default function EditOS() {
                                     <label className="text-sm font-medium text-gray-600 mb-1 block">Observação da Garantia</label>
                                     <textarea
                                         {...register('warrantyNotes')}
-                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[80px] text-sm sm:text-base"
+                                        disabled={isLocked}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[80px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                                         placeholder="Ex: garantia cobre apenas a peça trocada, não cobre mau uso..."
                                     />
                                 </div>
@@ -452,12 +474,12 @@ export default function EditOS() {
                                 </div>
                             )}
 
-                            <ImageUpload onImagesChange={setNewImages} />
+                            <ImageUpload onImagesChange={setNewImages} disabled={isLocked} />
                         </Card>
 
-                        <ServiceOrderItemsSection orderId={id} items={items} onChange={setItems} />
+                        <ServiceOrderItemsSection orderId={id} items={items} onChange={setItems} disabled={isLocked} />
 
-                        <ServiceOrderServicesSection orderId={id} lines={serviceLines} onChange={setServiceLines} />
+                        <ServiceOrderServicesSection orderId={id} lines={serviceLines} onChange={setServiceLines} disabled={isLocked} />
 
                         <OrderBudgetSummary
                             itemsTotal={items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)}
@@ -470,6 +492,7 @@ export default function EditOS() {
                             onDiscountValueChange={setDiscountValue}
                             onFreightChange={setFreight}
                             onUrgencyFeeChange={setUrgencyFee}
+                            disabled={isLocked}
                         />
                     </div>
 
