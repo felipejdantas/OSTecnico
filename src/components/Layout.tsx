@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet, Boxes } from 'lucide-react';
+import { Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet, Boxes, ShoppingCart } from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -16,6 +16,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { icon: Wrench, label: 'Técnicos', path: '/tecnicos' },
         { icon: Package, label: 'Produtos', path: '/produtos' },
         { icon: Boxes, label: 'Estoque', path: '/estoque' },
+        { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
         { icon: Hammer, label: 'Serviços', path: '/servicos' },
         { icon: Wallet, label: 'Faturamento', path: '/faturamento' },
         { icon: Settings, label: 'Configurações', path: '/configuracoes' },
