@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Wallet, FileText, CalendarDays, CalendarRange, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, CalendarDays, CalendarRange, Calendar } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
 
-type QuickStat = { total: number; count: number };
+type QuickStat = { total: number; osCount: number; salesCount: number };
 
 // Sums the revenue of every completed OS whose completed_date falls within
 // [startDate, endDate] (inclusive), applying each order's own discount/freight/urgency fee.
-async function fetchRevenueTotal(userId: string, startDate: string, endDate: string): Promise<QuickStat> {
+async function fetchOSRevenueTotal(userId: string, startDate: string, endDate: string): Promise<{ total: number; count: number }> {
     const { data: orders } = await supabase
         .from('service_orders')
         .select('id, discount_type, discount_value, freight, urgency_fee')
@@ -46,14 +46,59 @@ async function fetchRevenueTotal(userId: string, startDate: string, endDate: str
     return { total, count: orders.length };
 }
 
+// Same idea as fetchOSRevenueTotal, but for standalone Pedidos de Venda (sale_date instead
+// of completed_date, no services, "other_costs" fills the same slot freight does for OS).
+async function fetchSalesRevenueTotal(userId: string, startDate: string, endDate: string): Promise<{ total: number; count: number }> {
+    const { data: sales } = await supabase
+        .from('sales_orders')
+        .select('id, discount_type, discount_value, other_costs')
+        .eq('user_id', userId)
+        .gte('sale_date', startDate)
+        .lte('sale_date', endDate);
+
+    if (!sales || sales.length === 0) return { total: 0, count: 0 };
+
+    const saleIds = sales.map((s: any) => s.id);
+    const { data: items } = await supabase
+        .from('sale_items')
+        .select('sale_id, quantity, unit_price')
+        .in('sale_id', saleIds);
+
+    const total = sales.reduce((sum: number, s: any) => {
+        const itemsTotal = (items || [])
+            .filter((i: any) => i.sale_id === s.id)
+            .reduce((sub: number, i: any) => sub + i.quantity * i.unit_price, 0);
+        const { total: saleTotal } = calculateOrderTotal({
+            itemsTotal,
+            servicesTotal: 0,
+            discountType: s.discount_type || 'fixed',
+            discountValue: s.discount_value || 0,
+            freight: s.other_costs || 0,
+            urgencyFee: 0,
+        });
+        return sum + saleTotal;
+    }, 0);
+
+    return { total, count: sales.length };
+}
+
+async function fetchRevenueTotal(userId: string, startDate: string, endDate: string): Promise<QuickStat> {
+    const [os, sales] = await Promise.all([
+        fetchOSRevenueTotal(userId, startDate, endDate),
+        fetchSalesRevenueTotal(userId, startDate, endDate),
+    ]);
+    return { total: os.total + sales.total, osCount: os.count, salesCount: sales.count };
+}
+
 function toDateStr(d: Date) {
     return d.toISOString().slice(0, 10);
 }
 
 type BillingRow = {
     id: string;
-    os_number: number;
-    completed_date: string;
+    origin: 'os' | 'venda';
+    number: number;
+    date: string;
     customer_name: string;
     total: number;
     payment_status: PaymentStatus;
@@ -116,27 +161,40 @@ export default function Billing() {
         const startDate = new Date(year, month, 1).toISOString().slice(0, 10);
         const endDate = new Date(year, month + 1, 0).toISOString().slice(0, 10);
 
-        const { data: orders } = await supabase
-            .from('service_orders')
-            .select('id, os_number, completed_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
-            .eq('user_id', user.id)
-            .gte('completed_date', startDate)
-            .lte('completed_date', endDate)
-            .order('completed_date', { ascending: true });
-
-        if (!orders || orders.length === 0) {
-            setRows([]);
-            setLoading(false);
-            return;
-        }
-
-        const orderIds = orders.map((o: any) => o.id);
-        const [{ data: items }, { data: services }] = await Promise.all([
-            supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', orderIds),
-            supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', orderIds),
+        const [{ data: orders }, { data: sales }] = await Promise.all([
+            supabase
+                .from('service_orders')
+                .select('id, os_number, completed_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
+                .eq('user_id', user.id)
+                .gte('completed_date', startDate)
+                .lte('completed_date', endDate),
+            supabase
+                .from('sales_orders')
+                .select('id, sale_number, sale_date, discount_type, discount_value, other_costs, payment_status, customers (name)')
+                .eq('user_id', user.id)
+                .gte('sale_date', startDate)
+                .lte('sale_date', endDate),
         ]);
 
-        const computed = orders.map((o: any) => {
+        const osList = orders || [];
+        const salesList = sales || [];
+
+        const osIds = osList.map((o: any) => o.id);
+        const saleIds = salesList.map((s: any) => s.id);
+
+        const [{ data: items }, { data: services }, { data: saleItems }] = await Promise.all([
+            osIds.length > 0
+                ? supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', osIds)
+                : Promise.resolve({ data: [] as any[] }),
+            osIds.length > 0
+                ? supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', osIds)
+                : Promise.resolve({ data: [] as any[] }),
+            saleIds.length > 0
+                ? supabase.from('sale_items').select('sale_id, quantity, unit_price').in('sale_id', saleIds)
+                : Promise.resolve({ data: [] as any[] }),
+        ]);
+
+        const osRows: BillingRow[] = osList.map((o: any) => {
             const itemsTotal = (items || [])
                 .filter((i: any) => i.service_order_id === o.id)
                 .reduce((sum: number, i: any) => sum + i.quantity * i.unit_price, 0);
@@ -153,27 +211,53 @@ export default function Billing() {
             });
             return {
                 id: o.id,
-                os_number: o.os_number,
-                completed_date: o.completed_date,
+                origin: 'os',
+                number: o.os_number,
+                date: o.completed_date,
                 customer_name: o.customers?.name || 'N/A',
                 total,
                 payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
             };
         });
 
-        setRows(computed);
+        const saleRows: BillingRow[] = salesList.map((s: any) => {
+            const itemsTotal = (saleItems || [])
+                .filter((i: any) => i.sale_id === s.id)
+                .reduce((sum: number, i: any) => sum + i.quantity * i.unit_price, 0);
+            const { total } = calculateOrderTotal({
+                itemsTotal,
+                servicesTotal: 0,
+                discountType: s.discount_type || 'fixed',
+                discountValue: s.discount_value || 0,
+                freight: s.other_costs || 0,
+                urgencyFee: 0,
+            });
+            return {
+                id: s.id,
+                origin: 'venda',
+                number: s.sale_number,
+                date: s.sale_date,
+                customer_name: s.customers?.name || 'N/A',
+                total,
+                payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
+            };
+        });
+
+        const combined = [...osRows, ...saleRows].sort((a, b) => a.date.localeCompare(b.date));
+        setRows(combined);
         setLoading(false);
     };
 
-    const togglePaymentStatus = async (orderId: string, currentStatus: PaymentStatus) => {
-        const newStatus: PaymentStatus = currentStatus === 'pago' ? 'nao_pago' : 'pago';
+    const togglePaymentStatus = async (row: BillingRow) => {
+        const newStatus: PaymentStatus = row.payment_status === 'pago' ? 'nao_pago' : 'pago';
+        const table = row.origin === 'os' ? 'service_orders' : 'sales_orders';
         const { error } = await supabase
-            .from('service_orders')
+            .from(table)
             .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
-            .eq('id', orderId);
+            .eq('id', row.id);
 
         if (!error) {
-            setRows(prev => prev.map(r => r.id === orderId ? { ...r, payment_status: newStatus } : r));
+            setRows(prev => prev.map(r => r.id === row.id ? { ...r, payment_status: newStatus } : r));
         }
     };
 
@@ -188,6 +272,14 @@ export default function Billing() {
 
     const filteredRows = rows.filter(r => filter === 'todos' || r.payment_status === filter);
 
+    const statSubtitle = (stat: QuickStat | null) => {
+        if (!stat) return null;
+        const parts = [];
+        if (stat.osCount > 0) parts.push(`${stat.osCount} OS`);
+        if (stat.salesCount > 0) parts.push(`${stat.salesCount} venda${stat.salesCount !== 1 ? 's' : ''}`);
+        return parts.length > 0 ? parts.join(' · ') : 'Nenhum registro';
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-3">
@@ -196,7 +288,7 @@ export default function Billing() {
                 </div>
                 <div>
                     <h2 className="text-2xl font-bold text-dark">Faturamento</h2>
-                    <p className="text-gray-500">Receita das ordens de serviço concluídas</p>
+                    <p className="text-gray-500">Receita das OS concluídas e dos Pedidos de Venda</p>
                 </div>
             </div>
 
@@ -209,7 +301,7 @@ export default function Billing() {
                     <p className="text-xl sm:text-2xl font-bold text-dark">
                         {dayStat ? formatCurrency(dayStat.total) : '...'}
                     </p>
-                    {dayStat && <p className="text-xs text-gray-500 mt-0.5">{dayStat.count} OS concluída{dayStat.count !== 1 ? 's' : ''}</p>}
+                    {dayStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(dayStat)}</p>}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
@@ -219,7 +311,7 @@ export default function Billing() {
                     <p className="text-xl sm:text-2xl font-bold text-dark">
                         {weekStat ? formatCurrency(weekStat.total) : '...'}
                     </p>
-                    {weekStat && <p className="text-xs text-gray-500 mt-0.5">{weekStat.count} OS concluída{weekStat.count !== 1 ? 's' : ''}</p>}
+                    {weekStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(weekStat)}</p>}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
@@ -229,7 +321,7 @@ export default function Billing() {
                     <p className="text-xl sm:text-2xl font-bold text-dark">
                         {currentMonthStat ? formatCurrency(currentMonthStat.total) : '...'}
                     </p>
-                    {currentMonthStat && <p className="text-xs text-gray-500 mt-0.5">{currentMonthStat.count} OS concluída{currentMonthStat.count !== 1 ? 's' : ''}</p>}
+                    {currentMonthStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(currentMonthStat)}</p>}
                 </Card>
             </div>
 
@@ -255,7 +347,7 @@ export default function Billing() {
                 </div>
                 <p className="text-center text-3xl sm:text-4xl font-bold text-primary-cyan">{formatCurrency(monthTotal)}</p>
                 <p className="text-center text-sm text-gray-500 mt-1">
-                    {rows.length} OS concluída{rows.length !== 1 ? 's' : ''} neste mês
+                    {rows.length} registro{rows.length !== 1 ? 's' : ''} neste mês
                 </p>
             </Card>
 
@@ -280,7 +372,7 @@ export default function Billing() {
                 {loading ? (
                     <p className="text-center text-gray-500 py-8">Carregando...</p>
                 ) : filteredRows.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">Nenhuma OS encontrada</p>
+                    <p className="text-center text-gray-500 py-8">Nenhum registro encontrado</p>
                 ) : (
                     <>
                         {/* Desktop Table */}
@@ -288,23 +380,28 @@ export default function Billing() {
                             <table className="w-full text-sm text-left">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                                     <tr>
-                                        <th className="px-6 py-3">OS</th>
+                                        <th className="px-6 py-3">Origem</th>
                                         <th className="px-6 py-3">Cliente</th>
-                                        <th className="px-6 py-3">Concluído em</th>
+                                        <th className="px-6 py-3">Data</th>
                                         <th className="px-6 py-3">Pagamento</th>
                                         <th className="px-6 py-3 text-right">Valor</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {filteredRows.map(r => (
-                                        <tr key={r.id} className="bg-white border-b hover:bg-gray-50">
-                                            <td className="px-6 py-4 font-semibold text-primary-cyan">#{r.os_number}</td>
+                                        <tr key={`${r.origin}-${r.id}`} className="bg-white border-b hover:bg-gray-50">
+                                            <td className="px-6 py-4 font-semibold">
+                                                <span className={`inline-flex items-center gap-1.5 ${r.origin === 'os' ? 'text-primary-cyan' : 'text-purple-600'}`}>
+                                                    {r.origin === 'os' ? <FileText className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                                                    {r.origin === 'os' ? 'OS' : 'Venda'} #{r.number}
+                                                </span>
+                                            </td>
                                             <td className="px-6 py-4 text-gray-900">{r.customer_name}</td>
-                                            <td className="px-6 py-4 text-gray-600">{new Date(r.completed_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                            <td className="px-6 py-4 text-gray-600">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                                             <td className="px-6 py-4">
                                                 <button
                                                     type="button"
-                                                    onClick={() => togglePaymentStatus(r.id, r.payment_status)}
+                                                    onClick={() => togglePaymentStatus(r)}
                                                     className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[r.payment_status].color}`}
                                                 >
                                                     {PAYMENT_STATUS_CONFIG[r.payment_status].label}
@@ -328,20 +425,20 @@ export default function Billing() {
                         {/* Mobile Cards */}
                         <div className="md:hidden space-y-3 p-4">
                             {filteredRows.map(r => (
-                                <div key={r.id} className="bg-white border border-gray-200 rounded-xl p-4">
+                                <div key={`${r.origin}-${r.id}`} className="bg-white border border-gray-200 rounded-xl p-4">
                                     <div className="flex items-center justify-between mb-1">
-                                        <div className="flex items-center gap-2">
-                                            <FileText className="w-4 h-4 text-primary-cyan" />
-                                            <span className="font-semibold text-primary-cyan">#{r.os_number}</span>
-                                        </div>
+                                        <span className={`inline-flex items-center gap-1.5 font-semibold ${r.origin === 'os' ? 'text-primary-cyan' : 'text-purple-600'}`}>
+                                            {r.origin === 'os' ? <FileText className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                                            {r.origin === 'os' ? 'OS' : 'Venda'} #{r.number}
+                                        </span>
                                         <span className="font-bold text-dark">{formatCurrency(r.total)}</span>
                                     </div>
                                     <p className="text-sm text-gray-700">{r.customer_name}</p>
                                     <div className="flex items-center justify-between mt-2">
-                                        <p className="text-xs text-gray-400">{new Date(r.completed_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                        <p className="text-xs text-gray-400">{new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
                                         <button
                                             type="button"
-                                            onClick={() => togglePaymentStatus(r.id, r.payment_status)}
+                                            onClick={() => togglePaymentStatus(r)}
                                             className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[r.payment_status].color}`}
                                         >
                                             {PAYMENT_STATUS_CONFIG[r.payment_status].label}
