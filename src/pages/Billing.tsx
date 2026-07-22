@@ -1,9 +1,54 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Wallet, FileText } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wallet, FileText, CalendarDays, CalendarRange, Calendar } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
+
+type QuickStat = { total: number; count: number };
+
+// Sums the revenue of every completed OS whose completed_date falls within
+// [startDate, endDate] (inclusive), applying each order's own discount/freight/urgency fee.
+async function fetchRevenueTotal(userId: string, startDate: string, endDate: string): Promise<QuickStat> {
+    const { data: orders } = await supabase
+        .from('service_orders')
+        .select('id, discount_type, discount_value, freight, urgency_fee')
+        .eq('user_id', userId)
+        .gte('completed_date', startDate)
+        .lte('completed_date', endDate);
+
+    if (!orders || orders.length === 0) return { total: 0, count: 0 };
+
+    const orderIds = orders.map((o: any) => o.id);
+    const [{ data: items }, { data: services }] = await Promise.all([
+        supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', orderIds),
+        supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', orderIds),
+    ]);
+
+    const total = orders.reduce((sum: number, o: any) => {
+        const itemsTotal = (items || [])
+            .filter((i: any) => i.service_order_id === o.id)
+            .reduce((s: number, i: any) => s + i.quantity * i.unit_price, 0);
+        const servicesTotal = (services || [])
+            .filter((s: any) => s.service_order_id === o.id)
+            .reduce((s: number, sv: any) => s + sv.quantity * sv.price, 0);
+        const { total: orderTotal } = calculateOrderTotal({
+            itemsTotal,
+            servicesTotal,
+            discountType: o.discount_type || 'fixed',
+            discountValue: o.discount_value || 0,
+            freight: o.freight || 0,
+            urgencyFee: o.urgency_fee || 0,
+        });
+        return sum + orderTotal;
+    }, 0);
+
+    return { total, count: orders.length };
+}
+
+function toDateStr(d: Date) {
+    return d.toISOString().slice(0, 10);
+}
 
 type BillingRow = {
     id: string;
@@ -20,6 +65,42 @@ export default function Billing() {
     const [rows, setRows] = useState<BillingRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'todos' | PaymentStatus>('todos');
+    const [dayStat, setDayStat] = useState<QuickStat | null>(null);
+    const [weekStat, setWeekStat] = useState<QuickStat | null>(null);
+    const [currentMonthStat, setCurrentMonthStat] = useState<QuickStat | null>(null);
+
+    // These always reflect "today" regardless of which month is being browsed below.
+    useEffect(() => {
+        if (user) fetchQuickStats();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user]);
+
+    const fetchQuickStats = async () => {
+        if (!user) return;
+
+        const today = new Date();
+        const todayStr = toDateStr(today);
+
+        const dayOfWeek = today.getDay(); // 0 = Sunday
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - diffToMonday);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+
+        const monthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+        const monthEnd = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+
+        const [day, week, month] = await Promise.all([
+            fetchRevenueTotal(user.id, todayStr, todayStr),
+            fetchRevenueTotal(user.id, toDateStr(monday), toDateStr(sunday)),
+            fetchRevenueTotal(user.id, monthStart, monthEnd),
+        ]);
+
+        setDayStat(day);
+        setWeekStat(week);
+        setCurrentMonthStat(month);
+    };
 
     useEffect(() => {
         if (user) fetchMonth();
@@ -115,8 +196,41 @@ export default function Billing() {
                 </div>
                 <div>
                     <h2 className="text-2xl font-bold text-dark">Faturamento</h2>
-                    <p className="text-gray-500">Receita das ordens de serviço concluídas, por mês</p>
+                    <p className="text-gray-500">Receita das ordens de serviço concluídas</p>
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
+                    <div className="flex items-center gap-2 text-gray-600 mb-1">
+                        <CalendarDays className="w-4 h-4" />
+                        <p className="text-xs sm:text-sm">Hoje</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-dark">
+                        {dayStat ? formatCurrency(dayStat.total) : '...'}
+                    </p>
+                    {dayStat && <p className="text-xs text-gray-500 mt-0.5">{dayStat.count} OS concluída{dayStat.count !== 1 ? 's' : ''}</p>}
+                </Card>
+                <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
+                    <div className="flex items-center gap-2 text-gray-600 mb-1">
+                        <CalendarRange className="w-4 h-4" />
+                        <p className="text-xs sm:text-sm">Esta Semana</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-dark">
+                        {weekStat ? formatCurrency(weekStat.total) : '...'}
+                    </p>
+                    {weekStat && <p className="text-xs text-gray-500 mt-0.5">{weekStat.count} OS concluída{weekStat.count !== 1 ? 's' : ''}</p>}
+                </Card>
+                <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
+                    <div className="flex items-center gap-2 text-gray-600 mb-1">
+                        <Calendar className="w-4 h-4" />
+                        <p className="text-xs sm:text-sm">Este Mês</p>
+                    </div>
+                    <p className="text-xl sm:text-2xl font-bold text-dark">
+                        {currentMonthStat ? formatCurrency(currentMonthStat.total) : '...'}
+                    </p>
+                    {currentMonthStat && <p className="text-xs text-gray-500 mt-0.5">{currentMonthStat.count} OS concluída{currentMonthStat.count !== 1 ? 's' : ''}</p>}
+                </Card>
             </div>
 
             <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
