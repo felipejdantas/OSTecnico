@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, X, MapPin, Phone, Mail, Calendar, FileText } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { CheckCircle, AlertCircle, X, MapPin, Phone, Mail, Calendar, FileText, FileDown } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
@@ -9,6 +10,7 @@ import { StatusTimeline } from '../components/StatusTimeline';
 import { PublicBudget } from '../components/PublicBudget';
 import { supabase } from '../lib/supabase';
 import { getStatusConfig } from '../lib/orderStatus';
+import { generateOSPDF } from '../lib/pdfGenerator';
 
 // Only surfaces items with a problem, so the client's attention goes straight
 // to what actually needs fixing instead of a long list of "OK" rows.
@@ -47,6 +49,7 @@ export default function ClientSignature() {
     const [notFound, setNotFound] = useState(false);
     const [justSigned, setJustSigned] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
+    const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
     const sigPadRef = useRef<SignaturePadRef>(null);
 
     const fetchOrder = useCallback(async () => {
@@ -162,6 +165,72 @@ export default function ClientSignature() {
         }
     };
 
+    const downloadPDF = async () => {
+        if (!os) return;
+        setIsDownloadingPDF(true);
+        try {
+            await generateOSPDF({
+                os_number: os.os_number,
+                created_at: os.created_at,
+                entry_date: os.entry_date,
+                estimated_completion_date: os.estimated_completion_date,
+                completed_date: os.completed_date,
+                customer: {
+                    name: os.customer_name,
+                    cpf: os.customer_cpf,
+                    phone: os.customer_phone,
+                    email: os.customer_email,
+                    address: os.customer_address,
+                    number: os.customer_number,
+                    cnpj: os.customer_cnpj,
+                    company_name: os.customer_company_name,
+                    trade_name: os.customer_trade_name,
+                    state_registration: os.customer_state_registration,
+                    municipal_registration: os.customer_municipal_registration,
+                },
+                technician: { name: os.technician_name },
+                brand: os.brand,
+                equipment_type: os.equipment_type,
+                equipment: os.equipment,
+                serial_number: os.serial_number,
+                problem_description: os.problem_description,
+                physical_condition: os.physical_condition || [],
+                operating_condition: os.operating_condition || [],
+                technical_tests: os.technical_tests || [],
+                accessories_received: os.accessories_received || { fonte: false, cabo: false, mochila: false, outro: '' },
+                technician_observation: os.technician_observation,
+                status: os.status,
+                client_signed_at: os.client_signed_at,
+                client_signature_url: os.client_signature_url,
+                photos: os.photos || [],
+                items: os.items || [],
+                services: os.services || [],
+                discount_type: os.discount_type || 'fixed',
+                discount_value: os.discount_value || 0,
+                freight: os.freight || 0,
+                urgency_fee: os.urgency_fee || 0,
+                company: {
+                    company_name: os.company_name,
+                    cnpj: os.company_cnpj,
+                    address: os.company_address,
+                    phone: os.company_phone,
+                    email: os.company_email,
+                    pix_key: os.company_pix_key,
+                    bank_details: os.company_bank_details,
+                    warranty_days: os.company_warranty_days,
+                    warranty_text: os.company_warranty_text,
+                    terms_text: os.company_terms_text,
+                    default_technician_signature_url: os.company_technician_signature_url,
+                },
+            });
+        } catch (err: any) {
+            console.error('Error generating PDF:', err);
+            toast.error('Erro ao gerar o PDF. Tente novamente.');
+        } finally {
+            setIsDownloadingPDF(false);
+        }
+    };
+
     const approveBudget = async () => {
         if (!token) return;
         try {
@@ -218,6 +287,16 @@ export default function ClientSignature() {
                     <img src="/logo-full.jpg" alt="Dantas Info" className="h-16 mx-auto mb-4" />
                     <h1 className="text-2xl sm:text-3xl font-bold text-dark">Acompanhe sua Ordem de Serviço</h1>
                     <p className="text-gray-500 mt-1">OS #{os.os_number} · {os.customer_name}</p>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={downloadPDF}
+                        disabled={isDownloadingPDF}
+                        className="mt-4 touch-manipulation"
+                    >
+                        <FileDown className="w-4 h-4 mr-2" />
+                        {isDownloadingPDF ? 'Gerando PDF...' : 'Baixar PDF da OS'}
+                    </Button>
                 </div>
 
                 {justSigned && (
