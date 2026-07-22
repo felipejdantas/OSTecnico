@@ -9,8 +9,9 @@ import Technicians from './pages/Technicians';
 import Products from './pages/Products';
 import Stock from './pages/Stock';
 import SalesOrders from './pages/SalesOrders';
+import PurchaseOrders from './pages/PurchaseOrders';
 import Services from './pages/Services';
-import Billing from './pages/Billing';
+import CashFlow from './pages/CashFlow';
 import CompanySettings from './pages/CompanySettings';
 import ClientSignature from './pages/ClientSignature';
 import Login from './pages/Login';
@@ -74,8 +75,10 @@ function App() {
           <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
           <Route path="/estoque" element={<ProtectedRoute><Layout><Stock /></Layout></ProtectedRoute>} />
           <Route path="/vendas" element={<ProtectedRoute><Layout><SalesOrders /></Layout></ProtectedRoute>} />
+          <Route path="/compras" element={<ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
-          <Route path="/faturamento" element={<ProtectedRoute><Layout><Billing /></Layout></ProtectedRoute>} />
+          <Route path="/caixa" element={<ProtectedRoute><Layout><CashFlow /></Layout></ProtectedRoute>} />
+          <Route path="/faturamento" element={<Navigate to="/caixa" replace />} />
           <Route path="/configuracoes" element={<ProtectedRoute><Layout><CompanySettings /></Layout></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
