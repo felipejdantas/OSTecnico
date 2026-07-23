@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileUp, Undo2, FileSpreadsheet, Package } from 'lucide-react';
+import { FileUp, Undo2, FileSpreadsheet, Package, AlertTriangle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -29,6 +29,8 @@ type ParsedItem = {
     unitPrice: number;
     productId: string; // real product id, or the '__new__' sentinel
     newName: string;
+    suggestedProductId?: string;
+    suggestedProductName?: string;
 };
 
 const NEW_PRODUCT = '__new__';
@@ -39,6 +41,42 @@ function normalizeDoc(doc: string) {
 
 function getText(parent: Element | Document, tag: string) {
     return parent.getElementsByTagName(tag)[0]?.textContent?.trim() || '';
+}
+
+// Loose normalization so "SSD ADATA SU650 240GB SATA" and "SSD Adata 240GB" are
+// recognized as the same product despite differing punctuation/accents/wording.
+function normalizeName(text: string) {
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Word-overlap (Jaccard) similarity, with a boost for plain substring containment —
+// good enough to flag likely duplicates without a real fuzzy-matching library.
+function nameSimilarity(a: string, b: string): number {
+    const na = normalizeName(a);
+    const nb = normalizeName(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+    if (na.includes(nb) || nb.includes(na)) return 0.9;
+    const wordsA = new Set(na.split(' '));
+    const wordsB = new Set(nb.split(' '));
+    const intersection = [...wordsA].filter(w => wordsB.has(w));
+    const union = new Set([...wordsA, ...wordsB]);
+    return union.size > 0 ? intersection.length / union.size : 0;
+}
+
+function findSimilarProduct(name: string, products: Product[]): Product | null {
+    let best: { product: Product; score: number } | null = null;
+    for (const p of products) {
+        const score = nameSimilarity(name, p.name);
+        if (score > (best?.score ?? 0)) best = { product: p, score };
+    }
+    return best && best.score >= 0.4 ? best.product : null;
 }
 
 export default function ImportNFe() {
@@ -124,14 +162,17 @@ export default function ImportNFe() {
             const parsedItems: ParsedItem[] = detNodes.map(det => {
                 const prod = det.getElementsByTagName('prod')[0];
                 const originalName = getText(prod, 'xProd');
-                const match = products.find(p => p.name.trim().toLowerCase() === originalName.trim().toLowerCase());
+                const exactMatch = products.find(p => normalizeName(p.name) === normalizeName(originalName));
+                const suggestion = !exactMatch ? findSimilarProduct(originalName, products) : null;
                 return {
                     originalName,
                     unit: (getText(prod, 'uCom') || 'un').toLowerCase(),
                     quantity: parseFloat(getText(prod, 'qCom')) || 1,
                     unitPrice: parseFloat(getText(prod, 'vUnCom')) || 0,
-                    productId: match ? match.id : NEW_PRODUCT,
+                    productId: exactMatch ? exactMatch.id : NEW_PRODUCT,
                     newName: originalName,
+                    suggestedProductId: suggestion?.id,
+                    suggestedProductName: suggestion?.name,
                 };
             });
 
@@ -371,6 +412,19 @@ export default function ImportNFe() {
                                             />
                                         </div>
                                     </div>
+                                    {item.productId === NEW_PRODUCT && item.suggestedProductId && (
+                                        <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                                            <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                            <span>Parecido com "{item.suggestedProductName}", já cadastrado.</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => updateItem(index, { productId: item.suggestedProductId! })}
+                                                className="underline font-medium hover:text-amber-700"
+                                            >
+                                                Usar este produto
+                                            </button>
+                                        </div>
+                                    )}
                                     {item.productId === NEW_PRODUCT && (
                                         <Input
                                             label="Nome do novo produto"
