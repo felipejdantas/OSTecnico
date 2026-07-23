@@ -146,7 +146,7 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
                     {items.map((item, index) => (
                         <div key={item.id || index} className="flex items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl text-sm">
                             <div className="flex-1 min-w-0">
-                                <div className="font-medium text-dark truncate">{item.product_name}</div>
+                                <div className="font-medium text-dark break-words">{item.product_name}</div>
                                 <div className="text-xs text-gray-500">
                                     {item.quantity} x R$ {item.unit_price.toFixed(2)} = R$ {(item.quantity * item.unit_price).toFixed(2)}
                                 </div>

@@ -320,7 +320,7 @@ export default function Products() {
                                             )}
                                         </button>
                                         <div className="min-w-0 flex-1">
-                                            <div className="font-semibold text-gray-900 truncate">{product.name}</div>
+                                            <div className="font-semibold text-gray-900 break-words">{product.name}</div>
                                             <div className="text-xs text-gray-500">{product.sku || product.category}</div>
                                         </div>
                                     </div>

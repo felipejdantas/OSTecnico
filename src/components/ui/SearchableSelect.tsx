@@ -65,6 +65,7 @@ export function SearchableSelect({ options, value, onChange, placeholder = 'Sele
                     ref={inputRef}
                     type="text"
                     disabled={disabled}
+                    title={!isOpen ? selected?.label : undefined}
                     value={isOpen ? query : (selected?.label || '')}
                     onChange={(e) => {
                         setQuery(e.target.value);
@@ -76,7 +77,7 @@ export function SearchableSelect({ options, value, onChange, placeholder = 'Sele
                     }}
                     placeholder={placeholder}
                     className={cn(
-                        'w-full pl-9 pr-9 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base',
+                        'w-full pl-9 pr-9 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm sm:text-base truncate',
                         'disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50',
                         error && 'border-red-500 focus:ring-red-200'
                     )}

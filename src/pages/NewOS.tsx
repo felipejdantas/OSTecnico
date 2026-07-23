@@ -303,9 +303,8 @@ export default function NewOS() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {/* Main Info */}
-                    <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+                <div className="max-w-6xl mx-auto">
+                    <div className="space-y-4 sm:space-y-6">
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4">Dados Principais</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -479,8 +478,6 @@ export default function NewOS() {
                             <SignaturePad ref={sigPadRef} />
                         </Card>
                     </div>
-
-                    {/* Sidebar Info - Removed Button from here */}
                 </div>
 
                 {/* Bottom Action Bar */}
