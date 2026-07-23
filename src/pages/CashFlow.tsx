@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, ArrowUpCircle, ArrowDownCircle,
-    CalendarDays, CalendarRange, Calendar, Plus, Trash2, X, Truck,
+    CalendarDays, CalendarRange, Calendar, Plus, Trash2, X, Truck, FileSpreadsheet,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -20,7 +20,7 @@ type LedgerRow = {
     category: string | null;
     amount: number; // signed: positive entrada, negative saida
     payment_status?: PaymentStatus;
-    source?: 'manual' | 'compra';
+    source?: 'manual' | 'compra' | 'nfe';
 };
 
 type PeriodStats = { entradas: number; saidas: number; saldo: number; osCount: number; salesCount: number; entryCount: number };
@@ -282,6 +282,7 @@ export default function CashFlow() {
         if (row.origin === 'os') return <span className="inline-flex items-center gap-1.5 text-primary-cyan"><FileText className="w-4 h-4" />{row.label}</span>;
         if (row.origin === 'venda') return <span className="inline-flex items-center gap-1.5 text-purple-600"><ShoppingCart className="w-4 h-4" />{row.label}</span>;
         if (row.source === 'compra') return <span className="inline-flex items-center gap-1.5 text-orange-600"><Truck className="w-4 h-4" />{row.label}</span>;
+        if (row.source === 'nfe') return <span className="inline-flex items-center gap-1.5 text-indigo-600"><FileSpreadsheet className="w-4 h-4" />{row.label}</span>;
         return <span className={`inline-flex items-center gap-1.5 ${row.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{row.amount >= 0 ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}{row.label}</span>;
     };
 

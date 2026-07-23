@@ -12,6 +12,7 @@ import Stock from './pages/Stock';
 import Quotes from './pages/Quotes';
 import SalesOrders from './pages/SalesOrders';
 import PurchaseOrders from './pages/PurchaseOrders';
+import ImportNFe from './pages/ImportNFe';
 import Services from './pages/Services';
 import CashFlow from './pages/CashFlow';
 import CompanySettings from './pages/CompanySettings';
@@ -80,6 +81,7 @@ function App() {
           <Route path="/orcamentos" element={<ProtectedRoute><Layout><Quotes /></Layout></ProtectedRoute>} />
           <Route path="/vendas" element={<ProtectedRoute><Layout><SalesOrders /></Layout></ProtectedRoute>} />
           <Route path="/compras" element={<ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
+          <Route path="/importar-nfe" element={<ProtectedRoute><Layout><ImportNFe /></Layout></ProtectedRoute>} />
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
           <Route path="/caixa" element={<ProtectedRoute><Layout><CashFlow /></Layout></ProtectedRoute>} />
           <Route path="/faturamento" element={<Navigate to="/caixa" replace />} />
