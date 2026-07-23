@@ -209,21 +209,32 @@ export default function PurchaseOrders() {
         }
     };
 
-    const addStock = async () => {
-        if (!editingId || !user) return;
-        if (!confirm('Confirma adicionar as quantidades deste pedido ao estoque dos produtos?')) return;
+    // Generic versions take a purchase row (from the list or the form) so the 3-button
+    // workflow can run either from the open form or directly from the list's action menu.
+    const addStockFor = async (purchase: any, itemsOverride?: { product_id: string | null; quantity: number }[]) => {
+        if (!user) return;
+        if (!confirm(`Confirma adicionar as quantidades do pedido #${purchase.purchase_number} ao estoque dos produtos?`)) return;
 
         setIsActionLoading(true);
         try {
-            const purchase = purchases.find(p => p.id === editingId);
-            const movements = items
+            let orderItems: { product_id: string | null; quantity: number }[] = itemsOverride ?? [];
+            if (!itemsOverride) {
+                const { data, error: itemsError } = await supabase
+                    .from('purchase_order_items')
+                    .select('product_id, quantity')
+                    .eq('purchase_order_id', purchase.id);
+                if (itemsError) throw itemsError;
+                orderItems = data || [];
+            }
+
+            const movements = orderItems
                 .filter(i => i.product_id)
                 .map(i => ({
                     user_id: user.id,
                     product_id: i.product_id,
                     type: 'entrada' as const,
                     quantity: i.quantity,
-                    note: `Pedido de Compra #${purchase?.purchase_number ?? ''}${purchase?.suppliers?.name ? ' - ' + purchase.suppliers.name : ''}`,
+                    note: `Pedido de Compra #${purchase.purchase_number}${purchase.suppliers?.name ? ' - ' + purchase.suppliers.name : ''}`,
                 }));
 
             if (movements.length > 0) {
@@ -231,10 +242,10 @@ export default function PurchaseOrders() {
                 if (movError) throw movError;
             }
 
-            const { error } = await supabase.from('purchase_orders').update({ stock_added: true }).eq('id', editingId);
+            const { error } = await supabase.from('purchase_orders').update({ stock_added: true }).eq('id', purchase.id);
             if (error) throw error;
 
-            setEditingStatus(prev => prev ? { ...prev, stock_added: true } : prev);
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, stock_added: true } : prev);
             toast.success('Estoque atualizado com sucesso!');
             fetchPurchases();
         } catch (error: any) {
@@ -244,15 +255,12 @@ export default function PurchaseOrders() {
         }
     };
 
-    const addAccount = async () => {
-        if (!editingId || !user) return;
-        if (!confirm('Confirma lançar o valor deste pedido como saída no Fluxo de Caixa?')) return;
+    const addAccountFor = async (purchase: any) => {
+        if (!user) return;
+        if (!confirm(`Confirma lançar o valor do pedido #${purchase.purchase_number} como saída no Fluxo de Caixa?`)) return;
 
         setIsActionLoading(true);
         try {
-            const purchase = purchases.find(p => p.id === editingId);
-            if (!purchase) throw new Error('Pedido não encontrado');
-
             const { data: entry, error: entryError } = await supabase
                 .from('cash_entries')
                 .insert([{
@@ -265,7 +273,7 @@ export default function PurchaseOrders() {
                     description: `Pedido de Compra #${purchase.purchase_number}`,
                     related_party: purchase.suppliers?.name || null,
                     source: 'compra',
-                    purchase_order_id: editingId,
+                    purchase_order_id: purchase.id,
                 }])
                 .select('id')
                 .single();
@@ -274,10 +282,10 @@ export default function PurchaseOrders() {
             const { error } = await supabase
                 .from('purchase_orders')
                 .update({ account_added: true, cash_entry_id: entry.id })
-                .eq('id', editingId);
+                .eq('id', purchase.id);
             if (error) throw error;
 
-            setEditingStatus(prev => prev ? { ...prev, account_added: true } : prev);
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, account_added: true } : prev);
             toast.success('Lançamento de saída criado no Fluxo de Caixa!');
             fetchPurchases();
         } catch (error: any) {
@@ -287,19 +295,31 @@ export default function PurchaseOrders() {
         }
     };
 
-    const finalizePurchase = async () => {
-        if (!editingId || !user) return;
-        if (!confirm('Finalizar este pedido de compra? Ele deixará de poder ser editado.')) return;
+    const finalizeFor = async (purchase: any) => {
+        if (!confirm(`Finalizar o pedido de compra #${purchase.purchase_number}? Ele deixará de poder ser editado.`)) return;
 
         try {
-            const { error } = await supabase.from('purchase_orders').update({ status: 'finalizado' }).eq('id', editingId);
+            const { error } = await supabase.from('purchase_orders').update({ status: 'finalizado' }).eq('id', purchase.id);
             if (error) throw error;
-            setEditingStatus(prev => prev ? { ...prev, status: 'finalizado' } : prev);
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, status: 'finalizado' } : prev);
             toast.success('Pedido de compra finalizado!');
             fetchPurchases();
         } catch (error: any) {
             toast.error('Erro ao finalizar pedido: ' + error.message);
         }
+    };
+
+    const addStock = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) addStockFor(purchase, items);
+    };
+    const addAccount = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) addAccountFor(purchase);
+    };
+    const finalizePurchase = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) finalizeFor(purchase);
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
@@ -313,6 +333,14 @@ export default function PurchaseOrders() {
     );
 
     const isFinalized = editingStatus?.status === 'finalizado';
+
+    const purchaseMenuItems = (p: any) => [
+        ...(!p.stock_added ? [{ label: 'Adicionar Estoque', icon: <PackageCheck className="w-4 h-4" />, onClick: () => addStockFor(p) }] : []),
+        ...(!p.account_added ? [{ label: 'Adicionar Conta', icon: <Wallet className="w-4 h-4" />, onClick: () => addAccountFor(p) }] : []),
+        ...(p.status !== 'finalizado' ? [{ label: 'Finalizar Pedido', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => finalizeFor(p) }] : []),
+        { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(p) },
+        { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(p.id, p.purchase_number, p.stock_added, p.account_added), variant: 'danger' as const },
+    ];
 
     return (
         <div className="space-y-6">
@@ -492,12 +520,7 @@ export default function PurchaseOrders() {
                                         </td>
                                         <td className="px-6 py-4 text-right font-medium text-dark">{formatCurrency(p.total)}</td>
                                         <td className="px-6 py-4 text-right">
-                                            <DropdownMenu
-                                                items={[
-                                                    { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(p) },
-                                                    { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(p.id, p.purchase_number, p.stock_added, p.account_added), variant: 'danger' as const },
-                                                ]}
-                                            />
+                                            <DropdownMenu items={purchaseMenuItems(p)} />
                                         </td>
                                     </tr>
                                 ))
