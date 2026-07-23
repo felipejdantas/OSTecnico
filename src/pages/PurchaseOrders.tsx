@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, Truck, Save, PackageCheck, Wallet, CheckCircle2, UserPlus } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Truck, Save, PackageCheck, Wallet, CheckCircle2, UserPlus, Undo2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -235,6 +235,7 @@ export default function PurchaseOrders() {
                     type: 'entrada' as const,
                     quantity: i.quantity,
                     note: `Pedido de Compra #${purchase.purchase_number}${purchase.suppliers?.name ? ' - ' + purchase.suppliers.name : ''}`,
+                    purchase_order_id: purchase.id,
                 }));
 
             if (movements.length > 0) {
@@ -309,6 +310,71 @@ export default function PurchaseOrders() {
         }
     };
 
+    // Reverses each of the 3 workflow steps, mirroring what the delete-cascade trigger
+    // already does when a purchase order is removed, but without deleting the order itself.
+    const undoStockFor = async (purchase: any) => {
+        if (!confirm(`Confirma desfazer a entrada de estoque do pedido #${purchase.purchase_number}? As quantidades serão subtraídas do estoque novamente.`)) return;
+
+        setIsActionLoading(true);
+        try {
+            const { error: delError } = await supabase
+                .from('stock_movements')
+                .delete()
+                .eq('purchase_order_id', purchase.id)
+                .eq('type', 'entrada');
+            if (delError) throw delError;
+
+            const { error } = await supabase.from('purchase_orders').update({ stock_added: false }).eq('id', purchase.id);
+            if (error) throw error;
+
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, stock_added: false } : prev);
+            toast.success('Entrada de estoque desfeita!');
+            fetchPurchases();
+        } catch (error: any) {
+            toast.error('Erro ao desfazer estoque: ' + error.message);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const undoAccountFor = async (purchase: any) => {
+        if (!confirm(`Confirma remover o lançamento de saída do pedido #${purchase.purchase_number} do Fluxo de Caixa?`)) return;
+
+        setIsActionLoading(true);
+        try {
+            const { error: delError } = await supabase.from('cash_entries').delete().eq('purchase_order_id', purchase.id);
+            if (delError) throw delError;
+
+            const { error } = await supabase
+                .from('purchase_orders')
+                .update({ account_added: false, cash_entry_id: null })
+                .eq('id', purchase.id);
+            if (error) throw error;
+
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, account_added: false } : prev);
+            toast.success('Lançamento removido do Fluxo de Caixa!');
+            fetchPurchases();
+        } catch (error: any) {
+            toast.error('Erro ao desfazer conta: ' + error.message);
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    const unfinalizeFor = async (purchase: any) => {
+        if (!confirm(`Reabrir o pedido de compra #${purchase.purchase_number} para edição?`)) return;
+
+        try {
+            const { error } = await supabase.from('purchase_orders').update({ status: 'pendente' }).eq('id', purchase.id);
+            if (error) throw error;
+            if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, status: 'pendente' } : prev);
+            toast.success('Pedido de compra reaberto!');
+            fetchPurchases();
+        } catch (error: any) {
+            toast.error('Erro ao reabrir pedido: ' + error.message);
+        }
+    };
+
     const addStock = () => {
         const purchase = purchases.find(p => p.id === editingId);
         if (purchase) addStockFor(purchase, items);
@@ -320,6 +386,18 @@ export default function PurchaseOrders() {
     const finalizePurchase = () => {
         const purchase = purchases.find(p => p.id === editingId);
         if (purchase) finalizeFor(purchase);
+    };
+    const undoStock = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) undoStockFor(purchase);
+    };
+    const undoAccount = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) undoAccountFor(purchase);
+    };
+    const unfinalize = () => {
+        const purchase = purchases.find(p => p.id === editingId);
+        if (purchase) unfinalizeFor(purchase);
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
@@ -334,10 +412,20 @@ export default function PurchaseOrders() {
 
     const isFinalized = editingStatus?.status === 'finalizado';
 
+    // Once finalized, stock/conta can only be undone after reabrindo the order first —
+    // mirrors the existing rule that finalized orders can't have stock/conta touched.
     const purchaseMenuItems = (p: any) => [
-        ...(!p.stock_added ? [{ label: 'Adicionar Estoque', icon: <PackageCheck className="w-4 h-4" />, onClick: () => addStockFor(p) }] : []),
-        ...(!p.account_added ? [{ label: 'Adicionar Conta', icon: <Wallet className="w-4 h-4" />, onClick: () => addAccountFor(p) }] : []),
-        ...(p.status !== 'finalizado' ? [{ label: 'Finalizar Pedido', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => finalizeFor(p) }] : []),
+        ...(p.status === 'finalizado'
+            ? [{ label: 'Reabrir Pedido', icon: <Undo2 className="w-4 h-4" />, onClick: () => unfinalizeFor(p) }]
+            : [
+                !p.stock_added
+                    ? { label: 'Adicionar Estoque', icon: <PackageCheck className="w-4 h-4" />, onClick: () => addStockFor(p) }
+                    : { label: 'Desfazer Estoque', icon: <Undo2 className="w-4 h-4" />, onClick: () => undoStockFor(p) },
+                !p.account_added
+                    ? { label: 'Adicionar Conta', icon: <Wallet className="w-4 h-4" />, onClick: () => addAccountFor(p) }
+                    : { label: 'Desfazer Conta', icon: <Undo2 className="w-4 h-4" />, onClick: () => undoAccountFor(p) },
+                { label: 'Finalizar Pedido', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => finalizeFor(p) },
+            ]),
         { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(p) },
         { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(p.id, p.purchase_number, p.stock_added, p.account_added), variant: 'danger' as const },
     ];
@@ -429,31 +517,33 @@ export default function PurchaseOrders() {
                                 <Button
                                     type="button"
                                     variant={editingStatus?.stock_added ? 'outline' : 'primary'}
-                                    disabled={editingStatus?.stock_added || isActionLoading || isFinalized}
-                                    onClick={addStock}
+                                    disabled={isActionLoading || isFinalized}
+                                    onClick={editingStatus?.stock_added ? undoStock : addStock}
                                 >
-                                    <PackageCheck className="w-4 h-4 mr-2" />
-                                    {editingStatus?.stock_added ? 'Estoque já adicionado' : 'Adicionar Estoque'}
+                                    {editingStatus?.stock_added ? <Undo2 className="w-4 h-4 mr-2" /> : <PackageCheck className="w-4 h-4 mr-2" />}
+                                    {editingStatus?.stock_added ? 'Desfazer Estoque' : 'Adicionar Estoque'}
                                 </Button>
                                 <Button
                                     type="button"
                                     variant={editingStatus?.account_added ? 'outline' : 'primary'}
-                                    disabled={editingStatus?.account_added || isActionLoading || isFinalized}
-                                    onClick={addAccount}
+                                    disabled={isActionLoading || isFinalized}
+                                    onClick={editingStatus?.account_added ? undoAccount : addAccount}
                                 >
-                                    <Wallet className="w-4 h-4 mr-2" />
-                                    {editingStatus?.account_added ? 'Conta já lançada' : 'Adicionar Conta'}
+                                    {editingStatus?.account_added ? <Undo2 className="w-4 h-4 mr-2" /> : <Wallet className="w-4 h-4 mr-2" />}
+                                    {editingStatus?.account_added ? 'Desfazer Conta' : 'Adicionar Conta'}
                                 </Button>
                                 <Button
                                     type="button"
                                     variant={isFinalized ? 'outline' : 'secondary'}
-                                    disabled={isFinalized}
-                                    onClick={finalizePurchase}
+                                    onClick={isFinalized ? unfinalize : finalizePurchase}
                                 >
-                                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                                    {isFinalized ? 'Finalizado' : 'Finalizar Pedido'}
+                                    {isFinalized ? <Undo2 className="w-4 h-4 mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                                    {isFinalized ? 'Reabrir Pedido' : 'Finalizar Pedido'}
                                 </Button>
                             </div>
+                            {isFinalized && (
+                                <p className="text-xs text-gray-400 mt-2">Reabra o pedido para poder desfazer o estoque ou a conta lançada.</p>
+                            )}
                         </Card>
                     )}
 
