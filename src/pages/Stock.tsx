@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ArrowDownCircle, ArrowUpCircle, Boxes, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -145,19 +146,16 @@ export default function Stock() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="md:col-span-2">
                             <label className="text-sm font-medium text-gray-600 mb-1 block">Produto</label>
-                            <select
+                            <SearchableSelect
                                 value={productId}
-                                onChange={(e) => setProductId(e.target.value)}
-                                required
-                                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 bg-white text-sm"
-                            >
-                                <option value="">Selecione um produto...</option>
-                                {products.map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.name} (estoque atual: {p.stock_quantity} {p.unit})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={setProductId}
+                                placeholder="Buscar produto..."
+                                options={products.map(p => ({
+                                    value: p.id,
+                                    label: p.name,
+                                    sublabel: `Estoque atual: ${p.stock_quantity} ${p.unit}`,
+                                }))}
+                            />
                         </div>
 
                         <div>
