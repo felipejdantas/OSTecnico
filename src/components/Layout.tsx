@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
     Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet,
-    Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown, Search,
+    Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown, Search, Calculator,
 } from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
@@ -31,6 +31,7 @@ const menuGroups: MenuGroup[] = [
     {
         title: 'Vendas',
         items: [
+            { icon: Calculator, label: 'Orçamentos', path: '/orcamentos' },
             { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
         ],
     },

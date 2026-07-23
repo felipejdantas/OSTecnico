@@ -9,6 +9,7 @@ import Technicians from './pages/Technicians';
 import Suppliers from './pages/Suppliers';
 import Products from './pages/Products';
 import Stock from './pages/Stock';
+import Quotes from './pages/Quotes';
 import SalesOrders from './pages/SalesOrders';
 import PurchaseOrders from './pages/PurchaseOrders';
 import Services from './pages/Services';
@@ -76,6 +77,7 @@ function App() {
           <Route path="/fornecedores" element={<ProtectedRoute><Layout><Suppliers /></Layout></ProtectedRoute>} />
           <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
           <Route path="/estoque" element={<ProtectedRoute><Layout><Stock /></Layout></ProtectedRoute>} />
+          <Route path="/orcamentos" element={<ProtectedRoute><Layout><Quotes /></Layout></ProtectedRoute>} />
           <Route path="/vendas" element={<ProtectedRoute><Layout><SalesOrders /></Layout></ProtectedRoute>} />
           <Route path="/compras" element={<ProtectedRoute><Layout><PurchaseOrders /></Layout></ProtectedRoute>} />
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
