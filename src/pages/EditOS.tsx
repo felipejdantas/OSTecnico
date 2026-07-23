@@ -371,9 +371,10 @@ export default function EditOS() {
                                 <Input label="Previsão de Conclusão" type="date" disabled={isLocked} {...register('estimatedCompletionDate')} />
                                 <Input label="Data de Finalização" type="date" disabled={isLocked} {...register('completedDate')} />
                                 <div>
-                                    <Input label="Data de Faturamento" type="date" disabled={isLocked} {...register('billingDate')} />
+                                    <Input label="Data de Faturamento" type="date" {...register('billingDate')} />
                                     <p className="text-xs text-gray-400 mt-1">
                                         Em qual dia essa OS deve contar no Fluxo de Caixa. Deixe em branco para usar a Data de Finalização.
+                                        {isLocked && ' Este campo continua editável mesmo com a OS finalizada.'}
                                     </p>
                                 </div>
                             </div>
