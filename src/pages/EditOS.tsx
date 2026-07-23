@@ -37,6 +37,7 @@ const osSchema = z.object({
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
     completedDate: z.string().optional(),
+    billingDate: z.string().optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
 });
@@ -138,6 +139,7 @@ export default function EditOS() {
             setValue('entryDate', os.entry_date || '');
             setValue('estimatedCompletionDate', os.estimated_completion_date || '');
             setValue('completedDate', os.completed_date || '');
+            setValue('billingDate', os.billing_date || '');
             setValue('warrantyDays', os.warranty_days ?? undefined);
             setValue('warrantyNotes', os.warranty_notes || '');
             setOriginalStatus(os.status);
@@ -242,6 +244,7 @@ export default function EditOS() {
                     entry_date: data.entryDate,
                     estimated_completion_date: data.estimatedCompletionDate || null,
                     completed_date: data.completedDate || null,
+                    billing_date: data.billingDate || null,
                     warranty_days: data.warrantyDays ?? null,
                     warranty_notes: data.warrantyNotes || null,
                     discount_type: discountType,
@@ -367,6 +370,12 @@ export default function EditOS() {
                                 <Input label="Data de Entrada" type="date" disabled={isLocked} {...register('entryDate')} error={errors.entryDate?.message} />
                                 <Input label="Previsão de Conclusão" type="date" disabled={isLocked} {...register('estimatedCompletionDate')} />
                                 <Input label="Data de Finalização" type="date" disabled={isLocked} {...register('completedDate')} />
+                                <div>
+                                    <Input label="Data de Faturamento" type="date" disabled={isLocked} {...register('billingDate')} />
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        Em qual dia essa OS deve contar no Fluxo de Caixa. Deixe em branco para usar a Data de Finalização.
+                                    </p>
+                                </div>
                             </div>
                         </Card>
 

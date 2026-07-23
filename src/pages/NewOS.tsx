@@ -32,6 +32,7 @@ const osSchema = z.object({
     technicianObservation: z.string().optional(),
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
+    billingDate: z.string().optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
 });
@@ -197,6 +198,7 @@ export default function NewOS() {
                 status: data.status,
                 entry_date: data.entryDate,
                 estimated_completion_date: data.estimatedCompletionDate || null,
+                billing_date: data.billingDate || null,
                 warranty_days: data.warrantyDays ?? null,
                 warranty_notes: data.warrantyNotes || null,
                 discount_type: discountType,
@@ -357,6 +359,12 @@ export default function NewOS() {
 
                                 <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />
                                 <Input label="Previsão de Conclusão" type="date" {...register('estimatedCompletionDate')} />
+                                <div className="sm:col-span-2">
+                                    <Input label="Data de Faturamento (opcional)" type="date" {...register('billingDate')} />
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        Preencha só se quiser que essa OS conte em uma data diferente no Fluxo de Caixa (ex: lançando um serviço com atraso).
+                                    </p>
+                                </div>
                             </div>
                         </Card>
 

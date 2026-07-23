@@ -11,105 +11,11 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
 
-type PeriodStats = { entradas: number; saidas: number; saldo: number; osCount: number; salesCount: number; entryCount: number };
-
-async function fetchOSRevenue(userId: string, startDate: string, endDate: string) {
-    const { data: orders } = await supabase
-        .from('service_orders')
-        .select('id, discount_type, discount_value, freight, urgency_fee')
-        .eq('user_id', userId)
-        .gte('completed_date', startDate)
-        .lte('completed_date', endDate);
-
-    if (!orders || orders.length === 0) return { total: 0, count: 0 };
-
-    const orderIds = orders.map((o: any) => o.id);
-    const [{ data: items }, { data: services }] = await Promise.all([
-        supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', orderIds),
-        supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', orderIds),
-    ]);
-
-    const total = orders.reduce((sum: number, o: any) => {
-        const itemsTotal = (items || []).filter((i: any) => i.service_order_id === o.id).reduce((s: number, i: any) => s + i.quantity * i.unit_price, 0);
-        const servicesTotal = (services || []).filter((s: any) => s.service_order_id === o.id).reduce((s: number, sv: any) => s + sv.quantity * sv.price, 0);
-        const { total: orderTotal } = calculateOrderTotal({
-            itemsTotal, servicesTotal,
-            discountType: o.discount_type || 'fixed',
-            discountValue: o.discount_value || 0,
-            freight: o.freight || 0,
-            urgencyFee: o.urgency_fee || 0,
-        });
-        return sum + orderTotal;
-    }, 0);
-
-    return { total, count: orders.length };
-}
-
-async function fetchSalesRevenue(userId: string, startDate: string, endDate: string) {
-    const { data: sales } = await supabase
-        .from('sales_orders')
-        .select('id, discount_type, discount_value, other_costs')
-        .eq('user_id', userId)
-        .gte('sale_date', startDate)
-        .lte('sale_date', endDate);
-
-    if (!sales || sales.length === 0) return { total: 0, count: 0 };
-
-    const saleIds = sales.map((s: any) => s.id);
-    const { data: items } = await supabase.from('sale_items').select('sale_id, quantity, unit_price').in('sale_id', saleIds);
-
-    const total = sales.reduce((sum: number, s: any) => {
-        const itemsTotal = (items || []).filter((i: any) => i.sale_id === s.id).reduce((sub: number, i: any) => sub + i.quantity * i.unit_price, 0);
-        const { total: saleTotal } = calculateOrderTotal({
-            itemsTotal, servicesTotal: 0,
-            discountType: s.discount_type || 'fixed',
-            discountValue: s.discount_value || 0,
-            freight: s.other_costs || 0,
-            urgencyFee: 0,
-        });
-        return sum + saleTotal;
-    }, 0);
-
-    return { total, count: sales.length };
-}
-
-async function fetchManualEntries(userId: string, startDate: string, endDate: string) {
-    const { data } = await supabase
-        .from('cash_entries')
-        .select('type, amount')
-        .eq('user_id', userId)
-        .gte('entry_date', startDate)
-        .lte('entry_date', endDate);
-
-    const rows = data || [];
-    const entradas = rows.filter(r => r.type === 'entrada').reduce((s, r) => s + Number(r.amount), 0);
-    const saidas = rows.filter(r => r.type === 'saida').reduce((s, r) => s + Number(r.amount), 0);
-    return { entradas, saidas, count: rows.length };
-}
-
-async function fetchPeriodStats(userId: string, startDate: string, endDate: string): Promise<PeriodStats> {
-    const [os, sales, manual] = await Promise.all([
-        fetchOSRevenue(userId, startDate, endDate),
-        fetchSalesRevenue(userId, startDate, endDate),
-        fetchManualEntries(userId, startDate, endDate),
-    ]);
-    const entradas = os.total + sales.total + manual.entradas;
-    const saidas = manual.saidas;
-    return {
-        entradas, saidas, saldo: entradas - saidas,
-        osCount: os.count, salesCount: sales.count, entryCount: manual.count,
-    };
-}
-
-function toDateStr(d: Date) {
-    return d.toISOString().slice(0, 10);
-}
-
 type LedgerRow = {
     id: string;
     origin: 'os' | 'venda' | 'cash';
     label: string;
-    date: string;
+    date: string; // effective date (YYYY-MM-DD): billing_date when set, otherwise completed_date/sale_date
     party: string;
     category: string | null;
     amount: number; // signed: positive entrada, negative saida
@@ -117,149 +23,148 @@ type LedgerRow = {
     source?: 'manual' | 'compra';
 };
 
+type PeriodStats = { entradas: number; saidas: number; saldo: number; osCount: number; salesCount: number; entryCount: number };
+
+// Fetches every OS/Venda/lançamento the tenant has and resolves each one's "effective"
+// date (billing_date overrides completed_date/sale_date when set). Everything below —
+// quick stats, the browsable month, the ledger table — is just filtering this one list,
+// so a manually chosen billing date is honored everywhere without juggling DB-side
+// coalesce logic across three different range queries.
+async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
+    const [osRes, salesRes, cashRes] = await Promise.all([
+        supabase
+            .from('service_orders')
+            .select('id, os_number, completed_date, billing_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
+            .eq('user_id', userId)
+            .or('completed_date.not.is.null,billing_date.not.is.null'),
+        supabase
+            .from('sales_orders')
+            .select('id, sale_number, sale_date, billing_date, discount_type, discount_value, other_costs, payment_status, customers (name)')
+            .eq('user_id', userId),
+        supabase
+            .from('cash_entries')
+            .select('id, entry_date, type, category, amount, description, related_party, source')
+            .eq('user_id', userId),
+    ]);
+
+    const osList = osRes.data || [];
+    const salesList = salesRes.data || [];
+    const osIds = osList.map((o: any) => o.id);
+    const saleIds = salesList.map((s: any) => s.id);
+
+    const [itemsRes, servicesRes, saleItemsRes] = await Promise.all([
+        osIds.length > 0 ? supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', osIds) : Promise.resolve({ data: [] as any[] }),
+        osIds.length > 0 ? supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', osIds) : Promise.resolve({ data: [] as any[] }),
+        saleIds.length > 0 ? supabase.from('sale_items').select('sale_id, quantity, unit_price').in('sale_id', saleIds) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const items = itemsRes.data || [];
+    const services = servicesRes.data || [];
+    const saleItems = saleItemsRes.data || [];
+
+    const osRows: LedgerRow[] = osList.map((o: any) => {
+        const itemsTotal = items.filter((i: any) => i.service_order_id === o.id).reduce((s: number, i: any) => s + i.quantity * i.unit_price, 0);
+        const servicesTotal = services.filter((s: any) => s.service_order_id === o.id).reduce((s: number, sv: any) => s + sv.quantity * sv.price, 0);
+        const { total } = calculateOrderTotal({
+            itemsTotal, servicesTotal,
+            discountType: o.discount_type || 'fixed',
+            discountValue: o.discount_value || 0,
+            freight: o.freight || 0,
+            urgencyFee: o.urgency_fee || 0,
+        });
+        return {
+            id: o.id,
+            origin: 'os',
+            label: `OS #${o.os_number}`,
+            date: o.billing_date || o.completed_date,
+            party: o.customers?.name || 'N/A',
+            category: null,
+            amount: total,
+            payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
+        };
+    });
+
+    const saleRows: LedgerRow[] = salesList.map((s: any) => {
+        const itemsTotal = saleItems.filter((i: any) => i.sale_id === s.id).reduce((sum: number, i: any) => sum + i.quantity * i.unit_price, 0);
+        const { total } = calculateOrderTotal({
+            itemsTotal, servicesTotal: 0,
+            discountType: s.discount_type || 'fixed',
+            discountValue: s.discount_value || 0,
+            freight: s.other_costs || 0,
+            urgencyFee: 0,
+        });
+        return {
+            id: s.id,
+            origin: 'venda',
+            label: `Venda #${s.sale_number}`,
+            date: s.billing_date || s.sale_date,
+            party: s.customers?.name || 'N/A',
+            category: null,
+            amount: total,
+            payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
+        };
+    });
+
+    const cashRows: LedgerRow[] = (cashRes.data || []).map((e: any) => ({
+        id: e.id,
+        origin: 'cash',
+        label: e.description,
+        date: e.entry_date,
+        party: e.related_party || '-',
+        category: e.category,
+        amount: e.type === 'saida' ? -Number(e.amount) : Number(e.amount),
+        source: e.source,
+    }));
+
+    return [...osRows, ...saleRows, ...cashRows];
+}
+
+function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodStats {
+    const inRange = allRows.filter(r => r.date >= start && r.date <= end);
+    const entradas = inRange.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
+    const saidas = inRange.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
+    return {
+        entradas, saidas, saldo: entradas - saidas,
+        osCount: inRange.filter(r => r.origin === 'os').length,
+        salesCount: inRange.filter(r => r.origin === 'venda').length,
+        entryCount: inRange.filter(r => r.origin === 'cash').length,
+    };
+}
+
+function toDateStr(d: Date) {
+    return d.toISOString().slice(0, 10);
+}
+
 const manualEntrySchema = { entry_date: '', competence_date: '', category: '', amount: '', description: '', related_party: '' };
 type ManualEntryForm = typeof manualEntrySchema;
 
 export default function CashFlow() {
     const { user } = useAuth();
     const [monthDate, setMonthDate] = useState(() => new Date());
-    const [rows, setRows] = useState<LedgerRow[]>([]);
+    const [allRows, setAllRows] = useState<LedgerRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [typeFilter, setTypeFilter] = useState<'todos' | 'entrada' | 'saida'>('todos');
     const [originFilter, setOriginFilter] = useState<'todos' | 'os' | 'venda' | 'cash'>('todos');
-
-    const [dayStat, setDayStat] = useState<PeriodStats | null>(null);
-    const [weekStat, setWeekStat] = useState<PeriodStats | null>(null);
-    const [currentMonthStat, setCurrentMonthStat] = useState<PeriodStats | null>(null);
 
     const [entryModal, setEntryModal] = useState<'entrada' | 'saida' | null>(null);
     const [entryForm, setEntryForm] = useState<ManualEntryForm>(manualEntrySchema);
     const [isSubmittingEntry, setIsSubmittingEntry] = useState(false);
 
     useEffect(() => {
-        if (user) fetchQuickStats();
+        if (user) fetchAll();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
-    const fetchQuickStats = async () => {
-        if (!user) return;
-        const today = new Date();
-        const todayStr = toDateStr(today);
-
-        const dayOfWeek = today.getDay();
-        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const monday = new Date(today);
-        monday.setDate(today.getDate() - diffToMonday);
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-
-        const monthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
-        const monthEnd = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-
-        const [day, week, month] = await Promise.all([
-            fetchPeriodStats(user.id, todayStr, todayStr),
-            fetchPeriodStats(user.id, toDateStr(monday), toDateStr(sunday)),
-            fetchPeriodStats(user.id, monthStart, monthEnd),
-        ]);
-
-        setDayStat(day);
-        setWeekStat(week);
-        setCurrentMonthStat(month);
-    };
-
-    useEffect(() => {
-        if (user) fetchMonth();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user, monthDate]);
-
-    const fetchMonth = async () => {
+    const fetchAll = async () => {
         if (!user) return;
         setLoading(true);
-
-        const year = monthDate.getFullYear();
-        const month = monthDate.getMonth();
-        const startDate = new Date(year, month, 1).toISOString().slice(0, 10);
-        const endDate = new Date(year, month + 1, 0).toISOString().slice(0, 10);
-
-        const [{ data: orders }, { data: sales }, { data: entries }] = await Promise.all([
-            supabase
-                .from('service_orders')
-                .select('id, os_number, completed_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
-                .eq('user_id', user.id)
-                .gte('completed_date', startDate)
-                .lte('completed_date', endDate),
-            supabase
-                .from('sales_orders')
-                .select('id, sale_number, sale_date, discount_type, discount_value, other_costs, payment_status, customers (name)')
-                .eq('user_id', user.id)
-                .gte('sale_date', startDate)
-                .lte('sale_date', endDate),
-            supabase
-                .from('cash_entries')
-                .select('id, entry_date, type, category, amount, description, related_party, source')
-                .eq('user_id', user.id)
-                .gte('entry_date', startDate)
-                .lte('entry_date', endDate),
-        ]);
-
-        const osList = orders || [];
-        const salesList = sales || [];
-        const osIds = osList.map((o: any) => o.id);
-        const saleIds = salesList.map((s: any) => s.id);
-
-        const [{ data: items }, { data: services }, { data: saleItems }] = await Promise.all([
-            osIds.length > 0 ? supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', osIds) : Promise.resolve({ data: [] as any[] }),
-            osIds.length > 0 ? supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', osIds) : Promise.resolve({ data: [] as any[] }),
-            saleIds.length > 0 ? supabase.from('sale_items').select('sale_id, quantity, unit_price').in('sale_id', saleIds) : Promise.resolve({ data: [] as any[] }),
-        ]);
-
-        const osRows: LedgerRow[] = osList.map((o: any) => {
-            const itemsTotal = (items || []).filter((i: any) => i.service_order_id === o.id).reduce((s: number, i: any) => s + i.quantity * i.unit_price, 0);
-            const servicesTotal = (services || []).filter((s: any) => s.service_order_id === o.id).reduce((s: number, sv: any) => s + sv.quantity * sv.price, 0);
-            const { total } = calculateOrderTotal({
-                itemsTotal, servicesTotal,
-                discountType: o.discount_type || 'fixed',
-                discountValue: o.discount_value || 0,
-                freight: o.freight || 0,
-                urgencyFee: o.urgency_fee || 0,
-            });
-            return {
-                id: o.id, origin: 'os', label: `OS #${o.os_number}`, date: o.completed_date,
-                party: o.customers?.name || 'N/A', category: null, amount: total,
-                payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
-            };
-        });
-
-        const saleRows: LedgerRow[] = salesList.map((s: any) => {
-            const itemsTotal = (saleItems || []).filter((i: any) => i.sale_id === s.id).reduce((sum: number, i: any) => sum + i.quantity * i.unit_price, 0);
-            const { total } = calculateOrderTotal({
-                itemsTotal, servicesTotal: 0,
-                discountType: s.discount_type || 'fixed',
-                discountValue: s.discount_value || 0,
-                freight: s.other_costs || 0,
-                urgencyFee: 0,
-            });
-            return {
-                id: s.id, origin: 'venda', label: `Venda #${s.sale_number}`, date: s.sale_date,
-                party: s.customers?.name || 'N/A', category: null, amount: total,
-                payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
-            };
-        });
-
-        const cashRows: LedgerRow[] = (entries || []).map((e: any) => ({
-            id: e.id,
-            origin: 'cash',
-            label: e.description,
-            date: e.entry_date,
-            party: e.related_party || '-',
-            category: e.category,
-            amount: e.type === 'saida' ? -Number(e.amount) : Number(e.amount),
-            source: e.source,
-        }));
-
-        const combined = [...osRows, ...saleRows, ...cashRows].sort((a, b) => a.date.localeCompare(b.date));
-        setRows(combined);
-        setLoading(false);
+        try {
+            const allData = await fetchAllLedgerRows(user.id);
+            setAllRows(allData);
+        } catch (error) {
+            console.error('Error fetching cash flow data:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const togglePaymentStatus = async (row: LedgerRow) => {
@@ -271,7 +176,7 @@ export default function CashFlow() {
             .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
             .eq('id', row.id);
         if (!error) {
-            setRows(prev => prev.map(r => r.id === row.id ? { ...r, payment_status: newStatus } : r));
+            setAllRows(prev => prev.map(r => (r.origin === row.origin && r.id === row.id) ? { ...r, payment_status: newStatus } : r));
         }
     };
 
@@ -310,8 +215,7 @@ export default function CashFlow() {
 
             toast.success(entryModal === 'entrada' ? 'Entrada lançada com sucesso!' : 'Saída lançada com sucesso!');
             setEntryModal(null);
-            fetchMonth();
-            fetchQuickStats();
+            fetchAll();
         } catch (error: any) {
             toast.error('Erro ao lançar: ' + error.message);
         } finally {
@@ -325,8 +229,7 @@ export default function CashFlow() {
             const { error } = await supabase.from('cash_entries').delete().eq('id', row.id);
             if (error) throw error;
             toast.success('Lançamento excluído!');
-            fetchMonth();
-            fetchQuickStats();
+            fetchAll();
         } catch (error: any) {
             toast.error('Erro ao excluir: ' + error.message);
         }
@@ -334,6 +237,27 @@ export default function CashFlow() {
 
     const monthLabel = monthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const changeMonth = (delta: number) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + delta, 1));
+
+    const today = new Date();
+    const todayStr = toDateStr(today);
+    const dayOfWeek = today.getDay();
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const currentMonthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+    const currentMonthEnd = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+
+    const dayStat = computeStats(allRows, todayStr, todayStr);
+    const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday));
+    const currentMonthStat = computeStats(allRows, currentMonthStart, currentMonthEnd);
+
+    const browsedMonthStart = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
+    const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
+    const rows = allRows
+        .filter(r => r.date >= browsedMonthStart && r.date <= browsedMonthEnd)
+        .sort((a, b) => a.date.localeCompare(b.date));
 
     const monthEntradas = rows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
     const monthSaidas = rows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
@@ -346,8 +270,7 @@ export default function CashFlow() {
         return true;
     });
 
-    const statSubtitle = (stat: PeriodStats | null) => {
-        if (!stat) return null;
+    const statSubtitle = (stat: PeriodStats) => {
         const parts = [];
         if (stat.osCount > 0) parts.push(`${stat.osCount} OS`);
         if (stat.salesCount > 0) parts.push(`${stat.salesCount} venda${stat.salesCount !== 1 ? 's' : ''}`);
@@ -390,42 +313,42 @@ export default function CashFlow() {
                         <CalendarDays className="w-4 h-4" />
                         <p className="text-xs sm:text-sm">Hoje</p>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold text-dark">{dayStat ? formatCurrency(dayStat.saldo) : '...'}</p>
-                    {dayStat && (
+                    <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(dayStat.saldo)}</p>
+                    {!loading && (
                         <p className="text-xs mt-0.5">
                             <span className="text-green-600">+{formatCurrency(dayStat.entradas)}</span>{' / '}
                             <span className="text-red-500">-{formatCurrency(dayStat.saidas)}</span>
                         </p>
                     )}
-                    {dayStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(dayStat)}</p>}
+                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(dayStat)}</p>}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
                         <CalendarRange className="w-4 h-4" />
                         <p className="text-xs sm:text-sm">Esta Semana</p>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold text-dark">{weekStat ? formatCurrency(weekStat.saldo) : '...'}</p>
-                    {weekStat && (
+                    <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(weekStat.saldo)}</p>
+                    {!loading && (
                         <p className="text-xs mt-0.5">
                             <span className="text-green-600">+{formatCurrency(weekStat.entradas)}</span>{' / '}
                             <span className="text-red-500">-{formatCurrency(weekStat.saidas)}</span>
                         </p>
                     )}
-                    {weekStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(weekStat)}</p>}
+                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(weekStat)}</p>}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
                         <Calendar className="w-4 h-4" />
                         <p className="text-xs sm:text-sm">Este Mês</p>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold text-dark">{currentMonthStat ? formatCurrency(currentMonthStat.saldo) : '...'}</p>
-                    {currentMonthStat && (
+                    <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(currentMonthStat.saldo)}</p>
+                    {!loading && (
                         <p className="text-xs mt-0.5">
                             <span className="text-green-600">+{formatCurrency(currentMonthStat.entradas)}</span>{' / '}
                             <span className="text-red-500">-{formatCurrency(currentMonthStat.saidas)}</span>
                         </p>
                     )}
-                    {currentMonthStat && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(currentMonthStat)}</p>}
+                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(currentMonthStat)}</p>}
                 </Card>
             </div>
 

@@ -19,6 +19,7 @@ const saleSchema = z.object({
     customerId: z.string().min(1, 'Selecione um cliente'),
     sellerTechnicianId: z.string().optional(),
     saleDate: z.string().min(1, 'Informe a data da venda'),
+    billingDate: z.string().optional(),
     discountType: z.enum(['fixed', 'percent']),
     discountValue: z.coerce.number().min(0, 'Valor inválido').optional(),
     otherCosts: z.coerce.number().min(0, 'Valor inválido').optional(),
@@ -71,7 +72,7 @@ export default function SalesOrders() {
 
         const { data: salesData, error } = await supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name), technicians (name)')
+            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name), technicians (name)')
             .eq('user_id', user.id)
             .order('sale_date', { ascending: false })
             .order('sale_number', { ascending: false });
@@ -116,6 +117,7 @@ export default function SalesOrders() {
         setValue('customerId', sale.customer_id);
         setValue('sellerTechnicianId', sale.seller_technician_id || '');
         setValue('saleDate', sale.sale_date);
+        setValue('billingDate', sale.billing_date || '');
         setValue('discountType', sale.discount_type || 'fixed');
         setValue('discountValue', sale.discount_value || 0);
         setValue('otherCosts', sale.other_costs || 0);
@@ -155,6 +157,7 @@ export default function SalesOrders() {
                 customer_id: data.customerId,
                 seller_technician_id: data.sellerTechnicianId || null,
                 sale_date: data.saleDate,
+                billing_date: data.billingDate || null,
                 discount_type: data.discountType,
                 discount_value: data.discountValue || 0,
                 other_costs: data.otherCosts || 0,
@@ -284,6 +287,13 @@ export default function SalesOrders() {
                             </div>
 
                             <Input label="Data da Venda" type="date" {...register('saleDate')} error={errors.saleDate?.message} />
+
+                            <div>
+                                <Input label="Data de Faturamento (opcional)" type="date" {...register('billingDate')} />
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Em qual dia essa venda deve contar no Fluxo de Caixa. Deixe em branco para usar a Data da Venda.
+                                </p>
+                            </div>
 
                             <div className="space-y-1">
                                 <label className="text-sm font-medium text-gray-600">Pagamento</label>
