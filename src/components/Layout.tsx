@@ -1,27 +1,67 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet, Boxes, ShoppingCart, Truck } from 'lucide-react';
+import {
+    Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet,
+    Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown,
+} from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
 
+type MenuItem = { icon: typeof Home; label: string; path: string };
+type MenuGroup = { title?: string; items: MenuItem[] };
+
+const menuGroups: MenuGroup[] = [
+    {
+        items: [
+            { icon: Home, label: 'Dashboard', path: '/' },
+            { icon: FilePlus, label: 'Nova OS', path: '/nova-os' },
+        ],
+    },
+    {
+        title: 'Cadastro',
+        items: [
+            { icon: Users, label: 'Clientes', path: '/clientes' },
+            { icon: Wrench, label: 'Técnicos', path: '/tecnicos' },
+            { icon: Truck, label: 'Fornecedores', path: '/fornecedores' },
+            { icon: Package, label: 'Produtos', path: '/produtos' },
+            { icon: Hammer, label: 'Serviços', path: '/servicos' },
+        ],
+    },
+    {
+        title: 'Movimento',
+        items: [
+            { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
+            { icon: ClipboardList, label: 'Pedidos de Compra', path: '/compras' },
+            { icon: Boxes, label: 'Estoque', path: '/estoque' },
+        ],
+    },
+    {
+        title: 'Financeiro',
+        items: [
+            { icon: Wallet, label: 'Fluxo de Caixa', path: '/caixa' },
+        ],
+    },
+    {
+        items: [
+            { icon: Settings, label: 'Configurações', path: '/configuracoes' },
+        ],
+    },
+];
+
 export function Layout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const location = useLocation();
     const { signOut, user } = useAuth();
 
-    const menuItems = [
-        { icon: Home, label: 'Dashboard', path: '/' },
-        { icon: FilePlus, label: 'Nova OS', path: '/nova-os' },
-        { icon: Users, label: 'Clientes', path: '/clientes' },
-        { icon: Wrench, label: 'Técnicos', path: '/tecnicos' },
-        { icon: Package, label: 'Produtos', path: '/produtos' },
-        { icon: Boxes, label: 'Estoque', path: '/estoque' },
-        { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
-        { icon: Truck, label: 'Pedidos de Compra', path: '/compras' },
-        { icon: Hammer, label: 'Serviços', path: '/servicos' },
-        { icon: Wallet, label: 'Fluxo de Caixa', path: '/caixa' },
-        { icon: Settings, label: 'Configurações', path: '/configuracoes' },
-    ];
+    const toggleGroup = (title: string) => {
+        setCollapsedGroups(prev => {
+            const next = new Set(prev);
+            if (next.has(title)) next.delete(title);
+            else next.add(title);
+            return next;
+        });
+    };
 
     return (
         <div className="min-h-screen bg-gray-50 flex">
@@ -60,29 +100,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
 
-                <nav className="px-3 sm:px-4 mt-6 space-y-2 flex-1">
-                    {menuItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = location.pathname === item.path;
+                <nav className="px-3 sm:px-4 mt-2 space-y-1 flex-1 overflow-y-auto">
+                    {menuGroups.map((group, groupIndex) => {
+                        const isCollapsed = group.title ? collapsedGroups.has(group.title) : false;
 
                         return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                onClick={() => setIsSidebarOpen(false)}
-                                className={cn(
-                                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group touch-manipulation min-h-[44px]",
-                                    isActive
-                                        ? "bg-primary-cyan/10 text-primary-cyan font-medium"
-                                        : "text-gray-500 hover:bg-gray-50 hover:text-dark active:bg-gray-100"
+                            <div key={group.title || groupIndex} className={groupIndex > 0 ? 'pt-3' : ''}>
+                                {group.title && (
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleGroup(group.title!)}
+                                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide hover:text-gray-600 touch-manipulation"
+                                    >
+                                        {group.title}
+                                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isCollapsed && "-rotate-90")} />
+                                    </button>
                                 )}
-                            >
-                                <Icon className={cn(
-                                    "w-5 h-5 transition-colors flex-shrink-0",
-                                    isActive ? "text-primary-cyan" : "text-gray-400 group-hover:text-primary-cyan"
-                                )} />
-                                <span className="text-sm sm:text-base">{item.label}</span>
-                            </Link>
+
+                                {!isCollapsed && (
+                                    <div className="space-y-1">
+                                        {group.items.map((item) => {
+                                            const Icon = item.icon;
+                                            const isActive = location.pathname === item.path;
+
+                                            return (
+                                                <Link
+                                                    key={item.path}
+                                                    to={item.path}
+                                                    onClick={() => setIsSidebarOpen(false)}
+                                                    className={cn(
+                                                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group touch-manipulation min-h-[44px]",
+                                                        isActive
+                                                            ? "bg-primary-cyan/10 text-primary-cyan font-medium"
+                                                            : "text-gray-500 hover:bg-gray-50 hover:text-dark active:bg-gray-100"
+                                                    )}
+                                                >
+                                                    <Icon className={cn(
+                                                        "w-5 h-5 transition-colors flex-shrink-0",
+                                                        isActive ? "text-primary-cyan" : "text-gray-400 group-hover:text-primary-cyan"
+                                                    )} />
+                                                    <span className="text-sm sm:text-base">{item.label}</span>
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         );
                     })}
                 </nav>

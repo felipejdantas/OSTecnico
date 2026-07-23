@@ -6,6 +6,7 @@ import NewOS from './pages/NewOS';
 import EditOS from './pages/EditOS';
 import Customers from './pages/Customers';
 import Technicians from './pages/Technicians';
+import Suppliers from './pages/Suppliers';
 import Products from './pages/Products';
 import Stock from './pages/Stock';
 import SalesOrders from './pages/SalesOrders';
@@ -72,6 +73,7 @@ function App() {
           <Route path="/editar-os/:id" element={<ProtectedRoute><Layout><EditOS /></Layout></ProtectedRoute>} />
           <Route path="/clientes" element={<ProtectedRoute><Layout><Customers /></Layout></ProtectedRoute>} />
           <Route path="/tecnicos" element={<ProtectedRoute><Layout><Technicians /></Layout></ProtectedRoute>} />
+          <Route path="/fornecedores" element={<ProtectedRoute><Layout><Suppliers /></Layout></ProtectedRoute>} />
           <Route path="/produtos" element={<ProtectedRoute><Layout><Products /></Layout></ProtectedRoute>} />
           <Route path="/estoque" element={<ProtectedRoute><Layout><Stock /></Layout></ProtectedRoute>} />
           <Route path="/vendas" element={<ProtectedRoute><Layout><SalesOrders /></Layout></ProtectedRoute>} />
