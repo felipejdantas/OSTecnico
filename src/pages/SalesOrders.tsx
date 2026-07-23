@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, ShoppingCart, Save } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -14,6 +14,8 @@ import SaleItemsSection, { type SaleItem } from '../components/SaleItemsSection'
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
+import { generateSalesPDF } from '../lib/pdfGenerator';
+import { openWhatsApp } from '../lib/shareLinks';
 
 const saleSchema = z.object({
     customerId: z.string().min(1, 'Selecione um cliente'),
@@ -72,7 +74,7 @@ export default function SalesOrders() {
 
         const { data: salesData, error } = await supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name), technicians (name)')
+            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
             .eq('user_id', user.id)
             .order('sale_date', { ascending: false })
             .order('sale_number', { ascending: false });
@@ -230,6 +232,56 @@ export default function SalesOrders() {
         } catch (error: any) {
             toast.error('Erro ao atualizar pagamento: ' + error.message);
         }
+    };
+
+    const exportPDF = async (saleId: string) => {
+        if (!user) return;
+
+        try {
+            const [{ data, error }, { data: itemsData }, { data: companyData }] = await Promise.all([
+                supabase
+                    .from('sales_orders')
+                    .select(`
+          *,
+          customers (name, cpf, phone, email, address, number, cnpj, company_name, trade_name, state_registration, municipal_registration),
+          technicians (name)
+        `)
+                    .eq('id', saleId)
+                    .eq('user_id', user.id)
+                    .single(),
+                supabase.from('sale_items').select('*').eq('sale_id', saleId),
+                supabase.from('company_settings').select('*').eq('user_id', user.id).maybeSingle(),
+            ]);
+
+            if (error) throw error;
+
+            await generateSalesPDF({
+                sale_number: data.sale_number,
+                sale_date: data.sale_date,
+                customer: data.customers,
+                seller: data.technicians,
+                items: itemsData || [],
+                discount_type: data.discount_type || 'fixed',
+                discount_value: data.discount_value || 0,
+                other_costs: data.other_costs || 0,
+                payment_status: data.payment_status,
+                warranty_days: data.warranty_days,
+                warranty_notes: data.warranty_notes,
+                company: companyData || undefined,
+            });
+        } catch (error: any) {
+            console.error('Error exporting PDF:', error);
+            toast.error('Erro ao gerar PDF: ' + (error.message || 'Verifique o console para mais detalhes'));
+        }
+    };
+
+    const shareViaWhatsApp = (sale: any) => {
+        if (!sale.customers?.phone) {
+            toast.error('Cliente sem telefone cadastrado');
+            return;
+        }
+        const message = `Olá ${sale.customers.name}! Segue o resumo do seu Pedido de Venda #${sale.sale_number}, no valor de ${formatCurrency(sale.total)}. Qualquer dúvida, estou à disposição!`;
+        openWhatsApp(sale.customers.phone, message);
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
@@ -433,6 +485,16 @@ export default function SalesOrders() {
                                         <td className="px-6 py-4 text-right">
                                             <DropdownMenu
                                                 items={[
+                                                    {
+                                                        label: 'Exportar PDF',
+                                                        icon: <FileDown className="w-4 h-4" />,
+                                                        onClick: () => exportPDF(sale.id),
+                                                    },
+                                                    {
+                                                        label: 'Enviar por WhatsApp',
+                                                        icon: <MessageCircle className="w-4 h-4" />,
+                                                        onClick: () => shareViaWhatsApp(sale),
+                                                    },
                                                     {
                                                         label: 'Atualizar',
                                                         icon: <Edit2 className="w-4 h-4" />,

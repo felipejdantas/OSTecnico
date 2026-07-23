@@ -79,6 +79,23 @@ type OSData = {
     company?: CompanyInfo;
 };
 
+type SalesItemRow = { product_name: string; quantity: number; unit_price: number };
+
+type SalesData = {
+    sale_number: number;
+    sale_date: string;
+    customer: CustomerInfo;
+    seller?: { name: string } | any;
+    items: SalesItemRow[];
+    discount_type?: DiscountType;
+    discount_value?: number;
+    other_costs?: number;
+    payment_status?: string;
+    warranty_days?: number | null;
+    warranty_notes?: string | null;
+    company?: CompanyInfo;
+};
+
 const brandColor = [0, 153, 255] as [number, number, number];
 const darkGray = [90, 90, 90] as [number, number, number];
 
@@ -511,6 +528,212 @@ export async function generateOSPDF(osData: OSData) {
 
     // Save PDF
     doc.save(`OS_${osData.os_number || '000'}_${(customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
+}
+
+export async function generateSalesPDF(salesData: SalesData) {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 20;
+
+    const customer = Array.isArray(salesData.customer) ? salesData.customer[0] : salesData.customer;
+    const seller = Array.isArray(salesData.seller) ? salesData.seller[0] : salesData.seller;
+    const company = salesData.company;
+
+    const ensureSpace = (needed: number) => {
+        if (yPos + needed > pageHeight - 22) {
+            doc.addPage();
+            yPos = 20;
+        }
+    };
+
+    // ---- Header: logo + company block ----
+    try {
+        const logoImg = await loadImage('/logo-full.jpg');
+        doc.addImage(logoImg.data, 'JPEG', 15, 10, 50, 20);
+    } catch (error) {
+        console.log('Logo not found, skipping');
+    }
+
+    doc.setFontSize(18);
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.text((company?.company_name || 'OSTECNICO').toUpperCase(), pageWidth - 15, 18, { align: 'right' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Pedido de Venda', pageWidth - 15, 24, { align: 'right' });
+
+    let headerY = 30;
+    doc.setFontSize(8);
+    const companyLines = [
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join('  ·  '),
+    ].filter(Boolean) as string[];
+    for (const line of companyLines) {
+        const wrapped = doc.splitTextToSize(line, 100);
+        doc.text(wrapped, pageWidth - 15, headerY, { align: 'right' });
+        headerY += wrapped.length * 4;
+    }
+
+    yPos = Math.max(38, headerY + 4);
+    doc.setDrawColor(220);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
+
+    // ---- Title bar: sale number + date ----
+    doc.setFillColor(240, 240, 240);
+    doc.rect(15, yPos, pageWidth - 30, 11, 'F');
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Pedido Nº ${salesData.sale_number || 'N/A'}`, 18, yPos + 7);
+    doc.setTextColor(100);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+        `Data: ${salesData.sale_date ? new Date(salesData.sale_date + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A'}`,
+        pageWidth - 18,
+        yPos + 7,
+        { align: 'right' }
+    );
+    yPos += 11 + 8;
+
+    // ---- Client block (full width) ----
+    const clientLines = [
+        `Cliente: ${customer?.trade_name || customer?.company_name || customer?.name || 'N/A'}`,
+        customer?.company_name && customer?.trade_name && `Razão Social: ${customer.company_name}`,
+        customer?.cnpj && `CNPJ: ${customer.cnpj}`,
+        customer?.state_registration && `Inscrição Estadual: ${customer.state_registration}`,
+        customer?.municipal_registration && `Inscrição Municipal: ${customer.municipal_registration}`,
+        customer?.cpf && `CPF: ${customer.cpf}`,
+        customer?.phone && `Telefone: ${customer.phone}`,
+        customer?.email && `E-mail: ${customer.email}`,
+        customer?.address && `Endereço: ${customer.address}${customer?.number ? `, ${customer.number}` : ''}`,
+        seller?.name && `Vendedor: ${seller.name}`,
+    ].filter(Boolean) as string[];
+    yPos = drawInfoBlock(doc, 15, yPos, pageWidth - 30, clientLines) + 6;
+
+    // ---- Products ----
+    ensureSpace(25);
+    yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Produtos');
+    autoTable(doc, {
+        startY: yPos,
+        head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total']],
+        body: salesData.items.map(i => [
+            i.product_name,
+            String(i.quantity),
+            formatCurrency(i.unit_price),
+            formatCurrency(i.quantity * i.unit_price),
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: darkGray, textColor: 255 },
+        styles: { fontSize: 8 },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+
+    // ---- Financial summary ----
+    const itemsTotal = salesData.items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
+    const { subtotal, discountAmount, total } = calculateOrderTotal({
+        itemsTotal,
+        servicesTotal: 0,
+        discountType: salesData.discount_type || 'fixed',
+        discountValue: salesData.discount_value || 0,
+        freight: salesData.other_costs || 0,
+        urgencyFee: 0,
+    });
+
+    ensureSpace(30);
+    const financeRows: string[][] = [['Subtotal', formatCurrency(subtotal)]];
+    if (discountAmount > 0) financeRows.push(['Desconto', `- ${formatCurrency(discountAmount)}`]);
+    if ((salesData.other_costs || 0) > 0) financeRows.push(['Outras Despesas', formatCurrency(salesData.other_costs || 0)]);
+    financeRows.push(['Total', formatCurrency(total)]);
+
+    autoTable(doc, {
+        startY: yPos,
+        head: [['Resumo Financeiro', '']],
+        body: financeRows,
+        theme: 'grid',
+        headStyles: { fillColor: darkGray, textColor: 255 },
+        styles: { fontSize: 9 },
+        didParseCell: (data) => {
+            if (data.row.index === financeRows.length - 1) {
+                data.cell.styles.fontStyle = 'bold';
+                if (data.column.index === 1) data.cell.styles.textColor = brandColor;
+            }
+        },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+
+    // ---- Payment status ----
+    ensureSpace(15);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    doc.text(`Situação do Pagamento: ${salesData.payment_status === 'pago' ? 'Faturado' : 'A Receber'}`, 15, yPos);
+    yPos += 10;
+
+    // ---- Payment & warranty info ----
+    if (company?.pix_key || company?.bank_details || salesData.warranty_notes || salesData.warranty_days) {
+        if (company?.pix_key || company?.bank_details) {
+            ensureSpace(25);
+            yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Pagamento');
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            if (company?.pix_key) {
+                doc.text(`PIX: ${company.pix_key}`, 15, yPos);
+                yPos += 5;
+            }
+            if (company?.bank_details) {
+                const bankLines = doc.splitTextToSize(company.bank_details, pageWidth - 30);
+                doc.text(bankLines, 15, yPos);
+                yPos += bankLines.length * 5;
+            }
+            yPos += 5;
+        }
+        if (salesData.warranty_notes || salesData.warranty_days) {
+            ensureSpace(20);
+            yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Garantia');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            doc.text(`Condições da garantia${salesData.warranty_days ? ` (${salesData.warranty_days} dias)` : ''}:`, 15, yPos);
+            yPos += 5;
+            doc.setFont('helvetica', 'normal');
+            if (salesData.warranty_notes) {
+                const warrantyLines = doc.splitTextToSize(salesData.warranty_notes, pageWidth - 30);
+                doc.text(warrantyLines, 15, yPos);
+                yPos += warrantyLines.length * 5;
+            }
+            yPos += 5;
+        }
+    }
+
+    // ---- Footer on every page ----
+    const pageCount = doc.getNumberOfPages();
+    const footerParts = [
+        company?.company_name,
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join(' · '),
+    ].filter(Boolean) as string[];
+
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(220);
+        doc.line(15, pageHeight - 18, pageWidth - 15, pageHeight - 18);
+        doc.setFontSize(7);
+        doc.setTextColor(120);
+        doc.setFont('helvetica', 'normal');
+        doc.text(footerParts.join('  |  '), 15, pageHeight - 13);
+        doc.text(`Página ${i} de ${pageCount}`, pageWidth - 15, pageHeight - 13, { align: 'right' });
+    }
+
+    // Save PDF
+    doc.save(`Venda_${salesData.sale_number || '000'}_${(customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
 }
 
 function drawSectionBar(doc: jsPDF, x: number, width: number, y: number, title: string): number {
