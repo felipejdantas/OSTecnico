@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileUp, Undo2, FileSpreadsheet, Package, AlertTriangle } from 'lucide-react';
+import { FileUp, Undo2, FileSpreadsheet, Package, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -376,8 +376,31 @@ export default function ImportNFe() {
                         </h3>
                         <div className="space-y-3">
                             {items.map((item, index) => (
-                                <div key={index} className="p-3 bg-gray-50 rounded-xl space-y-2">
-                                    <p className="text-xs text-gray-400">Descrição na nota: {item.originalName}</p>
+                                <div
+                                    key={index}
+                                    className={`p-3 bg-gray-50 rounded-xl space-y-2 border-l-4 ${item.productId !== NEW_PRODUCT
+                                        ? 'border-green-400'
+                                        : item.suggestedProductId
+                                            ? 'border-amber-400'
+                                            : 'border-red-300'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                        <p className="text-xs text-gray-400">Descrição na nota: {item.originalName}</p>
+                                        {item.productId !== NEW_PRODUCT ? (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                                                <CheckCircle2 className="w-3.5 h-3.5" /> Encontrado no estoque
+                                            </span>
+                                        ) : item.suggestedProductId ? (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                                                <AlertTriangle className="w-3.5 h-3.5" /> Parecido encontrado
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+                                                <XCircle className="w-3.5 h-3.5" /> Não encontrado — produto novo
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="flex flex-col sm:flex-row sm:items-end gap-2">
                                         <div className="flex-1 min-w-0">
                                             <label className="text-xs text-gray-500 mb-1 block">Produto</label>
