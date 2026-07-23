@@ -106,9 +106,10 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
                 Produtos
             </h3>
 
-            <div className="flex flex-col sm:flex-row gap-2 mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
+                <div className="flex-1 min-w-0">
+                <label className="text-xs text-gray-500 mb-1 block">Produto</label>
                 <SearchableSelect
-                    className="flex-1 min-w-0"
                     value={selectedProductId}
                     onChange={setSelectedProductId}
                     placeholder="Buscar produto no estoque..."
@@ -118,13 +119,17 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
                         sublabel: `Estoque: ${p.stock_quantity} ${p.unit} · R$ ${p.sale_price.toFixed(2)}`,
                     }))}
                 />
+                </div>
+                <div className="w-full sm:w-24">
+                <label className="text-xs text-gray-500 mb-1 block">Quantidade</label>
                 <input
                     type="number"
                     min={1}
                     value={quantity}
                     onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                    className="w-full sm:w-24 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
                 />
+                </div>
                 <Button type="button" onClick={addItem} disabled={!selectedProductId} className="touch-manipulation">
                     <Plus className="w-4 h-4 mr-1" /> Adicionar
                 </Button>

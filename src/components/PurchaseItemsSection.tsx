@@ -101,39 +101,47 @@ export default function PurchaseItemsSection({ purchaseOrderId, items, onChange,
             </h3>
 
             {!disabled && (
-                <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                    <SearchableSelect
-                        className="flex-1 min-w-0"
-                        value={selectedProductId}
-                        onChange={(id) => {
-                            setSelectedProductId(id);
-                            const p = products.find(pr => pr.id === id);
-                            if (p) setUnitPrice(0);
-                        }}
-                        placeholder="Buscar produto..."
-                        options={products.map(p => ({
-                            value: p.id,
-                            label: p.name,
-                            sublabel: `Estoque atual: ${p.stock_quantity} ${p.unit}`,
-                        }))}
-                    />
-                    <input
-                        type="number"
-                        min={1}
-                        value={quantity}
-                        onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                        placeholder="Qtd"
-                        className="w-full sm:w-20 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
-                    />
-                    <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        value={unitPrice}
-                        onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
-                        placeholder="Preço un."
-                        className="w-full sm:w-28 px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
-                    />
+                <div className="flex flex-col sm:flex-row sm:items-end gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                        <label className="text-xs text-gray-500 mb-1 block">Produto</label>
+                        <SearchableSelect
+                            value={selectedProductId}
+                            onChange={(id) => {
+                                setSelectedProductId(id);
+                                const p = products.find(pr => pr.id === id);
+                                if (p) setUnitPrice(0);
+                            }}
+                            placeholder="Buscar produto..."
+                            options={products.map(p => ({
+                                value: p.id,
+                                label: p.name,
+                                sublabel: `Estoque atual: ${p.stock_quantity} ${p.unit}`,
+                            }))}
+                        />
+                    </div>
+                    <div className="w-full sm:w-20">
+                        <label className="text-xs text-gray-500 mb-1 block">Quantidade</label>
+                        <input
+                            type="number"
+                            min={1}
+                            value={quantity}
+                            onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                            placeholder="Qtd"
+                            className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                        />
+                    </div>
+                    <div className="w-full sm:w-28">
+                        <label className="text-xs text-gray-500 mb-1 block">Preço Unit. (R$)</label>
+                        <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={unitPrice}
+                            onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
+                            placeholder="Preço un."
+                            className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                        />
+                    </div>
                     <Button type="button" onClick={addItem} disabled={!selectedProductId} className="touch-manipulation">
                         <Plus className="w-4 h-4 mr-1" /> Adicionar
                     </Button>
