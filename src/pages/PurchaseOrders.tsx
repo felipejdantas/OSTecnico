@@ -195,7 +195,7 @@ export default function PurchaseOrders() {
 
     const handleDelete = async (id: string, purchaseNumber: number, stockAdded: boolean, accountAdded: boolean) => {
         const warning = stockAdded || accountAdded
-            ? ' Atenção: estoque e/ou lançamento no caixa já foram gerados por este pedido e NÃO serão desfeitos automaticamente.'
+            ? ' O estoque adicionado e/ou o lançamento no caixa gerados por este pedido serão desfeitos automaticamente.'
             : '';
         if (!user || !confirm(`Tem certeza que deseja excluir o pedido de compra #${purchaseNumber}?${warning}`)) return;
 
