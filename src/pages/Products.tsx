@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -31,10 +32,11 @@ type Product = ProductForm & { id: string; photos?: string[] };
 
 export default function Products() {
     const { user } = useAuth();
+    const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
     const [newImages, setNewImages] = useState<File[]>([]);
     const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<ProductFormInput, any, ProductForm>({

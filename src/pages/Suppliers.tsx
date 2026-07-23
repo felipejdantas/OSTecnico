@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,10 +24,11 @@ type SupplierForm = z.infer<typeof supplierSchema>;
 
 export default function Suppliers() {
     const { user } = useAuth();
+    const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [suppliers, setSuppliers] = useState<any[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<SupplierForm>({
         resolver: zodResolver(supplierSchema),
     });

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,10 +35,11 @@ type CustomerForm = z.infer<typeof customerSchema>;
 
 export default function Customers() {
     const { user } = useAuth();
+    const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [customers, setCustomers] = useState<any[]>([]);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
     const [historyCustomer, setHistoryCustomer] = useState<{ id: string; name: string } | null>(null);
     const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<CustomerForm>({
         resolver: zodResolver(customerSchema),

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
     Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet,
-    Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown,
+    Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown, Search,
 } from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { QuickSearch } from './QuickSearch';
 
 type MenuItem = { icon: typeof Home; label: string; path: string };
 type MenuGroup = { title?: string; items: MenuItem[] };
@@ -28,9 +29,14 @@ const menuGroups: MenuGroup[] = [
         ],
     },
     {
-        title: 'Movimento',
+        title: 'Vendas',
         items: [
             { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
+        ],
+    },
+    {
+        title: 'Compras',
+        items: [
             { icon: ClipboardList, label: 'Pedidos de Compra', path: '/compras' },
             { icon: Boxes, label: 'Estoque', path: '/estoque' },
         ],
@@ -48,11 +54,46 @@ const menuGroups: MenuGroup[] = [
     },
 ];
 
+function activeGroupTitle(pathname: string): string | undefined {
+    return menuGroups.find(g => g.items.some(i => i.path === pathname))?.title;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
     const location = useLocation();
     const { signOut, user } = useAuth();
+
+    // Only the group containing the current page starts open; everything else stays
+    // collapsed until the user taps it, so the menu doesn't grow as more areas are added.
+    const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+        const active = activeGroupTitle(location.pathname);
+        return new Set(menuGroups.filter(g => g.title && g.title !== active).map(g => g.title!));
+    });
+
+    // Whenever navigation lands in a different group, make sure that group is visible —
+    // without forcing closed any group the user had manually opened.
+    useEffect(() => {
+        const active = activeGroupTitle(location.pathname);
+        if (!active) return;
+        setCollapsedGroups(prev => {
+            if (!prev.has(active)) return prev;
+            const next = new Set(prev);
+            next.delete(active);
+            return next;
+        });
+    }, [location.pathname]);
+
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                setIsQuickSearchOpen(true);
+            }
+        }
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     const toggleGroup = (title: string) => {
         setCollapsedGroups(prev => {
@@ -172,6 +213,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         <Menu className="w-6 h-6" />
                     </button>
 
+                    <button
+                        type="button"
+                        onClick={() => setIsQuickSearchOpen(true)}
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600 transition-colors text-sm w-64"
+                    >
+                        <Search className="w-4 h-4" />
+                        <span className="flex-1 text-left">Buscar...</span>
+                        <kbd className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">Ctrl+K</kbd>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={() => setIsQuickSearchOpen(true)}
+                        className="sm:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg touch-manipulation"
+                        aria-label="Buscar"
+                    >
+                        <Search className="w-5 h-5" />
+                    </button>
+
                     <div className="flex items-center gap-3 sm:gap-4 ml-auto">
                         <div className="hidden md:flex items-center gap-2 text-sm text-gray-600">
                             <div className="w-2 h-2 rounded-full bg-green-500"></div>
@@ -195,6 +255,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     {children}
                 </div>
             </main>
+
+            <QuickSearch isOpen={isQuickSearchOpen} onClose={() => setIsQuickSearchOpen(false)} />
         </div>
     );
 }
