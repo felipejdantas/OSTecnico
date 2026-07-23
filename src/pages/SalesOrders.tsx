@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle, User, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -437,97 +437,76 @@ export default function SalesOrders() {
                     />
                 </div>
 
-                {/* Desktop Table */}
-                <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3">Venda</th>
-                                <th className="px-6 py-3">Cliente</th>
-                                <th className="px-6 py-3">Data</th>
-                                <th className="px-6 py-3">Pagamento</th>
-                                <th className="px-6 py-3">Garantia</th>
-                                <th className="px-6 py-3 text-right">Total</th>
-                                <th className="px-6 py-3 text-right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredSales.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
-                                        Nenhuma venda registrada ainda
-                                    </td>
-                                </tr>
-                            ) : (
-                                filteredSales.map(sale => (
-                                    <tr key={sale.id} className="bg-white border-b hover:bg-gray-50">
-                                        <td className="px-6 py-4 font-semibold text-primary-cyan">
-                                            <div className="flex items-center gap-2">
-                                                <ShoppingCart className="w-4 h-4" />
-                                                #{sale.sale_number}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-900">{sale.customers?.name || 'N/A'}</td>
-                                        <td className="px-6 py-4 text-gray-600">{new Date(sale.sale_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                        <td className="px-6 py-4">
+                <div className="p-4 space-y-3">
+                    {filteredSales.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Nenhuma venda registrada ainda</p>
+                    ) : (
+                        filteredSales.map(sale => (
+                            <div
+                                key={sale.id}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-200 rounded-xl hover:shadow-md transition-all"
+                            >
+                                <div className="flex items-start gap-4 flex-1 mb-3 sm:mb-0">
+                                    <div className="w-12 h-12 rounded-full bg-primary-cyan/10 flex items-center justify-center flex-shrink-0">
+                                        <ShoppingCart className="w-6 h-6 text-primary-cyan" />
+                                    </div>
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                            <span className="font-bold text-primary-cyan text-lg">Venda #{sale.sale_number}</span>
                                             <button
                                                 type="button"
                                                 onClick={() => togglePaymentStatus(sale)}
                                                 className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].color}`}
+                                                title="Clique para alternar entre Faturado / A Receber"
                                             >
                                                 {PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].label}
                                             </button>
-                                        </td>
-                                        <td className="px-6 py-4">
                                             <WarrantyBadge completedDate={sale.sale_date} warrantyDays={sale.warranty_days} />
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-medium text-dark">{formatCurrency(sale.total)}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            <DropdownMenu
-                                                items={[
-                                                    {
-                                                        label: 'Exportar PDF',
-                                                        icon: <FileDown className="w-4 h-4" />,
-                                                        onClick: () => exportPDF(sale.id),
-                                                    },
-                                                    {
-                                                        label: 'Enviar por WhatsApp',
-                                                        icon: <MessageCircle className="w-4 h-4" />,
-                                                        onClick: () => shareViaWhatsApp(sale),
-                                                    },
-                                                    {
-                                                        label: 'Atualizar',
-                                                        icon: <Edit2 className="w-4 h-4" />,
-                                                        onClick: () => handleEdit(sale),
-                                                    },
-                                                    {
-                                                        label: 'Excluir',
-                                                        icon: <Trash2 className="w-4 h-4" />,
-                                                        onClick: () => handleDelete(sale.id, sale.sale_number),
-                                                        variant: 'danger' as const,
-                                                    },
-                                                ]}
-                                            />
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                        </div>
 
-                {/* Mobile Cards */}
-                <div className="md:hidden space-y-3 p-4">
-                    {filteredSales.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">Nenhuma venda registrada ainda</div>
-                    ) : (
-                        filteredSales.map(sale => (
-                            <div key={sale.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
-                                <div className="flex items-start justify-between gap-3">
-                                    <div className="flex items-center gap-2 font-semibold text-primary-cyan">
-                                        <ShoppingCart className="w-4 h-4" />
-                                        #{sale.sale_number}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleEdit(sale)}
+                                            title="Clique para atualizar a venda"
+                                            className="flex items-center gap-2 mb-1 hover:underline text-left"
+                                        >
+                                            <User className="w-4 h-4 text-primary-cyan" />
+                                            <span className="font-semibold text-dark text-base">{sale.customers?.name || 'N/A'}</span>
+                                        </button>
+
+                                        <p className="text-sm text-gray-600 mb-1">
+                                            {sale.itemCount} {sale.itemCount === 1 ? 'item' : 'itens'} · {formatCurrency(sale.total)}
+                                        </p>
+
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <Calendar className="w-3 h-3" />
+                                            {new Date(sale.sale_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                        </div>
                                     </div>
+                                </div>
+
+                                <div className="flex items-center justify-center gap-2 flex-wrap">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => shareViaWhatsApp(sale)}
+                                        className="touch-manipulation min-w-[40px] text-green-600 border-green-200 hover:bg-green-50"
+                                        title="Enviar por WhatsApp"
+                                    >
+                                        <MessageCircle className="w-4 h-4" />
+                                    </Button>
+
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => exportPDF(sale.id)}
+                                        className="touch-manipulation min-w-[40px]"
+                                        title="Exportar PDF"
+                                    >
+                                        <FileDown className="w-4 h-4" />
+                                    </Button>
+
                                     <DropdownMenu
                                         items={[
                                             {
@@ -543,19 +522,6 @@ export default function SalesOrders() {
                                             },
                                         ]}
                                     />
-                                </div>
-                                <p className="text-sm text-gray-700">{sale.customers?.name || 'N/A'}</p>
-                                <p className="text-xs text-gray-400">{new Date(sale.sale_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-                                <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => togglePaymentStatus(sale)}
-                                        className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].color}`}
-                                    >
-                                        {PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].label}
-                                    </button>
-                                    <WarrantyBadge completedDate={sale.sale_date} warrantyDays={sale.warranty_days} />
-                                    <span className="font-bold text-dark ml-auto">{formatCurrency(sale.total)}</span>
                                 </div>
                             </div>
                         ))
