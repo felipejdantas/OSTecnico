@@ -257,7 +257,7 @@ export default function CashFlow() {
     const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
     const rows = allRows
         .filter(r => r.date >= browsedMonthStart && r.date <= browsedMonthEnd)
-        .sort((a, b) => a.date.localeCompare(b.date));
+        .sort((a, b) => b.date.localeCompare(a.date));
 
     const monthEntradas = rows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
     const monthSaidas = rows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
