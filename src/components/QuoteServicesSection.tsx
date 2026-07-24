@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Trash2, Hammer } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -28,15 +29,24 @@ type Props = {
     lines: QuoteServiceLine[];
     onChange: (lines: QuoteServiceLine[]) => void;
     disabled?: boolean;
+    approvedAt?: string | null;
+    onApprovalReset?: () => void;
 };
 
-export default function QuoteServicesSection({ quoteId, lines, onChange, disabled }: Props) {
+export default function QuoteServicesSection({ quoteId, lines, onChange, disabled, approvedAt, onApprovalReset }: Props) {
     const { user } = useAuth();
     const [catalog, setCatalog] = useState<ServiceCatalogEntry[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [customDescription, setCustomDescription] = useState('');
     const [customPrice, setCustomPrice] = useState(0);
+
+    const invalidateApproval = async () => {
+        if (!quoteId || !approvedAt) return;
+        await supabase.from('quotes').update({ approved_at: null }).eq('id', quoteId);
+        toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        onApprovalReset?.();
+    };
 
     useEffect(() => {
         if (user) fetchCatalog();
@@ -83,6 +93,7 @@ export default function QuoteServicesSection({ quoteId, lines, onChange, disable
                 return;
             }
             onChange([...lines, { ...newLine, id: data.id }]);
+            await invalidateApproval();
         } else {
             onChange([...lines, newLine]);
         }
@@ -101,6 +112,7 @@ export default function QuoteServicesSection({ quoteId, lines, onChange, disable
                 console.error('Error removing quote service line:', error);
                 return;
             }
+            await invalidateApproval();
         }
         onChange(lines.filter((_, i) => i !== index));
     };

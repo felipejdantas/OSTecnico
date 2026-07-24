@@ -342,7 +342,7 @@ export default function Dashboard() {
     // The message invites the client to the specific action the OS still needs
     // from them (approve the budget, then sign), falling back to plain tracking.
     const trackingContextFor = (order: ServiceOrder): TrackingMessageContext => {
-        if (order.status === 'aguardando_aprovacao' && !order.budget_approved_at) return 'approval';
+        if (!order.budget_approved_at && order.status !== 'cancelado' && order.status !== 'entregue') return 'approval';
         if (!order.client_signed_at) return 'signature';
         return 'tracking';
     };

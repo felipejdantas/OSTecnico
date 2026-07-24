@@ -1,4 +1,4 @@
-import { Receipt } from 'lucide-react';
+import { Receipt, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/Card';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from '../lib/orderFinance';
 
@@ -14,11 +14,13 @@ type Props = {
     onFreightChange: (value: number) => void;
     onUrgencyFeeChange: (value: number) => void;
     disabled?: boolean;
+    budgetApprovedAt?: string | null;
 };
 
 export default function OrderBudgetSummary({
     itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
     onDiscountTypeChange, onDiscountValueChange, onFreightChange, onUrgencyFeeChange, disabled,
+    budgetApprovedAt,
 }: Props) {
     const { subtotal, discountAmount, total } = calculateOrderTotal({
         itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
@@ -30,6 +32,20 @@ export default function OrderBudgetSummary({
                 <Receipt className="w-5 h-5 text-primary-cyan" />
                 Orçamento
             </h3>
+
+            {budgetApprovedAt !== undefined && (
+                budgetApprovedAt ? (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4">
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                        Aprovado pelo cliente em {new Date(budgetApprovedAt).toLocaleString('pt-BR')}
+                    </div>
+                ) : (
+                    <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                        Ainda não aprovado pelo cliente.
+                    </div>
+                )
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
                 <div className="space-y-1">

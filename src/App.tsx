@@ -17,6 +17,7 @@ import Services from './pages/Services';
 import CashFlow from './pages/CashFlow';
 import CompanySettings from './pages/CompanySettings';
 import ClientSignature from './pages/ClientSignature';
+import PublicQuote from './pages/PublicQuote';
 import Login from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -68,6 +69,7 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/assinar/:token" element={<ClientSignature />} />
+          <Route path="/orcamento/:token" element={<PublicQuote />} />
 
           {/* Protected routes with layout */}
           <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />

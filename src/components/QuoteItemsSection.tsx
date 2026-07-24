@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Trash2, Package } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -25,14 +26,26 @@ type Props = {
     items: QuoteItem[];
     onChange: (items: QuoteItem[]) => void;
     disabled?: boolean;
+    // When the quote was already approved by the client, changing its contents
+    // invalidates that approval — cleared here and surfaced with a toast so the
+    // shop remembers to ask the client to approve again.
+    approvedAt?: string | null;
+    onApprovalReset?: () => void;
 };
 
-export default function QuoteItemsSection({ quoteId, items, onChange, disabled }: Props) {
+export default function QuoteItemsSection({ quoteId, items, onChange, disabled, approvedAt, onApprovalReset }: Props) {
     const { user } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [unitPrice, setUnitPrice] = useState(0);
+
+    const invalidateApproval = async () => {
+        if (!quoteId || !approvedAt) return;
+        await supabase.from('quotes').update({ approved_at: null }).eq('id', quoteId);
+        toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        onApprovalReset?.();
+    };
 
     useEffect(() => {
         if (user) fetchProducts();
@@ -71,6 +84,7 @@ export default function QuoteItemsSection({ quoteId, items, onChange, disabled }
                 return;
             }
             onChange([...items, { ...newItem, id: data.id }]);
+            await invalidateApproval();
         } else {
             onChange([...items, newItem]);
         }
@@ -88,6 +102,7 @@ export default function QuoteItemsSection({ quoteId, items, onChange, disabled }
                 console.error('Error removing quote item:', error);
                 return;
             }
+            await invalidateApproval();
         }
         onChange(items.filter((_, i) => i !== index));
     };

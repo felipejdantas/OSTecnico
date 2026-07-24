@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -30,13 +31,25 @@ type Props = {
     items: OrderItem[];
     onChange: (items: OrderItem[]) => void;
     disabled?: boolean;
+    // When the OS's budget was already approved by the client, changing its
+    // contents invalidates that approval — cleared here and surfaced with a
+    // toast so the shop remembers to ask the client to approve again.
+    budgetApprovedAt?: string | null;
+    onApprovalReset?: () => void;
 };
 
-export default function ServiceOrderItemsSection({ orderId, items, onChange, disabled }: Props) {
+export default function ServiceOrderItemsSection({ orderId, items, onChange, disabled, budgetApprovedAt, onApprovalReset }: Props) {
     const { user } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [quantity, setQuantity] = useState(1);
+
+    const invalidateApproval = async () => {
+        if (!orderId || !budgetApprovedAt) return;
+        await supabase.from('service_orders').update({ budget_approved_at: null }).eq('id', orderId);
+        toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        onApprovalReset?.();
+    };
 
     useEffect(() => {
         if (user) fetchProducts();
@@ -76,6 +89,7 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
             }
             onChange([...items, { ...newItem, id: data.id }]);
             fetchProducts();
+            await invalidateApproval();
         } else {
             onChange([...items, newItem]);
         }
@@ -93,6 +107,7 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
                 return;
             }
             fetchProducts();
+            await invalidateApproval();
         }
         onChange(items.filter((_, i) => i !== index));
     };

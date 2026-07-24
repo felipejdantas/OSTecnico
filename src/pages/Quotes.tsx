@@ -6,7 +6,7 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import {
     Plus, Search, Edit2, Trash2, Calculator, Save, FileDown, MessageCircle,
-    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2,
+    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -19,7 +19,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency } from '../lib/orderFinance';
 import { generateQuotePDF } from '../lib/pdfGenerator';
-import { openWhatsApp } from '../lib/shareLinks';
+import { openWhatsApp, buildQuoteLink, buildQuoteMessage } from '../lib/shareLinks';
 
 const quoteSchema = z.object({
     customerId: z.string().min(1, 'Selecione um cliente'),
@@ -46,7 +46,7 @@ export default function Quotes() {
     const navigate = useNavigate();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [editingStatus, setEditingStatus] = useState<{ status: string; converted_to: string | null; converted_order_id: string | null } | null>(null);
+    const [editingStatus, setEditingStatus] = useState<{ status: string; converted_to: string | null; converted_order_id: string | null; approved_at: string | null } | null>(null);
     const [customers, setCustomers] = useState<any[]>([]);
     const [quotes, setQuotes] = useState<any[]>([]);
     const [items, setItems] = useState<QuoteItem[]>([]);
@@ -79,7 +79,7 @@ export default function Quotes() {
 
         const { data: quotesData, error } = await supabase
             .from('quotes')
-            .select('id, quote_number, quote_date, valid_until, customer_id, equipment, notes, discount_type, discount_value, other_costs, status, converted_to, converted_order_id, customers (name, phone)')
+            .select('id, quote_number, quote_date, valid_until, customer_id, equipment, notes, discount_type, discount_value, other_costs, status, converted_to, converted_order_id, signature_token, approved_at, customers (name, phone)')
             .eq('user_id', user.id)
             .order('quote_date', { ascending: false })
             .order('quote_number', { ascending: false });
@@ -125,7 +125,7 @@ export default function Quotes() {
 
     const handleEdit = async (quote: any) => {
         setEditingId(quote.id);
-        setEditingStatus({ status: quote.status, converted_to: quote.converted_to, converted_order_id: quote.converted_order_id });
+        setEditingStatus({ status: quote.status, converted_to: quote.converted_to, converted_order_id: quote.converted_order_id, approved_at: quote.approved_at });
         setValue('customerId', quote.customer_id);
         setValue('quoteDate', quote.quote_date);
         setValue('validUntil', quote.valid_until || '');
@@ -433,8 +433,8 @@ export default function Quotes() {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
-        const validity = quote.valid_until ? ` Válido até ${new Date(quote.valid_until + 'T00:00:00').toLocaleDateString('pt-BR')}.` : '';
-        const message = `Olá ${quote.customers.name}! Segue o orçamento #${quote.quote_number}, no valor de ${formatCurrency(quote.total)}.${validity} Qualquer dúvida, estou à disposição!`;
+        const link = buildQuoteLink(quote.signature_token);
+        const message = buildQuoteMessage(quote.customers.name, quote.quote_number, link, quote.valid_until);
         openWhatsApp(quote.customers.phone, message);
     };
 
@@ -515,8 +515,22 @@ export default function Quotes() {
                         </div>
                     </Card>
 
-                    <QuoteServicesSection quoteId={editingId || undefined} lines={services} onChange={setServices} disabled={isLocked} />
-                    <QuoteItemsSection quoteId={editingId || undefined} items={items} onChange={setItems} disabled={isLocked} />
+                    <QuoteServicesSection
+                        quoteId={editingId || undefined}
+                        lines={services}
+                        onChange={setServices}
+                        disabled={isLocked}
+                        approvedAt={editingStatus?.approved_at}
+                        onApprovalReset={() => setEditingStatus(prev => prev ? { ...prev, approved_at: null } : prev)}
+                    />
+                    <QuoteItemsSection
+                        quoteId={editingId || undefined}
+                        items={items}
+                        onChange={setItems}
+                        disabled={isLocked}
+                        approvedAt={editingStatus?.approved_at}
+                        onApprovalReset={() => setEditingStatus(prev => prev ? { ...prev, approved_at: null } : prev)}
+                    />
 
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Totais</h3>
@@ -553,6 +567,17 @@ export default function Quotes() {
                                     ? `Este orçamento já foi convertido em ${editingStatus?.converted_to === 'os' ? 'uma OS' : 'um Pedido de Venda'} e não pode mais ser editado.`
                                     : 'Converta em OS ou Pedido de Venda quando o cliente aprovar, ou marque como recusado.'}
                             </p>
+                            {editingStatus?.approved_at ? (
+                                <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4">
+                                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                                    Aprovado pelo cliente em {new Date(editingStatus.approved_at).toLocaleString('pt-BR')}
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                                    Ainda não aprovado pelo cliente. Envie o link por WhatsApp para que ele revise e aprove.
+                                </div>
+                            )}
                             <div className="flex flex-wrap gap-3">
                                 {!isLocked && editingStatus?.status !== 'recusado' && (
                                     <>
@@ -620,6 +645,11 @@ export default function Quotes() {
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${QUOTE_STATUS_CONFIG[quote.status]?.color || 'bg-gray-100 text-gray-600'}`}>
                                                 {QUOTE_STATUS_CONFIG[quote.status]?.label || quote.status}
                                             </span>
+                                            {quote.approved_at && (
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                                    Aprovado pelo cliente
+                                                </span>
+                                            )}
                                         </div>
 
                                         <button

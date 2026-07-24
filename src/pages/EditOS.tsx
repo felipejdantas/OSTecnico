@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import toast from 'react-hot-toast';
 import { Save, ArrowLeft, Lock } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -86,6 +87,10 @@ export default function EditOS() {
     const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<string>('');
+    const [budgetApprovedAt, setBudgetApprovedAt] = useState<string | null>(null);
+    // Snapshot of the financials as loaded, so onSubmit can tell whether the
+    // approved budget actually changed (vs. just re-saving the same numbers).
+    const [originalFinancials, setOriginalFinancials] = useState({ discountType: 'fixed' as DiscountType, discountValue: 0, freight: 0, urgencyFee: 0 });
 
     // const sigPadRef = useRef<SignaturePadRef>(null);
     const { register, handleSubmit, control, formState: { errors }, setValue, watch } = useForm<OSFormInput, any, OSForm>({
@@ -147,6 +152,13 @@ export default function EditOS() {
             setDiscountValue(os.discount_value || 0);
             setFreight(os.freight || 0);
             setUrgencyFee(os.urgency_fee || 0);
+            setBudgetApprovedAt(os.budget_approved_at);
+            setOriginalFinancials({
+                discountType: (os.discount_type as DiscountType) || 'fixed',
+                discountValue: os.discount_value || 0,
+                freight: os.freight || 0,
+                urgencyFee: os.urgency_fee || 0,
+            });
 
             // Fetch parts/products used on this OS
             const { data: orderItems } = await supabase
@@ -222,6 +234,16 @@ export default function EditOS() {
             const uploadDate = new Date().toISOString();
             const allPhotos = [...existingPhotos, ...newImageUrls.map(url => ({ url, date: uploadDate }))];
 
+            // If the client already approved this budget and the shop just changed
+            // discount/freight/urgency fee, that approval is now stale for the new
+            // total — clear it so the tracking link asks the client to approve again.
+            const financialsChanged =
+                discountType !== originalFinancials.discountType ||
+                discountValue !== originalFinancials.discountValue ||
+                freight !== originalFinancials.freight ||
+                urgencyFee !== originalFinancials.urgencyFee;
+            const shouldResetApproval = !!budgetApprovedAt && financialsChanged;
+
             // Update OS
             const { error } = await supabase
                 .from('service_orders')
@@ -251,11 +273,16 @@ export default function EditOS() {
                     discount_value: discountValue,
                     freight: freight,
                     urgency_fee: urgencyFee,
+                    ...(shouldResetApproval ? { budget_approved_at: null } : {}),
                 })
                 .eq('id', id)
                 .eq('user_id', user.id);
 
             if (error) throw error;
+
+            if (shouldResetApproval) {
+                toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+            }
 
             // Log the transition on the timeline the client sees, only when it actually changed
             if (data.status !== originalStatus) {
@@ -486,9 +513,23 @@ export default function EditOS() {
                             <ImageUpload onImagesChange={setNewImages} disabled={isLocked} />
                         </Card>
 
-                        <ServiceOrderItemsSection orderId={id} items={items} onChange={setItems} disabled={isLocked} />
+                        <ServiceOrderItemsSection
+                            orderId={id}
+                            items={items}
+                            onChange={setItems}
+                            disabled={isLocked}
+                            budgetApprovedAt={budgetApprovedAt}
+                            onApprovalReset={() => setBudgetApprovedAt(null)}
+                        />
 
-                        <ServiceOrderServicesSection orderId={id} lines={serviceLines} onChange={setServiceLines} disabled={isLocked} />
+                        <ServiceOrderServicesSection
+                            orderId={id}
+                            lines={serviceLines}
+                            onChange={setServiceLines}
+                            disabled={isLocked}
+                            budgetApprovedAt={budgetApprovedAt}
+                            onApprovalReset={() => setBudgetApprovedAt(null)}
+                        />
 
                         <OrderBudgetSummary
                             itemsTotal={items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0)}
@@ -502,6 +543,7 @@ export default function EditOS() {
                             onFreightChange={setFreight}
                             onUrgencyFeeChange={setUrgencyFee}
                             disabled={isLocked}
+                            budgetApprovedAt={budgetApprovedAt}
                         />
                     </div>
                 </div>

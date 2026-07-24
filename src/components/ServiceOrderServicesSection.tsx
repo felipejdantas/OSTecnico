@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { Plus, Trash2, Hammer } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -29,15 +30,24 @@ type Props = {
     lines: OrderServiceLine[];
     onChange: (lines: OrderServiceLine[]) => void;
     disabled?: boolean;
+    budgetApprovedAt?: string | null;
+    onApprovalReset?: () => void;
 };
 
-export default function ServiceOrderServicesSection({ orderId, lines, onChange, disabled }: Props) {
+export default function ServiceOrderServicesSection({ orderId, lines, onChange, disabled, budgetApprovedAt, onApprovalReset }: Props) {
     const { user } = useAuth();
     const [catalog, setCatalog] = useState<ServiceCatalogEntry[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [customDescription, setCustomDescription] = useState('');
     const [customPrice, setCustomPrice] = useState(0);
+
+    const invalidateApproval = async () => {
+        if (!orderId || !budgetApprovedAt) return;
+        await supabase.from('service_orders').update({ budget_approved_at: null }).eq('id', orderId);
+        toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        onApprovalReset?.();
+    };
 
     useEffect(() => {
         if (user) fetchCatalog();
@@ -84,6 +94,7 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange, 
                 return;
             }
             onChange([...lines, { ...newLine, id: data.id }]);
+            await invalidateApproval();
         } else {
             onChange([...lines, newLine]);
         }
@@ -102,6 +113,7 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange, 
                 console.error('Error removing service line:', error);
                 return;
             }
+            await invalidateApproval();
         }
         onChange(lines.filter((_, i) => i !== index));
     };

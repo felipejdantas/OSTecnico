@@ -14,6 +14,15 @@ export function buildTrackingMessage(customerName: string, osNumber: number, lin
     return `Olá ${customerName}! Você pode acompanhar o andamento da sua Ordem de Serviço #${osNumber} pelo link: ${link}`;
 }
 
+export function buildQuoteLink(token: string) {
+    return `${window.location.origin}/orcamento/${token}`;
+}
+
+export function buildQuoteMessage(customerName: string, quoteNumber: number, link: string, validUntil?: string | null) {
+    const validity = validUntil ? ` Válido até ${new Date(validUntil + 'T00:00:00').toLocaleDateString('pt-BR')}.` : '';
+    return `Olá ${customerName}! Segue o orçamento #${quoteNumber}.${validity} Acesse o link para revisar e aprovar: ${link}`;
+}
+
 export function openWhatsApp(phone: string, message: string) {
     const digits = phone.replace(/\D/g, '');
     const withCountryCode = digits.startsWith('55') ? digits : `55${digits}`;
