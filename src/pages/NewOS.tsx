@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useNavigate } from 'react-router-dom';
 import { Save } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -80,6 +81,7 @@ const TECHNICAL_TESTS_ITEMS = [
 
 export default function NewOS() {
     const { user } = useAuth();
+    const navigate = useNavigate();
     const [physicalCondition, setPhysicalCondition] = useState<ChecklistItem[]>(
         PHYSICAL_CONDITION_ITEMS.map(label => ({ label, status: 'na', observation: '' }))
     );
@@ -269,6 +271,7 @@ export default function NewOS() {
             setFreight(0);
             setUrgencyFee(0);
             sigPadRef.current?.clear();
+            navigate('/', { replace: true });
 
         } catch (error: any) {
             console.error('Error submitting OS:', error);
