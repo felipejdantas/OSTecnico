@@ -41,7 +41,7 @@ const osSchema = z.object({
 type OSFormInput = z.input<typeof osSchema>;
 type OSForm = z.output<typeof osSchema>;
 
-export const EQUIPMENT_TYPES = ['Notebook', 'Desktop', 'All-in-One', 'Tablet', 'Celular', 'Console', 'Impressora', 'Placa-mãe', 'Outro'];
+export const EQUIPMENT_TYPES = ['Notebook', 'Desktop', 'All-in-One', 'Console', 'Impressora', 'Placa-mãe', 'Placa de vídeo', 'Outro'];
 
 // Checklist items based on provided images
 const PHYSICAL_CONDITION_ITEMS = [
@@ -284,7 +284,7 @@ export default function NewOS() {
     return (
         <div className="space-y-4 sm:space-y-6 pb-20">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="sticky top-0 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white/95 backdrop-blur-sm py-3 sm:py-4 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0">
                     <div>
                         <h2 className="text-xl sm:text-2xl font-bold text-dark">Nova Ordem de Serviço</h2>
                         <p className="text-sm sm:text-base text-gray-500">Preencha os dados de entrada do equipamento</p>
