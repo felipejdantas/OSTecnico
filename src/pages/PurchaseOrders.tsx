@@ -64,7 +64,7 @@ export default function PurchaseOrders() {
 
         const { data: purchasesData, error } = await supabase
             .from('purchase_orders')
-            .select('id, purchase_number, purchase_date, expected_date, discount_value, freight, status, stock_added, account_added, suppliers (name)')
+            .select('id, purchase_number, purchase_date, expected_date, discount_value, freight, status, stock_added, account_added, supplier_id, suppliers (name)')
             .eq('user_id', user.id)
             .order('purchase_date', { ascending: false })
             .order('purchase_number', { ascending: false });
@@ -402,6 +402,12 @@ export default function PurchaseOrders() {
         if (purchase) unfinalizeFor(purchase);
     };
 
+    const editFromDetailsModal = () => {
+        const purchase = purchases.find(p => p.id === viewingId);
+        setViewingId(null);
+        if (purchase) handleEdit(purchase);
+    };
+
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
     const discountValue = Number(watch('discountValue')) || 0;
     const freight = Number(watch('freight')) || 0;
@@ -663,7 +669,7 @@ export default function PurchaseOrders() {
             </Card>
 
             {viewingId && (
-                <PurchaseOrderDetailsModal purchaseId={viewingId} onClose={() => setViewingId(null)} />
+                <PurchaseOrderDetailsModal purchaseId={viewingId} onClose={() => setViewingId(null)} onEdit={editFromDetailsModal} />
             )}
         </div>
     );

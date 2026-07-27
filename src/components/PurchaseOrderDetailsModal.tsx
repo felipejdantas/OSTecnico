@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { X, Truck, Package } from 'lucide-react';
+import { X, Truck, Package, Edit2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/orderFinance';
 import { Card } from './ui/Card';
+import { Button } from './ui/Button';
 
 type ItemRow = { id: string; product_name: string; quantity: number; unit_price: number };
 
@@ -22,9 +23,10 @@ type PurchaseRow = {
 interface Props {
     purchaseId: string;
     onClose: () => void;
+    onEdit: () => void;
 }
 
-export function PurchaseOrderDetailsModal({ purchaseId, onClose }: Props) {
+export function PurchaseOrderDetailsModal({ purchaseId, onClose, onEdit }: Props) {
     const [loading, setLoading] = useState(true);
     const [purchase, setPurchase] = useState<PurchaseRow | null>(null);
     const [items, setItems] = useState<ItemRow[]>([]);
@@ -75,9 +77,17 @@ export function PurchaseOrderDetailsModal({ purchaseId, onClose }: Props) {
                         </h3>
                         <p className="text-sm text-gray-500">{purchase?.suppliers?.name || 'Fornecedor não informado'}</p>
                     </div>
-                    <button type="button" onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg flex-shrink-0">
-                        <X className="w-5 h-5 text-gray-400" />
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        {purchase && (
+                            <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+                                <Edit2 className="w-4 h-4 mr-2" />
+                                Atualizar
+                            </Button>
+                        )}
+                        <button type="button" onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg">
+                            <X className="w-5 h-5 text-gray-400" />
+                        </button>
+                    </div>
                 </div>
 
                 {loading ? (
