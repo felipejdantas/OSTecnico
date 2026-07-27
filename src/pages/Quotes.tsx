@@ -6,7 +6,7 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import {
     Plus, Search, Edit2, Trash2, Calculator, Save, FileDown, MessageCircle,
-    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2, CheckCircle2, AlertTriangle,
+    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2, CheckCircle2, AlertTriangle, UserPlus,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -54,6 +54,10 @@ export default function Quotes() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
+
+    const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
+    const [newCustomerName, setNewCustomerName] = useState('');
+    const [newCustomerPhone, setNewCustomerPhone] = useState('');
 
     const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<QuoteFormInput, any, QuoteForm>({
         resolver: zodResolver(quoteSchema),
@@ -123,6 +127,26 @@ export default function Quotes() {
         setQuotes(computed);
     };
 
+    const createCustomer = async () => {
+        if (!user || !newCustomerName.trim()) return;
+        try {
+            const { data, error } = await supabase
+                .from('customers')
+                .insert([{ user_id: user.id, name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null }])
+                .select('id, name, phone')
+                .single();
+            if (error) throw error;
+            setCustomers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+            setValue('customerId', data.id);
+            setNewCustomerName('');
+            setNewCustomerPhone('');
+            setIsNewCustomerOpen(false);
+            toast.success('Cliente cadastrado! Complete os demais dados dele quando puder, em Clientes.');
+        } catch (error: any) {
+            toast.error('Erro ao cadastrar cliente: ' + error.message);
+        }
+    };
+
     const handleEdit = async (quote: any) => {
         setEditingId(quote.id);
         setEditingStatus({ status: quote.status, converted_to: quote.converted_to, converted_order_id: quote.converted_order_id, approved_at: quote.approved_at });
@@ -152,6 +176,7 @@ export default function Quotes() {
         setEditingStatus(null);
         setItems([]);
         setServices([]);
+        setIsNewCustomerOpen(false);
         reset({ quoteDate: new Date().toISOString().slice(0, 10), discountType: 'fixed' });
     };
 
@@ -482,20 +507,47 @@ export default function Quotes() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1">
                                 <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                <Controller
-                                    name="customerId"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <SearchableSelect
-                                            value={field.value || ''}
-                                            onChange={field.onChange}
-                                            placeholder="Buscar cliente..."
-                                            error={errors.customerId?.message}
-                                            disabled={isLocked}
-                                            options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                <div className="flex gap-2 items-start">
+                                    <div className="flex-1">
+                                        <Controller
+                                            name="customerId"
+                                            control={control}
+                                            render={({ field }) => (
+                                                <SearchableSelect
+                                                    value={field.value || ''}
+                                                    onChange={field.onChange}
+                                                    placeholder="Buscar cliente..."
+                                                    error={errors.customerId?.message}
+                                                    disabled={isLocked}
+                                                    options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                                />
+                                            )}
                                         />
+                                    </div>
+                                    {!isLocked && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setIsNewCustomerOpen(!isNewCustomerOpen)}
+                                            title="Orçamento rápido: cadastra o cliente só com nome e telefone"
+                                        >
+                                            <UserPlus className="w-4 h-4" />
+                                        </Button>
                                     )}
-                                />
+                                </div>
+
+                                {isNewCustomerOpen && (
+                                    <div className="mt-1 p-3 bg-gray-50 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <Input placeholder="Nome do cliente" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                                        <div className="flex gap-2">
+                                            <Input placeholder="Telefone (opcional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+                                            <Button type="button" onClick={createCustomer} disabled={!newCustomerName.trim()}>Salvar</Button>
+                                        </div>
+                                        <p className="text-xs text-gray-500 sm:col-span-2">
+                                            Cadastro mínimo para orçamento rápido. CPF, endereço e outros dados podem ser completados depois em Clientes.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
 
                             <Input label="Equipamento (opcional)" {...register('equipment')} disabled={isLocked} placeholder="Ex: Notebook Dell Inspiron" />
