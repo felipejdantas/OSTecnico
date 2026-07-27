@@ -80,7 +80,7 @@ const TECHNICAL_TESTS_ITEMS = [
 ];
 
 export default function NewOS() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const navigate = useNavigate();
     const [physicalCondition, setPhysicalCondition] = useState<ChecklistItem[]>(
         PHYSICAL_CONDITION_ITEMS.map(label => ({ label, status: 'na', observation: '' }))
@@ -120,15 +120,15 @@ export default function NewOS() {
     });
 
     useEffect(() => {
-        if (user) fetchData();
-    }, [user]);
+        if (tenantId) fetchData();
+    }, [tenantId]);
 
     const fetchData = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
-        const { data: customersData } = await supabase.from('customers').select('*').eq('user_id', user.id).order('name');
-        const { data: techniciansData } = await supabase.from('technicians').select('*').eq('user_id', user.id).order('name');
-        const { data: companyData } = await supabase.from('company_settings').select('warranty_days').eq('user_id', user.id).maybeSingle();
+        const { data: customersData } = await supabase.from('customers').select('*').eq('user_id', tenantId).order('name');
+        const { data: techniciansData } = await supabase.from('technicians').select('*').eq('user_id', tenantId).order('name');
+        const { data: companyData } = await supabase.from('company_settings').select('warranty_days').eq('user_id', tenantId).maybeSingle();
 
         if (customersData) setCustomers(customersData);
         if (techniciansData) setTechnicians(techniciansData);
@@ -157,7 +157,7 @@ export default function NewOS() {
     };
 
     const onSubmit = async (data: OSForm) => {
-        if (!user) {
+        if (!tenantId) {
             alert('Erro: Usuário não autenticado');
             return;
         }
@@ -182,7 +182,7 @@ export default function NewOS() {
 
             // Save OS
             const osData: any = {
-                user_id: user.id,
+                user_id: tenantId,
                 customer_id: data.customerId,
                 technician_id: data.technicianId,
                 equipment_type: data.equipmentType,

@@ -31,7 +31,7 @@ type ProductForm = z.output<typeof productSchema>;
 type Product = ProductForm & { id: string; photos?: string[] };
 
 export default function Products() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,16 +45,16 @@ export default function Products() {
     });
 
     useEffect(() => {
-        if (user) fetchProducts();
-    }, [user]);
+        if (tenantId) fetchProducts();
+    }, [tenantId]);
 
     const fetchProducts = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data, error } = await supabase
             .from('products')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
 
         if (error) console.error('Error fetching products:', error);
@@ -96,7 +96,7 @@ export default function Products() {
     };
 
     const onSubmit = async (data: ProductForm) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (editingId && !confirm('Tem certeza que deseja atualizar este produto?')) return;
 
         try {
@@ -108,14 +108,14 @@ export default function Products() {
                     .from('products')
                     .update({ ...data, photos })
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
 
                 if (error) throw error;
                 toast.success('Produto atualizado com sucesso!');
             } else {
                 const { error } = await supabase
                     .from('products')
-                    .insert([{ ...data, photos, user_id: user.id }]);
+                    .insert([{ ...data, photos, user_id: tenantId }]);
 
                 if (error) throw error;
                 toast.success('Produto salvo com sucesso!');
@@ -129,14 +129,14 @@ export default function Products() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
 
         try {
             const { error } = await supabase
                 .from('products')
                 .delete()
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
             toast.success('Produto excluído com sucesso!');

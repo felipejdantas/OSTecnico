@@ -23,7 +23,7 @@ type ServiceForm = z.output<typeof serviceSchema>;
 type ServiceCatalogItem = ServiceForm & { id: string };
 
 export default function Services() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [services, setServices] = useState<ServiceCatalogItem[]>([]);
@@ -34,16 +34,16 @@ export default function Services() {
     });
 
     useEffect(() => {
-        if (user) fetchServices();
-    }, [user]);
+        if (tenantId) fetchServices();
+    }, [tenantId]);
 
     const fetchServices = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data, error } = await supabase
             .from('services')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
 
         if (error) console.error('Error fetching services:', error);
@@ -66,7 +66,7 @@ export default function Services() {
     };
 
     const onSubmit = async (data: ServiceForm) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             if (editingId) {
@@ -74,14 +74,14 @@ export default function Services() {
                     .from('services')
                     .update(data)
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
 
                 if (error) throw error;
                 toast.success('Serviço atualizado com sucesso!');
             } else {
                 const { error } = await supabase
                     .from('services')
-                    .insert([{ ...data, user_id: user.id }]);
+                    .insert([{ ...data, user_id: tenantId }]);
 
                 if (error) throw error;
                 toast.success('Serviço salvo com sucesso!');
@@ -95,14 +95,14 @@ export default function Services() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir "${name}"?`)) return;
 
         try {
             const { error } = await supabase
                 .from('services')
                 .delete()
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
             toast.success('Serviço excluído com sucesso!');

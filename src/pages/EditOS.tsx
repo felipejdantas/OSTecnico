@@ -62,7 +62,7 @@ const TECHNICAL_TESTS_ITEMS = [
 ];
 
 export default function EditOS() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
@@ -106,16 +106,16 @@ export default function EditOS() {
     const isLocked = watchedStatus === 'pronto' || watchedStatus === 'entregue';
 
     useEffect(() => {
-        if (user) fetchData();
-    }, [id, user]);
+        if (tenantId) fetchData();
+    }, [id, tenantId]);
 
     const fetchData = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             // Fetch Customers and Technicians
-            const { data: customersData } = await supabase.from('customers').select('*').eq('user_id', user.id).order('name');
-            const { data: techniciansData } = await supabase.from('technicians').select('*').eq('user_id', user.id).order('name');
+            const { data: customersData } = await supabase.from('customers').select('*').eq('user_id', tenantId).order('name');
+            const { data: techniciansData } = await supabase.from('technicians').select('*').eq('user_id', tenantId).order('name');
 
             if (customersData) setCustomers(customersData);
             if (techniciansData) setTechnicians(techniciansData);
@@ -125,7 +125,7 @@ export default function EditOS() {
                 .from('service_orders')
                 .select('*')
                 .eq('id', id)
-                .eq('user_id', user.id)
+                .eq('user_id', tenantId)
                 .single();
 
             if (error) throw error;
@@ -221,7 +221,7 @@ export default function EditOS() {
     };
 
     const onSubmit = async (data: OSForm) => {
-        if (!user) {
+        if (!tenantId) {
             alert('Erro: Usuário não autenticado');
             return;
         }
@@ -276,7 +276,7 @@ export default function EditOS() {
                     ...(shouldResetApproval ? { budget_approved_at: null } : {}),
                 })
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
 

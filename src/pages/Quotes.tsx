@@ -51,7 +51,7 @@ const QUOTE_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function Quotes() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const navigate = useNavigate();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,23 +75,23 @@ export default function Quotes() {
     });
 
     useEffect(() => {
-        if (user) fetchAll();
-    }, [user]);
+        if (tenantId) fetchAll();
+    }, [tenantId]);
 
     const fetchAll = async () => {
-        if (!user) return;
-        const { data: customersData } = await supabase.from('customers').select('id, name, phone').eq('user_id', user.id).order('name');
+        if (!tenantId) return;
+        const { data: customersData } = await supabase.from('customers').select('id, name, phone').eq('user_id', tenantId).order('name');
         if (customersData) setCustomers(customersData);
         await fetchQuotes();
     };
 
     const fetchQuotes = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data: quotesData, error } = await supabase
             .from('quotes')
             .select('id, quote_number, quote_date, valid_until, customer_id, guest_name, guest_phone, equipment, notes, discount_type, discount_value, other_costs, status, converted_to, converted_order_id, signature_token, approved_at, customers (name, phone)')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('quote_date', { ascending: false })
             .order('quote_number', { ascending: false });
 
@@ -187,7 +187,7 @@ export default function Quotes() {
     };
 
     const onSubmit = async (data: QuoteForm) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!editingId && items.length === 0 && services.length === 0) {
             toast.error('Adicione pelo menos um produto ou serviço ao orçamento.');
             return;
@@ -209,13 +209,13 @@ export default function Quotes() {
             };
 
             if (editingId) {
-                const { error } = await supabase.from('quotes').update(row).eq('id', editingId).eq('user_id', user.id);
+                const { error } = await supabase.from('quotes').update(row).eq('id', editingId).eq('user_id', tenantId);
                 if (error) throw error;
                 toast.success('Orçamento atualizado!');
             } else {
                 const { data: created, error } = await supabase
                     .from('quotes')
-                    .insert([{ ...row, user_id: user.id }])
+                    .insert([{ ...row, user_id: tenantId }])
                     .select('id')
                     .single();
                 if (error) throw error;
@@ -260,10 +260,10 @@ export default function Quotes() {
     };
 
     const handleDelete = async (id: string, quoteNumber: number) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir o orçamento #${quoteNumber}?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir o orçamento #${quoteNumber}?`)) return;
 
         try {
-            const { error } = await supabase.from('quotes').delete().eq('id', id).eq('user_id', user.id);
+            const { error } = await supabase.from('quotes').delete().eq('id', id).eq('user_id', tenantId);
             if (error) throw error;
             toast.success('Orçamento excluído!');
             fetchQuotes();
@@ -280,7 +280,7 @@ export default function Quotes() {
 
         const { data: newCustomer, error } = await supabase
             .from('customers')
-            .insert([{ user_id: user!.id, name: quote.guest_name || 'Cliente sem nome', phone: quote.guest_phone || null }])
+            .insert([{ user_id: tenantId!, name: quote.guest_name || 'Cliente sem nome', phone: quote.guest_phone || null }])
             .select('id, name, phone')
             .single();
         if (error) throw error;
@@ -292,7 +292,7 @@ export default function Quotes() {
     };
 
     const convertToOSFor = async (quote: any) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!confirm(`Confirma converter o orçamento #${quote.quote_number} em uma nova OS?`)) return;
 
         setIsActionLoading(true);
@@ -306,7 +306,7 @@ export default function Quotes() {
             const { data: newOS, error } = await supabase
                 .from('service_orders')
                 .insert([{
-                    user_id: user.id,
+                    user_id: tenantId,
                     customer_id: customerId,
                     equipment: quote.equipment || 'Não especificado',
                     problem_description: quote.notes || null,
@@ -347,7 +347,7 @@ export default function Quotes() {
     };
 
     const convertToSaleFor = async (quote: any) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (quote.serviceCount > 0) {
             const proceed = confirm(
                 `Este orçamento tem ${quote.serviceCount} serviço(s) que não serão transferidos, pois Pedido de Venda não suporta serviços. Deseja continuar?`
@@ -368,7 +368,7 @@ export default function Quotes() {
             const { data: newSale, error } = await supabase
                 .from('sales_orders')
                 .insert([{
-                    user_id: user.id,
+                    user_id: tenantId,
                     customer_id: customerId,
                     sale_date: new Date().toISOString().slice(0, 10),
                     discount_type: quote.discount_type || 'fixed',
@@ -446,18 +446,18 @@ export default function Quotes() {
     };
 
     const exportPDF = async (quoteId: string) => {
-        if (!user) return;
+        if (!tenantId) return;
         try {
             const [{ data, error }, { data: itemsData }, { data: servicesData }, { data: companyData }] = await Promise.all([
                 supabase
                     .from('quotes')
                     .select('*, customers (name, cpf, phone, email, address, number, cnpj, company_name, trade_name, state_registration, municipal_registration)')
                     .eq('id', quoteId)
-                    .eq('user_id', user.id)
+                    .eq('user_id', tenantId)
                     .single(),
                 supabase.from('quote_items').select('*').eq('quote_id', quoteId),
                 supabase.from('quote_services').select('*').eq('quote_id', quoteId),
-                supabase.from('company_settings').select('*').eq('user_id', user.id).maybeSingle(),
+                supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle(),
             ]);
 
             if (error) throw error;

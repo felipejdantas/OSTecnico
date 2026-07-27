@@ -35,7 +35,7 @@ type Props = {
 };
 
 export default function ServiceOrderServicesSection({ orderId, lines, onChange, disabled, budgetApprovedAt, onApprovalReset }: Props) {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [catalog, setCatalog] = useState<ServiceCatalogEntry[]>([]);
     const [selectedServiceId, setSelectedServiceId] = useState('');
     const [quantity, setQuantity] = useState(1);
@@ -50,15 +50,15 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange, 
     };
 
     useEffect(() => {
-        if (user) fetchCatalog();
-    }, [user]);
+        if (tenantId) fetchCatalog();
+    }, [tenantId]);
 
     const fetchCatalog = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data } = await supabase
             .from('services')
             .select('id, name, description, default_price')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
         if (data) setCatalog(data);
     };

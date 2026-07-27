@@ -27,22 +27,22 @@ type Props = {
 };
 
 export default function PurchaseItemsSection({ purchaseOrderId, items, onChange, disabled }: Props) {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [unitPrice, setUnitPrice] = useState(0);
 
     useEffect(() => {
-        if (user) fetchProducts();
-    }, [user]);
+        if (tenantId) fetchProducts();
+    }, [tenantId]);
 
     const fetchProducts = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data } = await supabase
             .from('products')
             .select('id, name, unit, stock_quantity')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
         if (data) setProducts(data);
     };

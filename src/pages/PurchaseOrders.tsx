@@ -27,7 +27,7 @@ type PurchaseFormInput = z.input<typeof purchaseSchema>;
 type PurchaseForm = z.output<typeof purchaseSchema>;
 
 export default function PurchaseOrders() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingStatus, setEditingStatus] = useState<{ status: string; stock_added: boolean; account_added: boolean } | null>(null);
@@ -49,23 +49,23 @@ export default function PurchaseOrders() {
     });
 
     useEffect(() => {
-        if (user) fetchAll();
-    }, [user]);
+        if (tenantId) fetchAll();
+    }, [tenantId]);
 
     const fetchAll = async () => {
-        if (!user) return;
-        const { data: suppliersData } = await supabase.from('suppliers').select('id, name, phone').eq('user_id', user.id).order('name');
+        if (!tenantId) return;
+        const { data: suppliersData } = await supabase.from('suppliers').select('id, name, phone').eq('user_id', tenantId).order('name');
         if (suppliersData) setSuppliers(suppliersData);
         await fetchPurchases();
     };
 
     const fetchPurchases = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data: purchasesData, error } = await supabase
             .from('purchase_orders')
             .select('id, purchase_number, purchase_date, expected_date, discount_value, freight, status, stock_added, account_added, supplier_id, suppliers (name)')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('purchase_date', { ascending: false })
             .order('purchase_number', { ascending: false });
 
@@ -97,11 +97,11 @@ export default function PurchaseOrders() {
     };
 
     const createSupplier = async () => {
-        if (!user || !newSupplierName.trim()) return;
+        if (!tenantId || !newSupplierName.trim()) return;
         try {
             const { data, error } = await supabase
                 .from('suppliers')
-                .insert([{ user_id: user.id, name: newSupplierName.trim(), phone: newSupplierPhone.trim() || null }])
+                .insert([{ user_id: tenantId, name: newSupplierName.trim(), phone: newSupplierPhone.trim() || null }])
                 .select('id, name, phone')
                 .single();
             if (error) throw error;
@@ -145,7 +145,7 @@ export default function PurchaseOrders() {
     };
 
     const onSubmit = async (data: PurchaseForm) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!editingId && items.length === 0) {
             toast.error('Adicione pelo menos um item ao pedido.');
             return;
@@ -162,13 +162,13 @@ export default function PurchaseOrders() {
             };
 
             if (editingId) {
-                const { error } = await supabase.from('purchase_orders').update(row).eq('id', editingId).eq('user_id', user.id);
+                const { error } = await supabase.from('purchase_orders').update(row).eq('id', editingId).eq('user_id', tenantId);
                 if (error) throw error;
                 toast.success('Pedido de compra atualizado!');
             } else {
                 const { data: created, error } = await supabase
                     .from('purchase_orders')
-                    .insert([{ ...row, user_id: user.id }])
+                    .insert([{ ...row, user_id: tenantId }])
                     .select('id')
                     .single();
                 if (error) throw error;
@@ -199,10 +199,10 @@ export default function PurchaseOrders() {
         const warning = stockAdded || accountAdded
             ? ' O estoque adicionado e/ou o lançamento no caixa gerados por este pedido serão desfeitos automaticamente.'
             : '';
-        if (!user || !confirm(`Tem certeza que deseja excluir o pedido de compra #${purchaseNumber}?${warning}`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir o pedido de compra #${purchaseNumber}?${warning}`)) return;
 
         try {
-            const { error } = await supabase.from('purchase_orders').delete().eq('id', id).eq('user_id', user.id);
+            const { error } = await supabase.from('purchase_orders').delete().eq('id', id).eq('user_id', tenantId);
             if (error) throw error;
             toast.success('Pedido de compra excluído!');
             fetchPurchases();
@@ -214,7 +214,7 @@ export default function PurchaseOrders() {
     // Generic versions take a purchase row (from the list or the form) so the 3-button
     // workflow can run either from the open form or directly from the list's action menu.
     const addStockFor = async (purchase: any, itemsOverride?: { product_id: string | null; quantity: number }[]) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!confirm(`Confirma adicionar as quantidades do pedido #${purchase.purchase_number} ao estoque dos produtos?`)) return;
 
         setIsActionLoading(true);
@@ -232,7 +232,7 @@ export default function PurchaseOrders() {
             const movements = orderItems
                 .filter(i => i.product_id)
                 .map(i => ({
-                    user_id: user.id,
+                    user_id: tenantId,
                     product_id: i.product_id,
                     type: 'entrada' as const,
                     quantity: i.quantity,
@@ -259,7 +259,7 @@ export default function PurchaseOrders() {
     };
 
     const addAccountFor = async (purchase: any) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!confirm(`Confirma lançar o valor do pedido #${purchase.purchase_number} como saída no Fluxo de Caixa?`)) return;
 
         setIsActionLoading(true);
@@ -267,7 +267,7 @@ export default function PurchaseOrders() {
             const { data: entry, error: entryError } = await supabase
                 .from('cash_entries')
                 .insert([{
-                    user_id: user.id,
+                    user_id: tenantId,
                     entry_date: purchase.purchase_date,
                     competence_date: purchase.purchase_date,
                     type: 'saida',

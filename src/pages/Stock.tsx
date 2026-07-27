@@ -31,7 +31,7 @@ const TYPE_LABELS: Record<Movement['type'], string> = {
 };
 
 export default function Stock() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [movements, setMovements] = useState<Movement[]>([]);
     const [loading, setLoading] = useState(false);
@@ -42,29 +42,29 @@ export default function Stock() {
     const [note, setNote] = useState('');
 
     useEffect(() => {
-        if (user) {
+        if (tenantId) {
             fetchProducts();
             fetchMovements();
         }
-    }, [user]);
+    }, [tenantId]);
 
     const fetchProducts = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data, error } = await supabase
             .from('products')
             .select('id, name, unit, stock_quantity')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
         if (error) console.error('Error fetching products:', error);
         else setProducts(data || []);
     };
 
     const fetchMovements = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data, error } = await supabase
             .from('stock_movements')
             .select('id, product_id, type, quantity, note, created_at, products(name, unit)')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('created_at', { ascending: false })
             .limit(100);
         if (error) console.error('Error fetching movements:', error);
@@ -75,7 +75,7 @@ export default function Stock() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !productId || quantity < 1) return;
+        if (!tenantId || !productId || quantity < 1) return;
 
         if (type === 'saida' && selectedProduct && quantity > selectedProduct.stock_quantity) {
             const proceed = confirm(
@@ -89,7 +89,7 @@ export default function Stock() {
         setLoading(true);
         try {
             const { error } = await supabase.from('stock_movements').insert([{
-                user_id: user.id,
+                user_id: tenantId,
                 product_id: productId,
                 type,
                 quantity: signedQuantity,

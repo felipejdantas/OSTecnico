@@ -34,7 +34,7 @@ const customerSchema = z.object({
 type CustomerForm = z.infer<typeof customerSchema>;
 
 export default function Customers() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,16 +48,16 @@ export default function Customers() {
     const personType = watch('personType');
 
     useEffect(() => {
-        if (user) fetchCustomers();
-    }, [user]);
+        if (tenantId) fetchCustomers();
+    }, [tenantId]);
 
     const fetchCustomers = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data, error } = await supabase
             .from('customers')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('created_at', { ascending: false });
 
         if (error) console.error('Error fetching customers:', error);
@@ -146,7 +146,7 @@ export default function Customers() {
     const normalizeDoc = (v?: string | null) => (v || '').replace(/\D/g, '');
 
     const onSubmit = async (data: CustomerForm) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { personType, cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
         const isJuridica = personType === 'juridica';
@@ -186,7 +186,7 @@ export default function Customers() {
                     .from('customers')
                     .update(row)
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
 
                 if (error) throw error;
                 toast.success('Cliente atualizado com sucesso!');
@@ -194,7 +194,7 @@ export default function Customers() {
                 // Create new customer
                 const { error } = await supabase
                     .from('customers')
-                    .insert([{ ...row, user_id: user.id }]);
+                    .insert([{ ...row, user_id: tenantId }]);
 
                 if (error) throw error;
                 toast.success('Cliente salvo com sucesso!');
@@ -213,14 +213,14 @@ export default function Customers() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir o cliente "${name}"?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir o cliente "${name}"?`)) return;
 
         try {
             const { error } = await supabase
                 .from('customers')
                 .delete()
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
             toast.success('Cliente excluído com sucesso!');

@@ -19,7 +19,7 @@ const techSchema = z.object({
 type TechForm = z.infer<typeof techSchema>;
 
 export default function Technicians() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [technicians, setTechnicians] = useState<any[]>([]);
@@ -29,16 +29,16 @@ export default function Technicians() {
     });
 
     useEffect(() => {
-        if (user) fetchTechnicians();
-    }, [user]);
+        if (tenantId) fetchTechnicians();
+    }, [tenantId]);
 
     const fetchTechnicians = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data, error } = await supabase
             .from('technicians')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('created_at', { ascending: false });
 
         if (error) console.error('Error fetching technicians:', error);
@@ -60,7 +60,7 @@ export default function Technicians() {
     };
 
     const onSubmit = async (data: TechForm) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             if (editingId) {
@@ -69,7 +69,7 @@ export default function Technicians() {
                     .from('technicians')
                     .update(data)
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
 
                 if (error) throw error;
                 toast.success('Técnico atualizado com sucesso!');
@@ -77,7 +77,7 @@ export default function Technicians() {
                 // Create new technician
                 const { error } = await supabase
                     .from('technicians')
-                    .insert([{ ...data, user_id: user.id }]);
+                    .insert([{ ...data, user_id: tenantId }]);
 
                 if (error) throw error;
                 toast.success('Técnico salvo com sucesso!');
@@ -91,14 +91,14 @@ export default function Technicians() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir o técnico "${name}"?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir o técnico "${name}"?`)) return;
 
         try {
             const { error } = await supabase
                 .from('technicians')
                 .delete()
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
             toast.success('Técnico excluído com sucesso!');

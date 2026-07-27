@@ -45,7 +45,7 @@ type ServiceOrder = {
 type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
 
 export default function Dashboard() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [isListOpen, setIsListOpen] = useState(false);
@@ -61,8 +61,8 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        if (user) fetchOrders();
-    }, [user]);
+        if (tenantId) fetchOrders();
+    }, [tenantId]);
 
     // Reveals the list automatically once the shop starts typing a search,
     // so they don't have to click "expand" first to see results.
@@ -117,7 +117,7 @@ export default function Dashboard() {
     };
 
     const fetchOrders = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             const { data, error } = await supabase
@@ -144,7 +144,7 @@ export default function Dashboard() {
           customers (name, phone, email, cpf, cnpj, company_name, trade_name),
           technicians (name)
         `)
-                .eq('user_id', user.id)
+                .eq('user_id', tenantId)
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false });
 
@@ -215,7 +215,7 @@ export default function Dashboard() {
     };
 
     const deleteOS = async (orderId: string, osNumber: number, status: string) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         if (status === 'pronto' || status === 'entregue') {
             toast.error('OS finalizada — mude o status antes de excluir, para evitar exclusões acidentais.');
@@ -229,7 +229,7 @@ export default function Dashboard() {
                 .from('service_orders')
                 .delete()
                 .eq('id', orderId)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
 
             if (error) throw error;
             toast.success('OS excluída com sucesso!');
@@ -241,7 +241,7 @@ export default function Dashboard() {
     };
 
     const duplicateOS = async (orderId: string) => {
-        if (!user || !confirm('Tem certeza que deseja duplicar esta OS?')) return;
+        if (!tenantId || !confirm('Tem certeza que deseja duplicar esta OS?')) return;
 
         try {
             // 1. Fetch original OS data
@@ -249,7 +249,7 @@ export default function Dashboard() {
                 .from('service_orders')
                 .select('*')
                 .eq('id', orderId)
-                .eq('user_id', user.id)
+                .eq('user_id', tenantId)
                 .single();
 
             if (fetchError) throw fetchError;
@@ -275,7 +275,7 @@ export default function Dashboard() {
                 .from('service_orders')
                 .insert([{
                     ...osData,
-                    user_id: user.id,
+                    user_id: tenantId,
                     status: 'pendente',
                     // Ensure arrays are copied correctly
                     physical_condition: osData.physical_condition || [],
@@ -296,7 +296,7 @@ export default function Dashboard() {
     };
 
     const exportPDF = async (orderId: string) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             const [{ data, error }, { data: itemsData }, { data: servicesData }, { data: companyData }] = await Promise.all([
@@ -308,11 +308,11 @@ export default function Dashboard() {
           technicians (name)
         `)
                     .eq('id', orderId)
-                    .eq('user_id', user.id)
+                    .eq('user_id', tenantId)
                     .single(),
                 supabase.from('service_order_items').select('*').eq('service_order_id', orderId),
                 supabase.from('service_order_services').select('*').eq('service_order_id', orderId),
-                supabase.from('company_settings').select('*').eq('user_id', user.id).maybeSingle(),
+                supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle(),
             ]);
 
             if (error) throw error;

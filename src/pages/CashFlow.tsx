@@ -138,7 +138,7 @@ const manualEntrySchema = { entry_date: '', competence_date: '', category: '', a
 type ManualEntryForm = typeof manualEntrySchema;
 
 export default function CashFlow() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [monthDate, setMonthDate] = useState(() => new Date());
     const [allRows, setAllRows] = useState<LedgerRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -150,15 +150,15 @@ export default function CashFlow() {
     const [isSubmittingEntry, setIsSubmittingEntry] = useState(false);
 
     useEffect(() => {
-        if (user) fetchAll();
+        if (tenantId) fetchAll();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [user]);
+    }, [tenantId]);
 
     const fetchAll = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         setLoading(true);
         try {
-            const allData = await fetchAllLedgerRows(user.id);
+            const allData = await fetchAllLedgerRows(tenantId);
             setAllRows(allData);
         } catch (error) {
             console.error('Error fetching cash flow data:', error);
@@ -187,7 +187,7 @@ export default function CashFlow() {
     };
 
     const submitManualEntry = async () => {
-        if (!user || !entryModal) return;
+        if (!tenantId || !entryModal) return;
         const amount = parseFloat(entryForm.amount.replace(',', '.'));
         if (!entryForm.description.trim()) {
             toast.error('Informe o histórico do lançamento.');
@@ -201,7 +201,7 @@ export default function CashFlow() {
         setIsSubmittingEntry(true);
         try {
             const { error } = await supabase.from('cash_entries').insert([{
-                user_id: user.id,
+                user_id: tenantId,
                 entry_date: entryForm.entry_date,
                 competence_date: entryForm.competence_date || entryForm.entry_date,
                 type: entryModal,

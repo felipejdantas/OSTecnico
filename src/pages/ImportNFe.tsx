@@ -80,7 +80,7 @@ function findSimilarProduct(name: string, products: Product[]): Product | null {
 }
 
 export default function ImportNFe() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [products, setProducts] = useState<Product[]>([]);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -94,14 +94,14 @@ export default function ImportNFe() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
-        if (user) fetchAll();
-    }, [user]);
+        if (tenantId) fetchAll();
+    }, [tenantId]);
 
     const fetchAll = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const [{ data: productsData }, { data: suppliersData }] = await Promise.all([
-            supabase.from('products').select('id, name, unit, stock_quantity').eq('user_id', user.id).order('name'),
-            supabase.from('suppliers').select('id, name, document').eq('user_id', user.id).order('name'),
+            supabase.from('products').select('id, name, unit, stock_quantity').eq('user_id', tenantId).order('name'),
+            supabase.from('suppliers').select('id, name, document').eq('user_id', tenantId).order('name'),
         ]);
         if (productsData) setProducts(productsData);
         if (suppliersData) setSuppliers(suppliersData);
@@ -109,11 +109,11 @@ export default function ImportNFe() {
     };
 
     const fetchImports = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data } = await supabase
             .from('nfe_imports')
             .select('id, nfe_number, nfe_series, issue_date, total_value, xml_filename, created_at, suppliers (name)')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('created_at', { ascending: false })
             .limit(20);
         setImports(data || []);
@@ -205,7 +205,7 @@ export default function ImportNFe() {
     const itemsTotal = items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
 
     const handleConfirm = async () => {
-        if (!user || !header) return;
+        if (!tenantId || !header) return;
         setIsSubmitting(true);
         try {
             let supplierId = matchedSupplierId;
@@ -213,7 +213,7 @@ export default function ImportNFe() {
                 const { data: newSupplier, error } = await supabase
                     .from('suppliers')
                     .insert([{
-                        user_id: user.id,
+                        user_id: tenantId,
                         name: header.supplierName || 'Fornecedor NF-e',
                         phone: header.supplierPhone || null,
                         document: header.supplierCnpj || null,
@@ -228,7 +228,7 @@ export default function ImportNFe() {
             const { data: importRow, error: importError } = await supabase
                 .from('nfe_imports')
                 .insert([{
-                    user_id: user.id,
+                    user_id: tenantId,
                     nfe_number: header.number || null,
                     nfe_series: header.series || null,
                     supplier_id: supplierId,
@@ -246,7 +246,7 @@ export default function ImportNFe() {
                     const { data: newProduct, error: productError } = await supabase
                         .from('products')
                         .insert([{
-                            user_id: user.id,
+                            user_id: tenantId,
                             name: item.newName || item.originalName,
                             unit: item.unit || 'un',
                             cost_price: item.unitPrice,
@@ -261,7 +261,7 @@ export default function ImportNFe() {
                 }
 
                 const { error: movError } = await supabase.from('stock_movements').insert([{
-                    user_id: user.id,
+                    user_id: tenantId,
                     product_id: productId,
                     type: 'entrada',
                     quantity: Math.round(item.quantity) || 1,
@@ -272,7 +272,7 @@ export default function ImportNFe() {
             }
 
             const { error: cashError } = await supabase.from('cash_entries').insert([{
-                user_id: user.id,
+                user_id: tenantId,
                 entry_date: header.issueDate,
                 type: 'saida',
                 category: 'Compra de Mercadoria (NF-e)',

@@ -23,7 +23,7 @@ const supplierSchema = z.object({
 type SupplierForm = z.infer<typeof supplierSchema>;
 
 export default function Suppliers() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const location = useLocation();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -34,15 +34,15 @@ export default function Suppliers() {
     });
 
     useEffect(() => {
-        if (user) fetchSuppliers();
-    }, [user]);
+        if (tenantId) fetchSuppliers();
+    }, [tenantId]);
 
     const fetchSuppliers = async () => {
-        if (!user) return;
+        if (!tenantId) return;
         const { data, error } = await supabase
             .from('suppliers')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('name');
 
         if (error) console.error('Error fetching suppliers:', error);
@@ -67,7 +67,7 @@ export default function Suppliers() {
     };
 
     const onSubmit = async (data: SupplierForm) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (editingId && !confirm('Tem certeza que deseja atualizar os dados deste fornecedor?')) return;
 
         try {
@@ -76,13 +76,13 @@ export default function Suppliers() {
                     .from('suppliers')
                     .update(data)
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
                 if (error) throw error;
                 toast.success('Fornecedor atualizado com sucesso!');
             } else {
                 const { error } = await supabase
                     .from('suppliers')
-                    .insert([{ ...data, user_id: user.id }]);
+                    .insert([{ ...data, user_id: tenantId }]);
                 if (error) throw error;
                 toast.success('Fornecedor salvo com sucesso!');
             }
@@ -95,14 +95,14 @@ export default function Suppliers() {
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir o fornecedor "${name}"?`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir o fornecedor "${name}"?`)) return;
 
         try {
             const { error } = await supabase
                 .from('suppliers')
                 .delete()
                 .eq('id', id)
-                .eq('user_id', user.id);
+                .eq('user_id', tenantId);
             if (error) throw error;
             toast.success('Fornecedor excluído com sucesso!');
             fetchSuppliers();

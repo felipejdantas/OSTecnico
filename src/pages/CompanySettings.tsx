@@ -158,7 +158,7 @@ type SettingsForm = z.output<typeof settingsSchema>;
 const DEFAULT_WARRANTY_TEXT = 'A garantia prevista cobre exclusivamente o defeito relacionado ao serviço executado e/ou à peça substituída nesta Ordem de Serviço, contada a partir da data de entrega do equipamento, conforme o Código de Defesa do Consumidor (Lei nº 8.078/90, art. 26, inciso II). Não estão cobertos: danos decorrentes de mau uso, quedas, impactos, oxidação ou contato com líquidos; violação do lacre ou intervenção técnica de terceiros após a entrega; defeitos não relacionados ao reparo original; ou desgaste natural de outros componentes do equipamento. Constatada a reincidência do defeito coberto dentro do prazo de garantia, o reparo será refeito sem cobrança de mão de obra. Esta garantia contratual complementa, e não substitui, a garantia legal prevista no Código de Defesa do Consumidor.';
 
 export default function CompanySettings() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
@@ -171,16 +171,16 @@ export default function CompanySettings() {
     });
 
     useEffect(() => {
-        if (user) fetchSettings();
-    }, [user]);
+        if (tenantId) fetchSettings();
+    }, [tenantId]);
 
     const fetchSettings = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data, error } = await supabase
             .from('company_settings')
             .select('*')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .maybeSingle();
 
         if (error) console.error('Error fetching company settings:', error);
@@ -215,7 +215,7 @@ export default function CompanySettings() {
     };
 
     const onSubmit = async (data: SettingsForm) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             setIsSubmitting(true);
@@ -232,7 +232,7 @@ export default function CompanySettings() {
 
             const { error } = await supabase
                 .from('company_settings')
-                .upsert([{ ...data, default_technician_signature_url: technicianSignatureUrl, user_id: user.id }], { onConflict: 'user_id' });
+                .upsert([{ ...data, default_technician_signature_url: technicianSignatureUrl, user_id: tenantId }], { onConflict: 'user_id' });
 
             if (error) throw error;
             setSignatureUrl(technicianSignatureUrl);

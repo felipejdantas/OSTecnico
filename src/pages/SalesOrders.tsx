@@ -33,7 +33,7 @@ type SaleFormInput = z.input<typeof saleSchema>;
 type SaleForm = z.output<typeof saleSchema>;
 
 export default function SalesOrders() {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [customers, setCustomers] = useState<any[]>([]);
@@ -53,15 +53,15 @@ export default function SalesOrders() {
     });
 
     useEffect(() => {
-        if (user) fetchAll();
-    }, [user]);
+        if (tenantId) fetchAll();
+    }, [tenantId]);
 
     const fetchAll = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const [{ data: customersData }, { data: techniciansData }] = await Promise.all([
-            supabase.from('customers').select('id, name').eq('user_id', user.id).order('name'),
-            supabase.from('technicians').select('id, name').eq('user_id', user.id).order('name'),
+            supabase.from('customers').select('id, name').eq('user_id', tenantId).order('name'),
+            supabase.from('technicians').select('id, name').eq('user_id', tenantId).order('name'),
         ]);
         if (customersData) setCustomers(customersData);
         if (techniciansData) setTechnicians(techniciansData);
@@ -70,12 +70,12 @@ export default function SalesOrders() {
     };
 
     const fetchSales = async () => {
-        if (!user) return;
+        if (!tenantId) return;
 
         const { data: salesData, error } = await supabase
             .from('sales_orders')
             .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
-            .eq('user_id', user.id)
+            .eq('user_id', tenantId)
             .order('sale_date', { ascending: false })
             .order('sale_number', { ascending: false });
 
@@ -146,7 +146,7 @@ export default function SalesOrders() {
     };
 
     const onSubmit = async (data: SaleForm) => {
-        if (!user) return;
+        if (!tenantId) return;
         if (!editingId && items.length === 0) {
             toast.error('Adicione pelo menos um produto à venda.');
             return;
@@ -174,13 +174,13 @@ export default function SalesOrders() {
                     .from('sales_orders')
                     .update(row)
                     .eq('id', editingId)
-                    .eq('user_id', user.id);
+                    .eq('user_id', tenantId);
                 if (error) throw error;
                 toast.success('Venda atualizada com sucesso!');
             } else {
                 const { data: created, error } = await supabase
                     .from('sales_orders')
-                    .insert([{ ...row, user_id: user.id }])
+                    .insert([{ ...row, user_id: tenantId }])
                     .select('id')
                     .single();
                 if (error) throw error;
@@ -208,10 +208,10 @@ export default function SalesOrders() {
     };
 
     const handleDelete = async (id: string, saleNumber: number) => {
-        if (!user || !confirm(`Tem certeza que deseja excluir a venda #${saleNumber}? O estoque dos produtos será restaurado.`)) return;
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir a venda #${saleNumber}? O estoque dos produtos será restaurado.`)) return;
 
         try {
-            const { error } = await supabase.from('sales_orders').delete().eq('id', id).eq('user_id', user.id);
+            const { error } = await supabase.from('sales_orders').delete().eq('id', id).eq('user_id', tenantId);
             if (error) throw error;
             toast.success('Venda excluída com sucesso!');
             fetchSales();
@@ -235,7 +235,7 @@ export default function SalesOrders() {
     };
 
     const exportPDF = async (saleId: string) => {
-        if (!user) return;
+        if (!tenantId) return;
 
         try {
             const [{ data, error }, { data: itemsData }, { data: companyData }] = await Promise.all([
@@ -247,10 +247,10 @@ export default function SalesOrders() {
           technicians (name)
         `)
                     .eq('id', saleId)
-                    .eq('user_id', user.id)
+                    .eq('user_id', tenantId)
                     .single(),
                 supabase.from('sale_items').select('*').eq('sale_id', saleId),
-                supabase.from('company_settings').select('*').eq('user_id', user.id).maybeSingle(),
+                supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle(),
             ]);
 
             if (error) throw error;

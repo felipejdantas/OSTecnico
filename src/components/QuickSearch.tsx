@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function QuickSearch({ isOpen, onClose }: Props) {
-    const { user } = useAuth();
+    const { tenantId } = useAuth();
     const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [loading, setLoading] = useState(false);
@@ -38,14 +38,14 @@ export function QuickSearch({ isOpen, onClose }: Props) {
     }, [isOpen, onClose]);
 
     useEffect(() => {
-        if (!user || !isOpen || query.trim().length < 2) {
+        if (!tenantId || !isOpen || query.trim().length < 2) {
             setGroups([]);
             return;
         }
         const handle = setTimeout(() => runSearch(query.trim()), 300);
         return () => clearTimeout(handle);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [query, user, isOpen]);
+    }, [query, tenantId, isOpen]);
 
     const goTo = (path: string, prefillSearch?: string) => {
         onClose();
@@ -53,7 +53,7 @@ export function QuickSearch({ isOpen, onClose }: Props) {
     };
 
     const runSearch = async (q: string) => {
-        if (!user) return;
+        if (!tenantId) return;
         setLoading(true);
         try {
             const isNumeric = /^\d+$/.test(q);
@@ -63,11 +63,11 @@ export function QuickSearch({ isOpen, onClose }: Props) {
 
             const [osRes, customersRes, productsRes, suppliersRes] = await Promise.all([
                 isNumeric
-                    ? supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', user.id).eq('os_number', parseInt(q)).limit(5)
-                    : supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', user.id).or(`equipment.ilike.%${safe}%,brand.ilike.%${safe}%`).limit(5),
-                supabase.from('customers').select('id, name, cpf, phone').eq('user_id', user.id).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,cpf.ilike.%${safe}%`).limit(5),
-                supabase.from('products').select('id, name, sku').eq('user_id', user.id).or(`name.ilike.%${safe}%,sku.ilike.%${safe}%`).limit(5),
-                supabase.from('suppliers').select('id, name, phone').eq('user_id', user.id).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`).limit(5),
+                    ? supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', tenantId).eq('os_number', parseInt(q)).limit(5)
+                    : supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', tenantId).or(`equipment.ilike.%${safe}%,brand.ilike.%${safe}%`).limit(5),
+                supabase.from('customers').select('id, name, cpf, phone').eq('user_id', tenantId).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,cpf.ilike.%${safe}%`).limit(5),
+                supabase.from('products').select('id, name, sku').eq('user_id', tenantId).or(`name.ilike.%${safe}%,sku.ilike.%${safe}%`).limit(5),
+                supabase.from('suppliers').select('id, name, phone').eq('user_id', tenantId).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`).limit(5),
             ]);
 
             const newGroups: ResultGroup[] = [];
