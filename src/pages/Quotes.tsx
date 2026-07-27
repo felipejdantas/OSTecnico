@@ -22,7 +22,9 @@ import { generateQuotePDF } from '../lib/pdfGenerator';
 import { openWhatsApp, buildQuoteLink, buildQuoteMessage } from '../lib/shareLinks';
 
 const quoteSchema = z.object({
-    customerId: z.string().min(1, 'Selecione um cliente'),
+    customerId: z.string().optional(),
+    guestName: z.string().optional(),
+    guestPhone: z.string().optional(),
     quoteDate: z.string().min(1, 'Informe a data do orçamento'),
     validUntil: z.string().optional(),
     equipment: z.string().optional(),
@@ -30,6 +32,13 @@ const quoteSchema = z.object({
     discountType: z.enum(['fixed', 'percent']),
     discountValue: z.coerce.number().min(0, 'Valor inválido').optional(),
     otherCosts: z.coerce.number().min(0, 'Valor inválido').optional(),
+}).superRefine((data, ctx) => {
+    // Either an existing customer is picked, or a guest name is typed for a
+    // quick quote (no customers row created until it's converted into OS/Venda).
+    if (!data.customerId && !data.guestName?.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecione um cliente cadastrado', path: ['customerId'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nome do cliente', path: ['guestName'] });
+    }
 });
 
 type QuoteFormInput = z.input<typeof quoteSchema>;
@@ -55,9 +64,7 @@ export default function Quotes() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
 
-    const [isNewCustomerOpen, setIsNewCustomerOpen] = useState(false);
-    const [newCustomerName, setNewCustomerName] = useState('');
-    const [newCustomerPhone, setNewCustomerPhone] = useState('');
+    const [isGuestMode, setIsGuestMode] = useState(false);
 
     const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<QuoteFormInput, any, QuoteForm>({
         resolver: zodResolver(quoteSchema),
@@ -83,7 +90,7 @@ export default function Quotes() {
 
         const { data: quotesData, error } = await supabase
             .from('quotes')
-            .select('id, quote_number, quote_date, valid_until, customer_id, equipment, notes, discount_type, discount_value, other_costs, status, converted_to, converted_order_id, signature_token, approved_at, customers (name, phone)')
+            .select('id, quote_number, quote_date, valid_until, customer_id, guest_name, guest_phone, equipment, notes, discount_type, discount_value, other_costs, status, converted_to, converted_order_id, signature_token, approved_at, customers (name, phone)')
             .eq('user_id', user.id)
             .order('quote_date', { ascending: false })
             .order('quote_number', { ascending: false });
@@ -127,30 +134,29 @@ export default function Quotes() {
         setQuotes(computed);
     };
 
-    const createCustomer = async () => {
-        if (!user || !newCustomerName.trim()) return;
-        try {
-            const { data, error } = await supabase
-                .from('customers')
-                .insert([{ user_id: user.id, name: newCustomerName.trim(), phone: newCustomerPhone.trim() || null }])
-                .select('id, name, phone')
-                .single();
-            if (error) throw error;
-            setCustomers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
-            setValue('customerId', data.id);
-            setNewCustomerName('');
-            setNewCustomerPhone('');
-            setIsNewCustomerOpen(false);
-            toast.success('Cliente cadastrado! Complete os demais dados dele quando puder, em Clientes.');
-        } catch (error: any) {
-            toast.error('Erro ao cadastrar cliente: ' + error.message);
-        }
+    // Toggles between picking a registered customer and typing a name/phone for
+    // a quick quote — clears the other mode's fields so a stale value can't be
+    // submitted alongside the one currently shown.
+    const toggleGuestMode = () => {
+        setIsGuestMode(prev => {
+            const next = !prev;
+            if (next) {
+                setValue('customerId', '');
+            } else {
+                setValue('guestName', '');
+                setValue('guestPhone', '');
+            }
+            return next;
+        });
     };
 
     const handleEdit = async (quote: any) => {
         setEditingId(quote.id);
         setEditingStatus({ status: quote.status, converted_to: quote.converted_to, converted_order_id: quote.converted_order_id, approved_at: quote.approved_at });
-        setValue('customerId', quote.customer_id);
+        setIsGuestMode(!quote.customer_id);
+        setValue('customerId', quote.customer_id || '');
+        setValue('guestName', quote.guest_name || '');
+        setValue('guestPhone', quote.guest_phone || '');
         setValue('quoteDate', quote.quote_date);
         setValue('validUntil', quote.valid_until || '');
         setValue('equipment', quote.equipment || '');
@@ -176,7 +182,7 @@ export default function Quotes() {
         setEditingStatus(null);
         setItems([]);
         setServices([]);
-        setIsNewCustomerOpen(false);
+        setIsGuestMode(false);
         reset({ quoteDate: new Date().toISOString().slice(0, 10), discountType: 'fixed' });
     };
 
@@ -190,7 +196,9 @@ export default function Quotes() {
         setIsSubmitting(true);
         try {
             const row = {
-                customer_id: data.customerId,
+                customer_id: data.customerId || null,
+                guest_name: data.customerId ? null : (data.guestName?.trim() || null),
+                guest_phone: data.customerId ? null : (data.guestPhone?.trim() || null),
                 quote_date: data.quoteDate,
                 valid_until: data.validUntil || null,
                 equipment: data.equipment || null,
@@ -264,12 +272,32 @@ export default function Quotes() {
         }
     };
 
+    // Guest quotes (no customer_id) don't get a customers row until they're
+    // actually converted into an OS or Pedido de Venda — that's the moment the
+    // shop commits to the client, so that's when the registration happens.
+    const ensureCustomerId = async (quote: any): Promise<string> => {
+        if (quote.customer_id) return quote.customer_id;
+
+        const { data: newCustomer, error } = await supabase
+            .from('customers')
+            .insert([{ user_id: user!.id, name: quote.guest_name || 'Cliente sem nome', phone: quote.guest_phone || null }])
+            .select('id, name, phone')
+            .single();
+        if (error) throw error;
+
+        await supabase.from('quotes').update({ customer_id: newCustomer.id, guest_name: null, guest_phone: null }).eq('id', quote.id);
+        setCustomers(prev => [...prev, newCustomer].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
+        toast.success(`Cliente ${newCustomer.name} cadastrado automaticamente.`);
+        return newCustomer.id;
+    };
+
     const convertToOSFor = async (quote: any) => {
         if (!user) return;
         if (!confirm(`Confirma converter o orçamento #${quote.quote_number} em uma nova OS?`)) return;
 
         setIsActionLoading(true);
         try {
+            const customerId = await ensureCustomerId(quote);
             const [{ data: quoteItems }, { data: quoteServices }] = await Promise.all([
                 supabase.from('quote_items').select('product_id, product_name, quantity, unit_price').eq('quote_id', quote.id),
                 supabase.from('quote_services').select('service_id, service_name, description, quantity, price').eq('quote_id', quote.id),
@@ -279,7 +307,7 @@ export default function Quotes() {
                 .from('service_orders')
                 .insert([{
                     user_id: user.id,
-                    customer_id: quote.customer_id,
+                    customer_id: customerId,
                     equipment: quote.equipment || 'Não especificado',
                     problem_description: quote.notes || null,
                     discount_type: quote.discount_type || 'fixed',
@@ -331,6 +359,7 @@ export default function Quotes() {
 
         setIsActionLoading(true);
         try {
+            const customerId = await ensureCustomerId(quote);
             const { data: quoteItems } = await supabase
                 .from('quote_items')
                 .select('product_id, product_name, quantity, unit_price')
@@ -340,7 +369,7 @@ export default function Quotes() {
                 .from('sales_orders')
                 .insert([{
                     user_id: user.id,
-                    customer_id: quote.customer_id,
+                    customer_id: customerId,
                     sale_date: new Date().toISOString().slice(0, 10),
                     discount_type: quote.discount_type || 'fixed',
                     discount_value: quote.discount_value || 0,
@@ -437,7 +466,7 @@ export default function Quotes() {
                 quote_number: data.quote_number,
                 quote_date: data.quote_date,
                 valid_until: data.valid_until,
-                customer: data.customers,
+                customer: data.customers || { name: data.guest_name || 'Cliente não identificado', phone: data.guest_phone },
                 equipment: data.equipment,
                 notes: data.notes,
                 items: itemsData || [],
@@ -454,13 +483,15 @@ export default function Quotes() {
     };
 
     const shareViaWhatsApp = (quote: any) => {
-        if (!quote.customers?.phone) {
+        const phone = quote.customers?.phone || quote.guest_phone;
+        const name = quote.customers?.name || quote.guest_name || 'Cliente';
+        if (!phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
         const link = buildQuoteLink(quote.signature_token);
-        const message = buildQuoteMessage(quote.customers.name, quote.quote_number, link, quote.valid_until);
-        openWhatsApp(quote.customers.phone, message);
+        const message = buildQuoteMessage(name, quote.quote_number, link, quote.valid_until);
+        openWhatsApp(phone, message);
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
@@ -468,7 +499,7 @@ export default function Quotes() {
 
     const filteredQuotes = quotes.filter(q =>
         String(q.quote_number).includes(searchTerm) ||
-        q.customers?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        (q.customers?.name || q.guest_name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const isLocked = editingStatus?.status === 'convertido';
@@ -506,47 +537,50 @@ export default function Quotes() {
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Dados do Orçamento</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1">
-                                <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                <div className="flex gap-2 items-start">
-                                    <div className="flex-1">
-                                        <Controller
-                                            name="customerId"
-                                            control={control}
-                                            render={({ field }) => (
-                                                <SearchableSelect
-                                                    value={field.value || ''}
-                                                    onChange={field.onChange}
-                                                    placeholder="Buscar cliente..."
-                                                    error={errors.customerId?.message}
-                                                    disabled={isLocked}
-                                                    options={customers.map(c => ({ value: c.id, label: c.name }))}
-                                                />
-                                            )}
-                                        />
-                                    </div>
+                                <div className="flex items-center justify-between gap-2">
+                                    <label className="text-sm font-medium text-gray-600">Cliente</label>
                                     {!isLocked && (
-                                        <Button
+                                        <button
                                             type="button"
-                                            variant="outline"
-                                            onClick={() => setIsNewCustomerOpen(!isNewCustomerOpen)}
-                                            title="Orçamento rápido: cadastra o cliente só com nome e telefone"
+                                            onClick={toggleGuestMode}
+                                            className="text-xs text-primary-cyan hover:underline flex items-center gap-1"
                                         >
-                                            <UserPlus className="w-4 h-4" />
-                                        </Button>
+                                            <UserPlus className="w-3.5 h-3.5" />
+                                            {isGuestMode ? 'Selecionar cliente cadastrado' : 'Orçamento rápido (sem cadastro)'}
+                                        </button>
                                     )}
                                 </div>
 
-                                {isNewCustomerOpen && (
-                                    <div className="mt-1 p-3 bg-gray-50 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <Input placeholder="Nome do cliente" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
-                                        <div className="flex gap-2">
-                                            <Input placeholder="Telefone (opcional)" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
-                                            <Button type="button" onClick={createCustomer} disabled={!newCustomerName.trim()}>Salvar</Button>
+                                {isGuestMode ? (
+                                    <div className="space-y-1">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <Input
+                                                placeholder="Nome do cliente"
+                                                {...register('guestName')}
+                                                error={errors.guestName?.message}
+                                                disabled={isLocked}
+                                            />
+                                            <Input placeholder="Telefone (opcional)" {...register('guestPhone')} disabled={isLocked} />
                                         </div>
-                                        <p className="text-xs text-gray-500 sm:col-span-2">
-                                            Cadastro mínimo para orçamento rápido. CPF, endereço e outros dados podem ser completados depois em Clientes.
+                                        <p className="text-xs text-gray-500">
+                                            Nada é gravado em Clientes agora. O cadastro só é criado quando este orçamento virar OS ou Pedido de Venda.
                                         </p>
                                     </div>
+                                ) : (
+                                    <Controller
+                                        name="customerId"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <SearchableSelect
+                                                value={field.value || ''}
+                                                onChange={field.onChange}
+                                                placeholder="Buscar cliente..."
+                                                error={errors.customerId?.message}
+                                                disabled={isLocked}
+                                                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                            />
+                                        )}
+                                    />
                                 )}
                             </div>
 
@@ -702,6 +736,11 @@ export default function Quotes() {
                                                     Aprovado pelo cliente
                                                 </span>
                                             )}
+                                            {!quote.customer_id && quote.guest_name && (
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                                    Sem cadastro
+                                                </span>
+                                            )}
                                         </div>
 
                                         <button
@@ -711,7 +750,7 @@ export default function Quotes() {
                                             className="flex items-center gap-2 mb-1 hover:underline text-left"
                                         >
                                             <User className="w-4 h-4 text-primary-cyan" />
-                                            <span className="font-semibold text-dark text-base">{quote.customers?.name || 'N/A'}</span>
+                                            <span className="font-semibold text-dark text-base">{quote.customers?.name || quote.guest_name || 'N/A'}</span>
                                         </button>
 
                                         <p className="text-sm text-gray-600 mb-1">
