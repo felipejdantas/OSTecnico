@@ -521,7 +521,7 @@ export default function Quotes() {
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${!isFormOpen ? 'sticky top-0 z-30 bg-white/95 backdrop-blur-sm py-3 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0' : ''}`}>
                 <div>
                     <h2 className="text-2xl font-bold text-dark">Orçamentos</h2>
                     <p className="text-gray-500">Monte um orçamento antes de virar OS ou Pedido de Venda</p>
