@@ -40,8 +40,7 @@ function TeamSection() {
         setLoading(false);
     };
 
-    const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleCreate = async () => {
         if (!email || !password) return;
         if (!confirm(`Criar acesso ao sistema para "${email}"? Essa pessoa vai poder ver e editar todos os clientes, produtos, OS e estoque.`)) return;
 
@@ -117,19 +116,23 @@ function TeamSection() {
                 </div>
             )}
 
-            <form onSubmit={handleCreate} className="space-y-3 pt-4 border-t border-gray-100">
+            {/* Not a <form>: this section renders inside CompanySettings' own <form>,
+                and HTML doesn't allow nested forms (the browser silently drops a
+                nested <form> tag, so its submit button would instead submit the
+                outer company form). Plain div + type="button" avoids that trap. */}
+            <div className="space-y-3 pt-4 border-t border-gray-100">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <Input label="Nome" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: João (técnico)" />
                     <Input label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
                     <Input label="Senha provisória" type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required />
                 </div>
                 <div className="flex justify-end">
-                    <Button type="submit" disabled={isAdding}>
+                    <Button type="button" onClick={handleCreate} disabled={isAdding}>
                         <UserPlus className="w-4 h-4 mr-2" />
                         {isAdding ? 'Criando...' : 'Criar Usuário'}
                     </Button>
                 </div>
-            </form>
+            </div>
         </Card>
     );
 }
