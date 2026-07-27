@@ -305,6 +305,19 @@ export default function SalesOrders() {
 
             {isFormOpen && (
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+                    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-white/95 backdrop-blur-sm py-3 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0">
+                        <h3 className="font-semibold text-base sm:text-lg text-dark">
+                            {editingId ? `Editando Venda #${sales.find(s => s.id === editingId)?.sale_number ?? ''}` : 'Nova Venda'}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={handleCancel}>Cancelar</Button>
+                            <Button type="submit" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                                <Save className="w-4 h-4 mr-2" />
+                                {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Registrar'}
+                            </Button>
+                        </div>
+                    </div>
+
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Dados da Venda</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

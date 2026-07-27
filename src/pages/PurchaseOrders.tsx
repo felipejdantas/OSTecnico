@@ -453,6 +453,21 @@ export default function PurchaseOrders() {
 
             {isFormOpen && (
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+                    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-white/95 backdrop-blur-sm py-3 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0">
+                        <h3 className="font-semibold text-base sm:text-lg text-dark">
+                            {editingId ? `Editando Pedido #${purchases.find(p => p.id === editingId)?.purchase_number ?? ''}` : 'Novo Pedido'}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={handleCancel}>Cancelar</Button>
+                            {!isFinalized && (
+                                <Button type="submit" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Registrar'}
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Fornecedor</h3>
                         <div className="flex gap-2 items-start">
