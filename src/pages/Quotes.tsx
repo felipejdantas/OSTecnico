@@ -533,6 +533,21 @@ export default function Quotes() {
 
             {isFormOpen && (
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
+                    <div className="sticky top-0 z-30 flex items-center justify-between gap-3 bg-white/95 backdrop-blur-sm py-3 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0">
+                        <h3 className="font-semibold text-base sm:text-lg text-dark">
+                            {editingId ? `Editando Orçamento #${quotes.find(q => q.id === editingId)?.quote_number ?? ''}` : 'Novo Orçamento'}
+                        </h3>
+                        <div className="flex items-center gap-2">
+                            <Button type="button" variant="outline" size="sm" onClick={handleCancel}>Cancelar</Button>
+                            {!isLocked && (
+                                <Button type="submit" size="sm" disabled={isSubmitting} className="touch-manipulation">
+                                    <Save className="w-4 h-4 mr-2" />
+                                    {isSubmitting ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Registrar'}
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Dados do Orçamento</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -718,7 +733,9 @@ export default function Quotes() {
                         filteredQuotes.map(quote => (
                             <div
                                 key={quote.id}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-200 rounded-xl hover:shadow-md transition-all"
+                                onClick={() => handleEdit(quote)}
+                                title="Clique para atualizar o orçamento"
+                                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-gray-200 rounded-xl hover:shadow-md hover:border-primary-cyan/40 transition-all cursor-pointer"
                             >
                                 <div className="flex items-start gap-4 flex-1 mb-3 sm:mb-0">
                                     <div className="w-12 h-12 rounded-full bg-primary-cyan/10 flex items-center justify-center flex-shrink-0">
@@ -743,15 +760,10 @@ export default function Quotes() {
                                             )}
                                         </div>
 
-                                        <button
-                                            type="button"
-                                            onClick={() => handleEdit(quote)}
-                                            title="Clique para atualizar o orçamento"
-                                            className="flex items-center gap-2 mb-1 hover:underline text-left"
-                                        >
+                                        <div className="flex items-center gap-2 mb-1">
                                             <User className="w-4 h-4 text-primary-cyan" />
                                             <span className="font-semibold text-dark text-base">{quote.customers?.name || quote.guest_name || 'N/A'}</span>
-                                        </button>
+                                        </div>
 
                                         <p className="text-sm text-gray-600 mb-1">
                                             {quote.itemCount} produto(s) · {quote.serviceCount} serviço(s) · {formatCurrency(quote.total)}
@@ -764,7 +776,7 @@ export default function Quotes() {
                                     </div>
                                 </div>
 
-                                <div className="flex items-center justify-center gap-2 flex-wrap">
+                                <div className="flex items-center justify-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                                     <Button
                                         variant="outline"
                                         size="sm"
