@@ -16,6 +16,7 @@ const menuGroups: MenuGroup[] = [
         items: [
             { icon: Home, label: 'Dashboard', path: '/' },
             { icon: FilePlus, label: 'Nova OS', path: '/nova-os' },
+            { icon: Calculator, label: 'Orçamentos', path: '/orcamentos' },
         ],
     },
     {
@@ -31,7 +32,6 @@ const menuGroups: MenuGroup[] = [
     {
         title: 'Vendas',
         items: [
-            { icon: Calculator, label: 'Orçamentos', path: '/orcamentos' },
             { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
         ],
     },

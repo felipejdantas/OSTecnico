@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X, Search } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X, Search, Calculator } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -490,9 +490,15 @@ export default function Dashboard() {
                     <h2 className="text-xl sm:text-2xl font-bold text-dark">Dashboard</h2>
                     <p className="text-sm sm:text-base text-gray-500">Visão geral das ordens de serviço</p>
                 </div>
-                <Button onClick={() => navigate('/nova-os')}>
-                    Nova Ordem de Serviço
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => navigate('/orcamentos')}>
+                        <Calculator className="w-4 h-4 mr-2" />
+                        Orçamento
+                    </Button>
+                    <Button onClick={() => navigate('/nova-os')}>
+                        Nova Ordem de Serviço
+                    </Button>
+                </div>
             </div>
 
             {/* Stats Cards: only the statuses the shop actively triages day to day */}
@@ -735,7 +741,11 @@ export default function Dashboard() {
                 )}
             </Card>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => navigate('/orcamentos')}>
+                    <Calculator className="w-4 h-4 mr-2" />
+                    Orçamento
+                </Button>
                 <Button onClick={() => navigate('/nova-os')}>
                     Nova Ordem de Serviço
                 </Button>
