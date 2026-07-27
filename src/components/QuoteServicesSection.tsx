@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Plus, Trash2, Hammer } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { SearchableSelect } from './ui/SearchableSelect';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -131,16 +132,16 @@ export default function QuoteServicesSection({ quoteId, lines, onChange, disable
                     <div className="flex flex-col sm:flex-row sm:items-end gap-2">
                         <div className="flex-1 min-w-0">
                             <label className="text-xs text-gray-500 mb-1 block">Serviço</label>
-                            <select
+                            <SearchableSelect
                                 value={selectedServiceId}
-                                onChange={(e) => handleSelectService(e.target.value)}
-                                className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm"
-                            >
-                                <option value="">Selecione um serviço...</option>
-                                {catalog.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name} - R$ {s.default_price.toFixed(2)}</option>
-                                ))}
-                            </select>
+                                onChange={handleSelectService}
+                                placeholder="Buscar serviço..."
+                                options={catalog.map(s => ({
+                                    value: s.id,
+                                    label: s.name,
+                                    sublabel: `R$ ${s.default_price.toFixed(2)}`,
+                                }))}
+                            />
                         </div>
                         <div className="w-full sm:w-20">
                             <label className="text-xs text-gray-500 mb-1 block">Quantidade</label>
