@@ -3,13 +3,14 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, Truck, Save, PackageCheck, Wallet, CheckCircle2, UserPlus, Undo2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Truck, Save, PackageCheck, Wallet, CheckCircle2, UserPlus, Undo2, Eye } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import PurchaseItemsSection, { type PurchaseItem } from '../components/PurchaseItemsSection';
+import { PurchaseOrderDetailsModal } from '../components/PurchaseOrderDetailsModal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/orderFinance';
@@ -36,6 +37,7 @@ export default function PurchaseOrders() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [viewingId, setViewingId] = useState<string | null>(null);
 
     const [isNewSupplierOpen, setIsNewSupplierOpen] = useState(false);
     const [newSupplierName, setNewSupplierName] = useState('');
@@ -415,6 +417,7 @@ export default function PurchaseOrders() {
     // Once finalized, stock/conta can only be undone after reabrindo the order first —
     // mirrors the existing rule that finalized orders can't have stock/conta touched.
     const purchaseMenuItems = (p: any) => [
+        { label: 'Ver Detalhes', icon: <Eye className="w-4 h-4" />, onClick: () => setViewingId(p.id) },
         ...(p.status === 'finalizado'
             ? [{ label: 'Reabrir Pedido', icon: <Undo2 className="w-4 h-4" />, onClick: () => unfinalizeFor(p) }]
             : [
@@ -590,7 +593,12 @@ export default function PurchaseOrders() {
                                 </tr>
                             ) : (
                                 filteredPurchases.map(p => (
-                                    <tr key={p.id} className="bg-white border-b hover:bg-gray-50">
+                                    <tr
+                                        key={p.id}
+                                        className="bg-white border-b hover:bg-gray-50 cursor-pointer"
+                                        onClick={() => setViewingId(p.id)}
+                                        title="Clique para ver os detalhes do pedido"
+                                    >
                                         <td className="px-6 py-4 font-semibold text-primary-cyan">
                                             <div className="flex items-center gap-2">
                                                 <Truck className="w-4 h-4" />
@@ -609,7 +617,7 @@ export default function PurchaseOrders() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right font-medium text-dark">{formatCurrency(p.total)}</td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu items={purchaseMenuItems(p)} />
                                         </td>
                                     </tr>
@@ -624,18 +632,19 @@ export default function PurchaseOrders() {
                         <div className="text-center py-8 text-gray-500">Nenhum pedido de compra registrado ainda</div>
                     ) : (
                         filteredPurchases.map(p => (
-                            <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+                            <div
+                                key={p.id}
+                                className="bg-white border border-gray-200 rounded-xl p-4 space-y-2 cursor-pointer"
+                                onClick={() => setViewingId(p.id)}
+                            >
                                 <div className="flex items-start justify-between gap-3">
                                     <span className="flex items-center gap-2 font-semibold text-primary-cyan">
                                         <Truck className="w-4 h-4" />
                                         #{p.purchase_number}
                                     </span>
-                                    <DropdownMenu
-                                        items={[
-                                            { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(p) },
-                                            { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(p.id, p.purchase_number, p.stock_added, p.account_added), variant: 'danger' as const },
-                                        ]}
-                                    />
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <DropdownMenu items={purchaseMenuItems(p)} />
+                                    </div>
                                 </div>
                                 <p className="text-sm text-gray-700">{p.suppliers?.name || 'N/A'}</p>
                                 <p className="text-xs text-gray-400">{new Date(p.purchase_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
@@ -652,6 +661,10 @@ export default function PurchaseOrders() {
                     )}
                 </div>
             </Card>
+
+            {viewingId && (
+                <PurchaseOrderDetailsModal purchaseId={viewingId} onClose={() => setViewingId(null)} />
+            )}
         </div>
     );
 }
