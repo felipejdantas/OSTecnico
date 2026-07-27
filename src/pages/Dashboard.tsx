@@ -12,7 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
-import { PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
+import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
 
 type ServiceOrder = {
@@ -26,6 +26,11 @@ type ServiceOrder = {
     payment_status: PaymentStatus;
     completed_date: string | null;
     warranty_days: number | null;
+    discount_type: 'fixed' | 'percent' | null;
+    discount_value: number | null;
+    freight: number | null;
+    urgency_fee: number | null;
+    total: number;
     customers: {
         name: string; phone: string | null; email: string | null;
         cpf: string | null; cnpj: string | null; company_name: string | null; trade_name: string | null;
@@ -128,6 +133,10 @@ export default function Dashboard() {
           payment_status,
           completed_date,
           warranty_days,
+          discount_type,
+          discount_value,
+          freight,
+          urgency_fee,
           is_pinned,
           signature_token,
           client_signed_at,
@@ -141,8 +150,39 @@ export default function Dashboard() {
 
             if (error) throw error;
             const fetchedOrders = (data as any) || [];
-            setOrders(fetchedOrders);
-            await checkBudgetDeadlines(fetchedOrders);
+
+            const orderIds = fetchedOrders.map((o: any) => o.id);
+            const itemsByOrder: Record<string, { quantity: number; unit_price: number }[]> = {};
+            const servicesByOrder: Record<string, { quantity: number; price: number }[]> = {};
+            if (orderIds.length > 0) {
+                const [{ data: itemsData }, { data: servicesData }] = await Promise.all([
+                    supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', orderIds),
+                    supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', orderIds),
+                ]);
+                for (const item of itemsData || []) {
+                    (itemsByOrder[item.service_order_id] ||= []).push(item);
+                }
+                for (const line of servicesData || []) {
+                    (servicesByOrder[line.service_order_id] ||= []).push(line);
+                }
+            }
+
+            const enrichedOrders: ServiceOrder[] = fetchedOrders.map((o: any) => {
+                const itemsTotal = (itemsByOrder[o.id] || []).reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
+                const servicesTotal = (servicesByOrder[o.id] || []).reduce((sum, s) => sum + s.quantity * s.price, 0);
+                const { total } = calculateOrderTotal({
+                    itemsTotal,
+                    servicesTotal,
+                    discountType: o.discount_type || 'fixed',
+                    discountValue: o.discount_value || 0,
+                    freight: o.freight || 0,
+                    urgencyFee: o.urgency_fee || 0,
+                });
+                return { ...o, total };
+            });
+
+            setOrders(enrichedOrders);
+            await checkBudgetDeadlines(enrichedOrders);
         } catch (error) {
             console.error('Error fetching orders:', error);
         } finally {
@@ -600,10 +640,14 @@ export default function Dashboard() {
                                                 {[order.equipment_type, order.brand, order.equipment].filter(Boolean).join(' · ')}
                                             </p>
 
-                                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
                                                 <Calendar className="w-3 h-3" />
                                                 {new Date(order.created_at).toLocaleDateString('pt-BR')}
                                             </div>
+
+                                            {order.total > 0 && (
+                                                <p className="font-bold text-base text-dark">{formatCurrency(order.total)}</p>
+                                            )}
                                         </div>
                                     </div>
 
