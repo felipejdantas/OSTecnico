@@ -20,7 +20,7 @@ import ServiceOrderServicesSection, { type OrderServiceLine } from '../component
 import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
 import { EQUIPMENT_TYPES } from './NewOS';
 
@@ -237,7 +237,9 @@ export default function EditOS() {
 
             // If the client already approved this budget and the shop just changed
             // discount/freight/urgency fee, that approval is now stale for the new
-            // total — clear it so the tracking link asks the client to approve again.
+            // total. A DB trigger (trg_reset_approval_on_os_financials) actually
+            // clears budget_approved_at and sends the status back to "Aguardando
+            // Aprovação" as part of this same update — this is just for the toast.
             const financialsChanged =
                 discountType !== originalFinancials.discountType ||
                 discountValue !== originalFinancials.discountValue ||
@@ -274,7 +276,6 @@ export default function EditOS() {
                     discount_value: discountValue,
                     freight: freight,
                     urgency_fee: urgencyFee,
-                    ...(shouldResetApproval ? { budget_approved_at: null } : {}),
                 })
                 .eq('id', id)
                 .eq('user_id', tenantId);
@@ -301,31 +302,40 @@ export default function EditOS() {
         }
     };
 
+    // Adding/removing a part or service line invalidates approval via a DB trigger
+    // (trg_reset_approval_items/services) as a side effect of that insert/delete —
+    // this just re-reads the result so the form reflects it (status included).
+    const resyncApproval = async () => {
+        if (!id) return;
+        const { data: refreshed } = await supabase.from('service_orders').select('status, budget_approved_at').eq('id', id).single();
+        if (refreshed) {
+            setBudgetApprovedAt(refreshed.budget_approved_at);
+            setValue('status', refreshed.status);
+            setOriginalStatus(refreshed.status);
+        }
+    };
+
     // Records approval the client gave outside the digital flow (phone call, in
-    // person) instead of via the public link's "Aprovar" button. Diagnóstico/
-    // Aguardando Aprovação only exist to gate on that approval, so once it's
-    // recorded there's nothing left to wait for — jump straight to Em Reparo.
+    // person) instead of via the public link's "Aprovar" button. A DB trigger
+    // (trg_advance_status_on_budget_approval) is what actually jumps the status
+    // straight to Em Reparo when it's still parked in a "waiting" status — this
+    // just sets the approval timestamp and re-reads the result.
     const markApproved = async () => {
         if (!id) return;
-        if (!confirm('Confirma que o cliente aprovou o orçamento? A OS vai avançar para "Em Reparo".')) return;
+        if (!confirm('Confirma que o cliente aprovou o orçamento? Se a OS ainda estiver aguardando aprovação, ela vai avançar para "Em Reparo".')) return;
 
         setIsMarkingApproved(true);
         try {
-            const now = new Date().toISOString();
-            const { error } = await supabase.from('service_orders').update({ budget_approved_at: now }).eq('id', id);
+            const { error } = await supabase.from('service_orders').update({ budget_approved_at: new Date().toISOString() }).eq('id', id);
             if (error) throw error;
-            setBudgetApprovedAt(now);
 
-            const currentStatus = watch('status') as OrderStatus;
-            const stillWaiting = currentStatus === 'recebido' || currentStatus === 'em_diagnostico' || currentStatus === 'aguardando_aprovacao';
-            if (stillWaiting) {
-                await changeOrderStatus(id, 'em_reparo', 'Orçamento aprovado pelo cliente (marcado manualmente)');
-                setValue('status', 'em_reparo');
-                setOriginalStatus('em_reparo');
-                toast.success('Orçamento aprovado! Status avançado para Em Reparo.');
-            } else {
-                toast.success('Orçamento marcado como aprovado!');
+            const { data: refreshed } = await supabase.from('service_orders').select('status, budget_approved_at').eq('id', id).single();
+            if (refreshed) {
+                setBudgetApprovedAt(refreshed.budget_approved_at);
+                setValue('status', refreshed.status);
+                setOriginalStatus(refreshed.status);
             }
+            toast.success('Orçamento aprovado!');
         } catch (error: any) {
             toast.error('Erro ao marcar aprovação: ' + error.message);
         } finally {
@@ -550,7 +560,7 @@ export default function EditOS() {
                             onChange={setItems}
                             disabled={isLocked}
                             budgetApprovedAt={budgetApprovedAt}
-                            onApprovalReset={() => setBudgetApprovedAt(null)}
+                            onApprovalReset={resyncApproval}
                         />
 
                         <ServiceOrderServicesSection
@@ -559,7 +569,7 @@ export default function EditOS() {
                             onChange={setServiceLines}
                             disabled={isLocked}
                             budgetApprovedAt={budgetApprovedAt}
-                            onApprovalReset={() => setBudgetApprovedAt(null)}
+                            onApprovalReset={resyncApproval}
                         />
 
                         <OrderBudgetSummary

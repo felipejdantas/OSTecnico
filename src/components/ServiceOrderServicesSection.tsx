@@ -42,11 +42,13 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange, 
     const [customDescription, setCustomDescription] = useState('');
     const [customPrice, setCustomPrice] = useState(0);
 
+    // The actual reset (budget_approved_at + status) happens server-side via a DB
+    // trigger, as a side effect of the line insert/delete that already ran by the
+    // time this is called — this just surfaces it in the UI.
     const invalidateApproval = async () => {
         if (!orderId || !budgetApprovedAt) return;
-        await supabase.from('service_orders').update({ budget_approved_at: null }).eq('id', orderId);
         toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
-        onApprovalReset?.();
+        await onApprovalReset?.();
     };
 
     useEffect(() => {
