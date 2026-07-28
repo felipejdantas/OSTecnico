@@ -20,7 +20,7 @@ import ServiceOrderServicesSection, { type OrderServiceLine } from '../component
 import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig } from '../lib/orderStatus';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
 import { EQUIPMENT_TYPES } from './NewOS';
 
@@ -88,6 +88,7 @@ export default function EditOS() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<string>('');
     const [budgetApprovedAt, setBudgetApprovedAt] = useState<string | null>(null);
+    const [isMarkingApproved, setIsMarkingApproved] = useState(false);
     // Snapshot of the financials as loaded, so onSubmit can tell whether the
     // approved budget actually changed (vs. just re-saving the same numbers).
     const [originalFinancials, setOriginalFinancials] = useState({ discountType: 'fixed' as DiscountType, discountValue: 0, freight: 0, urgencyFee: 0 });
@@ -300,7 +301,37 @@ export default function EditOS() {
         }
     };
 
+    // Records approval the client gave outside the digital flow (phone call, in
+    // person) instead of via the public link's "Aprovar" button. Diagnóstico/
+    // Aguardando Aprovação only exist to gate on that approval, so once it's
+    // recorded there's nothing left to wait for — jump straight to Em Reparo.
+    const markApproved = async () => {
+        if (!id) return;
+        if (!confirm('Confirma que o cliente aprovou o orçamento? A OS vai avançar para "Em Reparo".')) return;
 
+        setIsMarkingApproved(true);
+        try {
+            const now = new Date().toISOString();
+            const { error } = await supabase.from('service_orders').update({ budget_approved_at: now }).eq('id', id);
+            if (error) throw error;
+            setBudgetApprovedAt(now);
+
+            const currentStatus = watch('status') as OrderStatus;
+            const stillWaiting = currentStatus === 'recebido' || currentStatus === 'em_diagnostico' || currentStatus === 'aguardando_aprovacao';
+            if (stillWaiting) {
+                await changeOrderStatus(id, 'em_reparo', 'Orçamento aprovado pelo cliente (marcado manualmente)');
+                setValue('status', 'em_reparo');
+                setOriginalStatus('em_reparo');
+                toast.success('Orçamento aprovado! Status avançado para Em Reparo.');
+            } else {
+                toast.success('Orçamento marcado como aprovado!');
+            }
+        } catch (error: any) {
+            toast.error('Erro ao marcar aprovação: ' + error.message);
+        } finally {
+            setIsMarkingApproved(false);
+        }
+    };
 
     if (loading) return <div className="flex justify-center p-8">Carregando...</div>;
 
@@ -544,6 +575,8 @@ export default function EditOS() {
                             onUrgencyFeeChange={setUrgencyFee}
                             disabled={isLocked}
                             budgetApprovedAt={budgetApprovedAt}
+                            onMarkApproved={markApproved}
+                            isMarkingApproved={isMarkingApproved}
                         />
                     </div>
                 </div>

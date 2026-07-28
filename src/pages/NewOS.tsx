@@ -109,6 +109,7 @@ export default function NewOS() {
     const [freight, setFreight] = useState(0);
     const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [alreadyApproved, setAlreadyApproved] = useState(false);
 
     const sigPadRef = useRef<SignaturePadRef>(null);
     const { register, handleSubmit, control, formState: { errors }, reset, setValue } = useForm<OSFormInput, any, OSForm>({
@@ -180,6 +181,13 @@ export default function NewOS() {
                 signatureUrl = await uploadFile(file);
             }
 
+            // Diagnóstico/Aguardando Aprovação only exist to gate on the client's
+            // approval — if the shop already knows the price and the client already
+            // approved (checkbox), skip straight to Em Reparo instead of leaving the
+            // OS parked in a "waiting" status it isn't actually waiting on anymore.
+            const waitingStatuses = ['recebido', 'em_diagnostico', 'aguardando_aprovacao'];
+            const effectiveStatus = alreadyApproved && waitingStatuses.includes(data.status) ? 'em_reparo' : data.status;
+
             // Save OS
             const osData: any = {
                 user_id: tenantId,
@@ -197,7 +205,7 @@ export default function NewOS() {
                 technician_observation: data.technicianObservation,
                 signature_url: signatureUrl,
                 photos,
-                status: data.status,
+                status: effectiveStatus,
                 entry_date: data.entryDate,
                 estimated_completion_date: data.estimatedCompletionDate || null,
                 billing_date: data.billingDate || null,
@@ -207,6 +215,7 @@ export default function NewOS() {
                 discount_value: discountValue,
                 freight: freight,
                 urgency_fee: urgencyFee,
+                budget_approved_at: alreadyApproved ? new Date().toISOString() : null,
             };
 
             // Add OS number if provided
@@ -223,7 +232,7 @@ export default function NewOS() {
             if (error) throw error;
 
             // Record the initial status on the timeline the client will see
-            await supabase.from('status_history').insert([{ service_order_id: createdOrder.id, status: data.status }]);
+            await supabase.from('status_history').insert([{ service_order_id: createdOrder.id, status: effectiveStatus }]);
 
             // Persist parts/products used (this also deducts stock via DB trigger)
             if (items.length > 0) {
@@ -357,6 +366,15 @@ export default function NewOS() {
                                         ))}
                                     </select>
                                     {errors.status && <p className="text-xs text-red-500">{errors.status.message}</p>}
+                                    <label className="flex items-center gap-2 text-xs text-gray-500 pt-1">
+                                        <input
+                                            type="checkbox"
+                                            checked={alreadyApproved}
+                                            onChange={(e) => setAlreadyApproved(e.target.checked)}
+                                            className="rounded border-gray-300"
+                                        />
+                                        Orçamento já aprovado pelo cliente (pula direto pra "Em Reparo")
+                                    </label>
                                 </div>
 
                                 <Input label="Data de Entrada" type="date" {...register('entryDate')} error={errors.entryDate?.message} />

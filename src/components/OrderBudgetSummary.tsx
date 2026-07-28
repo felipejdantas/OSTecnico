@@ -1,5 +1,6 @@
 import { Receipt, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Card } from './ui/Card';
+import { Button } from './ui/Button';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from '../lib/orderFinance';
 
 type Props = {
@@ -15,12 +16,17 @@ type Props = {
     onUrgencyFeeChange: (value: number) => void;
     disabled?: boolean;
     budgetApprovedAt?: string | null;
+    // When provided, shows a button to record that the client approved the budget
+    // outside the digital flow (phone call, in person) — for cases where the shop
+    // already knows the price and doesn't need to wait for the public-link approval.
+    onMarkApproved?: () => void;
+    isMarkingApproved?: boolean;
 };
 
 export default function OrderBudgetSummary({
     itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
     onDiscountTypeChange, onDiscountValueChange, onFreightChange, onUrgencyFeeChange, disabled,
-    budgetApprovedAt,
+    budgetApprovedAt, onMarkApproved, isMarkingApproved,
 }: Props) {
     const { subtotal, discountAmount, total } = calculateOrderTotal({
         itemsTotal, servicesTotal, discountType, discountValue, freight, urgencyFee,
@@ -40,9 +46,16 @@ export default function OrderBudgetSummary({
                         Aprovado pelo cliente em {new Date(budgetApprovedAt).toLocaleString('pt-BR')}
                     </div>
                 ) : (
-                    <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
-                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                        Ainda não aprovado pelo cliente.
+                    <div className="flex items-center justify-between gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4">
+                        <span className="flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            Ainda não aprovado pelo cliente.
+                        </span>
+                        {onMarkApproved && !disabled && (
+                            <Button type="button" size="sm" variant="outline" onClick={onMarkApproved} disabled={isMarkingApproved} className="flex-shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100">
+                                {isMarkingApproved ? 'Marcando...' : 'Marcar como aprovado'}
+                            </Button>
+                        )}
                     </div>
                 )
             )}

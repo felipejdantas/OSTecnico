@@ -628,6 +628,15 @@ export default function Dashboard() {
                                                         Assinado
                                                     </span>
                                                 )}
+                                                {order.budget_approved_at ? (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                                        Orçamento aprovado
+                                                    </span>
+                                                ) : order.status !== 'entregue' && order.status !== 'cancelado' && (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                                        Orçamento pendente
+                                                    </span>
+                                                )}
                                                 <WarrantyBadge completedDate={order.completed_date} warrantyDays={order.warranty_days} />
                                             </div>
 
