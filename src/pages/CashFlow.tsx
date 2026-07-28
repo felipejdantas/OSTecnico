@@ -36,6 +36,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             .from('service_orders')
             .select('id, os_number, completed_date, billing_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
             .eq('user_id', userId)
+            .neq('status', 'cancelado')
             .or('completed_date.not.is.null,billing_date.not.is.null'),
         supabase
             .from('sales_orders')
