@@ -130,8 +130,14 @@ function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodS
     };
 }
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the date
+// forward in the evening for any timezone behind UTC (like Brazil's UTC-3), making
+// "Hoje" silently point at tomorrow for the last few hours of every day.
 function toDateStr(d: Date) {
-    return d.toISOString().slice(0, 10);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 const manualEntrySchema = { entry_date: '', competence_date: '', category: '', amount: '', description: '', related_party: '' };
@@ -140,6 +146,7 @@ type ManualEntryForm = typeof manualEntrySchema;
 export default function CashFlow() {
     const { tenantId } = useAuth();
     const [monthDate, setMonthDate] = useState(() => new Date());
+    const [dayDate, setDayDate] = useState(() => new Date());
     const [allRows, setAllRows] = useState<LedgerRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [typeFilter, setTypeFilter] = useState<'todos' | 'entrada' | 'saida'>('todos');
@@ -238,8 +245,16 @@ export default function CashFlow() {
     const monthLabel = monthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const changeMonth = (delta: number) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + delta, 1));
 
+    const changeDay = (delta: number) => setDayDate(prev => {
+        const next = new Date(prev);
+        next.setDate(next.getDate() + delta);
+        return next;
+    });
+    const dayDateStr = toDateStr(dayDate);
+    const isViewingToday = dayDateStr === toDateStr(new Date());
+    const dayLabel = isViewingToday ? 'Hoje' : dayDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+
     const today = new Date();
-    const todayStr = toDateStr(today);
     const dayOfWeek = today.getDay();
     const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const monday = new Date(today);
@@ -249,7 +264,7 @@ export default function CashFlow() {
     const currentMonthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
     const currentMonthEnd = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
 
-    const dayStat = computeStats(allRows, todayStr, todayStr);
+    const dayStat = computeStats(allRows, dayDateStr, dayDateStr);
     const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday));
     const currentMonthStat = computeStats(allRows, currentMonthStart, currentMonthEnd);
 
@@ -310,9 +325,19 @@ export default function CashFlow() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
-                    <div className="flex items-center gap-2 text-gray-600 mb-1">
-                        <CalendarDays className="w-4 h-4" />
-                        <p className="text-xs sm:text-sm">Hoje</p>
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 text-gray-600">
+                            <CalendarDays className="w-4 h-4" />
+                            <p className="text-xs sm:text-sm capitalize">{dayLabel}</p>
+                        </div>
+                        <div className="flex items-center -mr-1.5">
+                            <button type="button" onClick={() => changeDay(-1)} className="p-1 hover:bg-white/60 rounded-lg transition-colors touch-manipulation" aria-label="Dia anterior">
+                                <ChevronLeft className="w-4 h-4 text-primary-cyan" />
+                            </button>
+                            <button type="button" onClick={() => changeDay(1)} className="p-1 hover:bg-white/60 rounded-lg transition-colors touch-manipulation" aria-label="Próximo dia">
+                                <ChevronRight className="w-4 h-4 text-primary-cyan" />
+                            </button>
+                        </div>
                     </div>
                     <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(dayStat.saldo)}</p>
                     {!loading && (
@@ -321,7 +346,19 @@ export default function CashFlow() {
                             <span className="text-red-500">-{formatCurrency(dayStat.saidas)}</span>
                         </p>
                     )}
-                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(dayStat)}</p>}
+                    {!loading && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            {statSubtitle(dayStat)}
+                            {!isViewingToday && (
+                                <>
+                                    {' · '}
+                                    <button type="button" onClick={() => setDayDate(new Date())} className="text-primary-cyan hover:underline">
+                                        voltar para hoje
+                                    </button>
+                                </>
+                            )}
+                        </p>
+                    )}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
