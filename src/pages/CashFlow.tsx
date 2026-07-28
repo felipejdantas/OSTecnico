@@ -118,15 +118,24 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
     return [...osRows, ...saleRows, ...cashRows];
 }
 
+// OS/Venda only actually become cash once marked Faturado — until then they're a
+// receivable, not money in hand, so they're excluded from every total below (they
+// still show up in the ledger table with the "A Receber" badge for tracking).
+// Manual/compra cash_entries have no pending state, so they always count.
+function isRealized(r: LedgerRow) {
+    return r.origin === 'cash' || r.payment_status === 'pago';
+}
+
 function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodStats {
     const inRange = allRows.filter(r => r.date >= start && r.date <= end);
-    const entradas = inRange.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
-    const saidas = inRange.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
+    const realized = inRange.filter(isRealized);
+    const entradas = realized.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
+    const saidas = realized.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
     return {
         entradas, saidas, saldo: entradas - saidas,
-        osCount: inRange.filter(r => r.origin === 'os').length,
-        salesCount: inRange.filter(r => r.origin === 'venda').length,
-        entryCount: inRange.filter(r => r.origin === 'cash').length,
+        osCount: realized.filter(r => r.origin === 'os').length,
+        salesCount: realized.filter(r => r.origin === 'venda').length,
+        entryCount: realized.filter(r => r.origin === 'cash').length,
     };
 }
 
@@ -274,8 +283,9 @@ export default function CashFlow() {
         .filter(r => r.date >= browsedMonthStart && r.date <= browsedMonthEnd)
         .sort((a, b) => b.date.localeCompare(a.date));
 
-    const monthEntradas = rows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
-    const monthSaidas = rows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
+    const realizedRows = rows.filter(isRealized);
+    const monthEntradas = realizedRows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
+    const monthSaidas = realizedRows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
     const monthSaldo = monthEntradas - monthSaidas;
 
     const filteredRows = rows.filter(r => {
@@ -498,9 +508,9 @@ export default function CashFlow() {
                                 </tbody>
                                 <tfoot>
                                     <tr className="bg-gray-50 font-bold">
-                                        <td className="px-6 py-3" colSpan={5}>Saldo do filtro</td>
-                                        <td className={`px-6 py-3 text-right ${filteredRows.reduce((s, r) => s + r.amount, 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                            {formatCurrency(filteredRows.reduce((s, r) => s + r.amount, 0))}
+                                        <td className="px-6 py-3" colSpan={5}>Saldo do filtro (faturado)</td>
+                                        <td className={`px-6 py-3 text-right ${filteredRows.filter(isRealized).reduce((s, r) => s + r.amount, 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                            {formatCurrency(filteredRows.filter(isRealized).reduce((s, r) => s + r.amount, 0))}
                                         </td>
                                         <td />
                                     </tr>
