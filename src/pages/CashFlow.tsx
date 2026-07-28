@@ -23,7 +23,7 @@ type LedgerRow = {
     source?: 'manual' | 'compra' | 'nfe';
 };
 
-type PeriodStats = { entradas: number; saidas: number; saldo: number; osCount: number; salesCount: number; entryCount: number };
+type PeriodStats = { entradas: number; saidas: number; saldo: number };
 
 // Fetches every OS/Venda/lançamento the tenant has and resolves each one's "effective"
 // date (billing_date overrides completed_date/sale_date when set). Everything below —
@@ -131,12 +131,7 @@ function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodS
     const realized = inRange.filter(isRealized);
     const entradas = realized.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
     const saidas = realized.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
-    return {
-        entradas, saidas, saldo: entradas - saidas,
-        osCount: realized.filter(r => r.origin === 'os').length,
-        salesCount: realized.filter(r => r.origin === 'venda').length,
-        entryCount: realized.filter(r => r.origin === 'cash').length,
-    };
+    return { entradas, saidas, saldo: entradas - saidas };
 }
 
 // Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the date
@@ -295,14 +290,6 @@ export default function CashFlow() {
         return true;
     });
 
-    const statSubtitle = (stat: PeriodStats) => {
-        const parts = [];
-        if (stat.osCount > 0) parts.push(`${stat.osCount} OS`);
-        if (stat.salesCount > 0) parts.push(`${stat.salesCount} venda${stat.salesCount !== 1 ? 's' : ''}`);
-        if (stat.entryCount > 0) parts.push(`${stat.entryCount} lanç.`);
-        return parts.length > 0 ? parts.join(' · ') : 'Sem movimentação';
-    };
-
     const originBadge = (row: LedgerRow) => {
         if (row.origin === 'os') return <span className="inline-flex items-center gap-1.5 text-primary-cyan"><FileText className="w-4 h-4" />{row.label}</span>;
         if (row.origin === 'venda') return <span className="inline-flex items-center gap-1.5 text-purple-600"><ShoppingCart className="w-4 h-4" />{row.label}</span>;
@@ -356,17 +343,11 @@ export default function CashFlow() {
                             <span className="text-red-500">-{formatCurrency(dayStat.saidas)}</span>
                         </p>
                     )}
-                    {!loading && (
+                    {!loading && !isViewingToday && (
                         <p className="text-xs text-gray-500 mt-0.5">
-                            {statSubtitle(dayStat)}
-                            {!isViewingToday && (
-                                <>
-                                    {' · '}
-                                    <button type="button" onClick={() => setDayDate(new Date())} className="text-primary-cyan hover:underline">
-                                        voltar para hoje
-                                    </button>
-                                </>
-                            )}
+                            <button type="button" onClick={() => setDayDate(new Date())} className="text-primary-cyan hover:underline">
+                                voltar para hoje
+                            </button>
                         </p>
                     )}
                 </Card>
@@ -382,7 +363,6 @@ export default function CashFlow() {
                             <span className="text-red-500">-{formatCurrency(weekStat.saidas)}</span>
                         </p>
                     )}
-                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(weekStat)}</p>}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
                     <div className="flex items-center gap-2 text-gray-600 mb-1">
@@ -396,7 +376,6 @@ export default function CashFlow() {
                             <span className="text-red-500">-{formatCurrency(currentMonthStat.saidas)}</span>
                         </p>
                     )}
-                    {!loading && <p className="text-xs text-gray-500 mt-0.5">{statSubtitle(currentMonthStat)}</p>}
                 </Card>
             </div>
 
