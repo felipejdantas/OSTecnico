@@ -114,27 +114,35 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
         setWarrantyDays(undefined);
     };
 
-    // Re-pulls this line's warranty from the product's current cadastro value —
-    // items snapshot warranty_days when added (like unit_price), so editing the
-    // product afterward doesn't touch existing OS lines until this is used.
-    const syncWarranty = async (index: number) => {
+    // Re-pulls this line's name/price/warranty from the product's current cadastro
+    // record — items snapshot these fields when added, so editing the product
+    // afterward (description, valor, garantia...) doesn't touch existing OS lines
+    // until this is used. Quantity is left alone (stock was already deducted for it).
+    const syncFromProduct = async (index: number) => {
         const item = items[index];
         const product = products.find(p => p.id === item.product_id);
         if (!product) return;
 
+        const updatedFields = {
+            product_name: product.name,
+            unit_price: product.sale_price,
+            warranty_days: product.warranty_days,
+        };
+
         if (orderId && item.id) {
             const { error } = await supabase
                 .from('service_order_items')
-                .update({ warranty_days: product.warranty_days })
+                .update(updatedFields)
                 .eq('id', item.id);
             if (error) {
-                console.error('Error syncing warranty:', error);
+                console.error('Error syncing item from product:', error);
                 return;
             }
+            await invalidateApproval();
         }
 
-        onChange(items.map((it, i) => (i === index ? { ...it, warranty_days: product.warranty_days } : it)));
-        toast.success('Garantia atualizada a partir do cadastro do produto.');
+        onChange(items.map((it, i) => (i === index ? { ...it, ...updatedFields } : it)));
+        toast.success('Peça atualizada a partir do cadastro do produto.');
     };
 
     const removeItem = async (index: number) => {
@@ -230,8 +238,8 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
                                     <button
                                         type="button"
                                         disabled={disabled}
-                                        title="Atualizar garantia a partir do cadastro do produto"
-                                        onClick={() => syncWarranty(index)}
+                                        title="Atualizar nome, preço e garantia a partir do cadastro do produto"
+                                        onClick={() => syncFromProduct(index)}
                                         className="p-2 text-gray-400 hover:text-primary-cyan hover:bg-primary-cyan/10 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
                                     >
                                         <RefreshCw className="w-4 h-4" />
