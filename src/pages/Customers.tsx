@@ -11,6 +11,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { CustomerHistoryModal } from '../components/CustomerHistoryModal';
+import { CustomerDetailModal } from '../components/CustomerDetailModal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -57,6 +58,7 @@ export default function Customers() {
     const [customers, setCustomers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
     const [historyCustomer, setHistoryCustomer] = useState<{ id: string; name: string } | null>(null);
+    const [viewingCustomer, setViewingCustomer] = useState<any | null>(null);
     const [step, setStep] = useState<Step>('basicos');
     const { register, handleSubmit, setValue, reset, watch, trigger, formState: { errors } } = useForm<CustomerForm>({
         resolver: zodResolver(customerSchema),
@@ -455,16 +457,21 @@ export default function Customers() {
                                             <div className="flex items-center gap-3">
                                                 <button
                                                     type="button"
-                                                    title="Clique para atualizar"
-                                                    onClick={() => handleEdit(customer)}
+                                                    title="Ver detalhes"
+                                                    onClick={() => setViewingCustomer(customer)}
                                                     className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0 hover:bg-primary-cyan/20 transition-colors cursor-pointer"
                                                 >
                                                     <User className="w-4 h-4" />
                                                 </button>
-                                                <div>
+                                                <button
+                                                    type="button"
+                                                    title="Ver detalhes"
+                                                    onClick={() => setViewingCustomer(customer)}
+                                                    className="text-left hover:underline"
+                                                >
                                                     <div className="font-semibold">{customer.name}</div>
                                                     <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>
-                                                </div>
+                                                </button>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -529,16 +536,21 @@ export default function Customers() {
                                     <div className="flex items-center gap-3 flex-1 min-w-0">
                                         <button
                                             type="button"
-                                            title="Toque para atualizar"
-                                            onClick={() => handleEdit(customer)}
+                                            title="Ver detalhes"
+                                            onClick={() => setViewingCustomer(customer)}
                                             className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0 hover:bg-primary-cyan/20 transition-colors cursor-pointer"
                                         >
                                             <User className="w-5 h-5" />
                                         </button>
-                                        <div className="min-w-0 flex-1">
+                                        <button
+                                            type="button"
+                                            title="Ver detalhes"
+                                            onClick={() => setViewingCustomer(customer)}
+                                            className="min-w-0 flex-1 text-left"
+                                        >
                                             <div className="font-semibold text-gray-900 truncate">{customer.name}</div>
                                             <div className="text-xs text-gray-500">{customer.trade_name || customer.cpf}</div>
-                                        </div>
+                                        </button>
                                     </div>
                                     <DropdownMenu
                                         items={[
@@ -582,6 +594,16 @@ export default function Customers() {
                     )}
                 </div>
             </Card>
+
+            {viewingCustomer && (
+                <CustomerDetailModal
+                    customer={viewingCustomer}
+                    onClose={() => setViewingCustomer(null)}
+                    onEdit={() => { const c = viewingCustomer; setViewingCustomer(null); handleEdit(c); }}
+                    onDelete={() => { handleDelete(viewingCustomer.id, viewingCustomer.name); setViewingCustomer(null); }}
+                    onViewHistory={() => { const c = viewingCustomer; setViewingCustomer(null); setHistoryCustomer({ id: c.id, name: c.name }); }}
+                />
+            )}
 
             {historyCustomer && (
                 <CustomerHistoryModal
