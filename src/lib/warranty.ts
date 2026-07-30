@@ -34,3 +34,16 @@ export function getWarrantyInfo(
         daysRemaining,
     };
 }
+
+/**
+ * Client-facing warranty label (PDF, link público) — converts to months since
+ * that's how a shop customer expects to read it ("3 meses", not "90 dias").
+ * Internal screens (Dashboard, Editar/Nova OS, WarrantyBadge) keep raw days —
+ * that's what techs enter/compare against dates, so leave those calls alone.
+ */
+export function formatWarrantyForClient(days: number | null | undefined): string | null {
+    if (!days || days <= 0) return null;
+    if (days < 30) return `${days} ${days === 1 ? 'dia' : 'dias'}`;
+    const months = Math.round(days / 30);
+    return `${months} ${months === 1 ? 'mês' : 'meses'}`;
+}

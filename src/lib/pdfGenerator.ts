@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getStatusConfig } from './orderStatus';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from './orderFinance';
+import { formatWarrantyForClient } from './warranty';
 
 type ChecklistItem = {
     label: string;
@@ -309,7 +310,7 @@ export async function generateOSPDF(osData: OSData) {
                 String(s.quantity),
                 formatCurrency(s.price),
                 formatCurrency(s.quantity * s.price),
-                company?.warranty_days ? `${company.warranty_days} dias` : '-',
+                formatWarrantyForClient(company?.warranty_days) ?? '-',
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },
@@ -330,7 +331,7 @@ export async function generateOSPDF(osData: OSData) {
                 String(i.quantity),
                 formatCurrency(i.unit_price),
                 formatCurrency(i.quantity * i.unit_price),
-                i.warranty_days ? `${i.warranty_days} dias` : (company?.warranty_days ? `${company.warranty_days} dias` : '-'),
+                formatWarrantyForClient(i.warranty_days || company?.warranty_days) ?? '-',
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },
@@ -403,7 +404,7 @@ export async function generateOSPDF(osData: OSData) {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(9);
             doc.setTextColor(0);
-            doc.text(`Condições da garantia${company?.warranty_days ? ` (${company.warranty_days} dias)` : ''}:`, 15, yPos);
+            doc.text(`Condições da garantia${formatWarrantyForClient(company?.warranty_days) ? ` (${formatWarrantyForClient(company?.warranty_days)})` : ''}:`, 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
             if (company?.warranty_text) {
@@ -717,7 +718,7 @@ export async function generateSalesPDF(salesData: SalesData) {
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(9);
             doc.setTextColor(0);
-            doc.text(`Condições da garantia${salesData.warranty_days ? ` (${salesData.warranty_days} dias)` : ''}:`, 15, yPos);
+            doc.text(`Condições da garantia${formatWarrantyForClient(salesData.warranty_days) ? ` (${formatWarrantyForClient(salesData.warranty_days)})` : ''}:`, 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
             if (salesData.warranty_notes) {

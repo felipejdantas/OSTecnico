@@ -2,6 +2,7 @@ import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from '../lib/orderFinance';
+import { formatWarrantyForClient } from '../lib/warranty';
 
 type LineItem = { name: string; quantity: number; unit_price?: number; price?: number; description?: string; warranty_days?: number | null };
 
@@ -51,9 +52,9 @@ export function PublicBudget({
                                 <div>
                                     <div className="font-medium text-gray-800">{s.name}</div>
                                     {s.description && <div className="text-xs text-gray-500">{s.description}</div>}
-                                    {warrantyDays ? (
-                                        <div className="text-xs text-gray-400 mt-0.5">Garantia: {warrantyDays} dias</div>
-                                    ) : null}
+                                    {formatWarrantyForClient(warrantyDays) && (
+                                        <div className="text-xs text-gray-400 mt-0.5">Garantia: {formatWarrantyForClient(warrantyDays)}</div>
+                                    )}
                                 </div>
                                 <div className="text-gray-700 whitespace-nowrap ml-2">{formatCurrency(s.quantity * (s.price ?? 0))}</div>
                             </div>
@@ -73,7 +74,7 @@ export function PublicBudget({
                                 <div>
                                     <div className="text-gray-800">{it.name} <span className="text-gray-400">x{it.quantity}</span></div>
                                     <div className="text-xs text-gray-400 mt-0.5">
-                                        Garantia: {it.warranty_days ? `${it.warranty_days} dias` : (warrantyDays ? `${warrantyDays} dias` : '-')}
+                                        Garantia: {formatWarrantyForClient(it.warranty_days || warrantyDays) ?? '-'}
                                     </div>
                                 </div>
                                 <div className="text-gray-700 whitespace-nowrap ml-2">{formatCurrency(it.quantity * (it.unit_price ?? 0))}</div>
@@ -131,7 +132,7 @@ export function PublicBudget({
                     <div className="flex gap-2">
                         <ShieldCheck className="w-4 h-4 text-primary-cyan flex-shrink-0 mt-0.5" />
                         <div>
-                            <span className="font-semibold text-gray-900">{warrantyDays ? `${warrantyDays} dias corridos` : 'Condições da garantia'}</span>
+                            <span className="font-semibold text-gray-900">{formatWarrantyForClient(warrantyDays) ? `${formatWarrantyForClient(warrantyDays)} corridos` : 'Condições da garantia'}</span>
                             {warrantyText && <p className="text-gray-600 text-xs mt-0.5">{warrantyText}</p>}
                         </div>
                     </div>
