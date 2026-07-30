@@ -45,7 +45,8 @@ type ServiceOrder = {
 type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
 type RankedRow = { label: string; count: number; revenue: number };
 type LowStockProduct = { id: string; name: string; unit: string; stock_quantity: number; min_stock_alert: number };
-type MonthCount = { label: string; count: number };
+type TrendPoint = { label: string; count: number };
+type TrendGranularity = 'dia' | 'semana' | 'mes';
 
 // Single-series horizontal bar (magnitude, one hue) — no legend needed, the
 // card title already names the series. Direct-labeled since there are only ~5 rows.
@@ -98,7 +99,7 @@ function ServicesPie({ rows }: { rows: RankedRow[] }) {
                     <div key={s.label} className="flex items-center gap-2 text-xs">
                         <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
                         <span className="text-gray-600 truncate flex-1 min-w-0">{s.label}</span>
-                        <span className="text-gray-400 flex-shrink-0">{s.count}x</span>
+                        <span className="text-gray-400 flex-shrink-0">{s.count}</span>
                         <span className="text-gray-300 flex-shrink-0 w-10 text-right">{Math.round((s.count / total) * 100)}%</span>
                     </div>
                 ))}
@@ -134,7 +135,7 @@ function StockMeterRow({ product }: { product: LowStockProduct }) {
 // down," which a line reads at a glance; only the current month is
 // direct-labeled (marks-and-anatomy: never a number on every point), the
 // rest live in each dot's hover/focus title.
-function TrendLine({ months }: { months: MonthCount[] }) {
+function TrendLine({ months }: { months: TrendPoint[] }) {
     const width = 800;
     const height = 260;
     const padX = 30;
@@ -160,7 +161,7 @@ function TrendLine({ months }: { months: MonthCount[] }) {
                     <circle cx={p.x} cy={p.y} r={6} fill="#0891b2" stroke="#fff" strokeWidth={2.5}>
                         <title>{`${p.label}: ${p.count} OS`}</title>
                     </circle>
-                    <text x={p.x} y={height - 10} textAnchor="middle" fontSize={14} fill="#898781" className="capitalize">{p.label}</text>
+                    <text x={p.x} y={height - 10} textAnchor="middle" fontSize={12} fill="#898781" className="capitalize">{p.label}</text>
                 </g>
             ))}
             <text x={last.x} y={last.y - 16} textAnchor="middle" fontSize={18} fontWeight={700} fill="#1f2937">{last.count}</text>
@@ -180,6 +181,7 @@ export default function Dashboard() {
     const [topServicesMonth, setTopServicesMonth] = useState<RankedRow[]>([]);
     const [topPartsMonth, setTopPartsMonth] = useState<RankedRow[]>([]);
     const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
+    const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>('mes');
     const navigate = useNavigate();
 
     const openList = (filter: 'todos' | 'em_andamento' | OrderStatus) => {
@@ -608,22 +610,58 @@ export default function Dashboard() {
 
     const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
 
-    // OS volume for the last 6 months, derived from what's already loaded —
-    // no extra round trip needed since `orders` already holds full history.
-    const monthlyVolume = useMemo<MonthCount[]>(() => {
-        const months: MonthCount[] = [];
+    // OS volume trend, derived from what's already loaded (`orders` already
+    // holds full history) — granularity is view-only, no extra round trip.
+    const ddmm = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    const startOfWeek = (d: Date) => {
+        const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const day = date.getDay();
+        date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day)); // Monday
+        return date;
+    };
+
+    const trendData = useMemo<TrendPoint[]>(() => {
         const now = new Date();
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
-            const count = orders.filter(o => {
-                const created = new Date(o.created_at);
-                return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
-            }).length;
-            months.push({ label, count });
+        const points: TrendPoint[] = [];
+
+        if (trendGranularity === 'mes') {
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                const count = orders.filter(o => {
+                    const c = new Date(o.created_at);
+                    return c.getFullYear() === d.getFullYear() && c.getMonth() === d.getMonth();
+                }).length;
+                points.push({ label, count });
+            }
+        } else if (trendGranularity === 'semana') {
+            const thisWeekStart = startOfWeek(now);
+            for (let i = 7; i >= 0; i--) {
+                const weekStart = new Date(thisWeekStart);
+                weekStart.setDate(weekStart.getDate() - i * 7);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekEnd.getDate() + 7);
+                const count = orders.filter(o => {
+                    const c = new Date(o.created_at);
+                    return c >= weekStart && c < weekEnd;
+                }).length;
+                points.push({ label: ddmm(weekStart), count });
+            }
+        } else {
+            for (let i = 9; i >= 0; i--) {
+                const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+                const nextDay = new Date(day);
+                nextDay.setDate(nextDay.getDate() + 1);
+                const count = orders.filter(o => {
+                    const c = new Date(o.created_at);
+                    return c >= day && c < nextDay;
+                }).length;
+                points.push({ label: ddmm(day), count });
+            }
         }
-        return months;
-    }, [orders]);
+
+        return points;
+    }, [orders, trendGranularity]);
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -957,8 +995,24 @@ export default function Dashboard() {
             </div>
 
             <Card>
-                <h3 className="font-semibold text-base sm:text-lg mb-4">OS abertas por mês</h3>
-                <TrendLine months={monthlyVolume} />
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-base sm:text-lg">
+                        OS abertas por {trendGranularity === 'dia' ? 'dia' : trendGranularity === 'semana' ? 'semana' : 'mês'}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs">
+                        {(['dia', 'semana', 'mes'] as const).map(g => (
+                            <button
+                                key={g}
+                                type="button"
+                                onClick={() => setTrendGranularity(g)}
+                                className={trendGranularity === g ? 'text-primary-cyan font-semibold' : 'text-gray-400 hover:text-gray-600'}
+                            >
+                                {g === 'dia' ? 'Dia' : g === 'semana' ? 'Semana' : 'Mês'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <TrendLine months={trendData} />
             </Card>
 
             <div className="flex justify-end gap-2">
