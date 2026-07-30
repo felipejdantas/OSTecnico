@@ -45,13 +45,17 @@ export default function SalesOrders() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<SaleFormInput, any, SaleForm>({
+    const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<SaleFormInput, any, SaleForm>({
         resolver: zodResolver(saleSchema),
         defaultValues: {
             saleDate: new Date().toISOString().slice(0, 10),
             discountType: 'fixed',
         },
     });
+    const watchedDiscountType = watch('discountType');
+    const watchedDiscountValue = watch('discountValue') as number | undefined;
+    const watchedFreight = watch('freight') as number | undefined;
+    const watchedOtherCosts = watch('otherCosts') as number | undefined;
 
     useEffect(() => {
         if (tenantId) fetchAll();
@@ -290,6 +294,14 @@ export default function SalesOrders() {
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
+    const { discountAmount, total: grandTotal } = calculateOrderTotal({
+        itemsTotal: itemsSubtotal,
+        servicesTotal: 0,
+        discountType: watchedDiscountType || 'fixed',
+        discountValue: watchedDiscountValue || 0,
+        freight: watchedFreight || 0,
+        urgencyFee: watchedOtherCosts || 0,
+    });
 
     const filteredSales = sales.filter(s =>
         String(s.sale_number).includes(searchTerm) ||
@@ -406,9 +418,33 @@ export default function SalesOrders() {
                             <Input label="Frete (R$)" type="number" step="0.01" {...register('freight')} error={errors.freight?.message} />
                             <Input label="Outras Despesas (R$)" type="number" step="0.01" {...register('otherCosts')} error={errors.otherCosts?.message} />
                         </div>
-                        <div className="flex justify-between pt-4 mt-4 border-t border-gray-100 font-semibold text-dark">
-                            <span>Total dos itens</span>
-                            <span>{formatCurrency(itemsSubtotal)}</span>
+                        <div className="pt-4 mt-4 border-t border-gray-100 space-y-1.5 text-sm">
+                            <div className="flex justify-between text-gray-600">
+                                <span>Subtotal dos itens</span>
+                                <span>{formatCurrency(itemsSubtotal)}</span>
+                            </div>
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between text-gray-600">
+                                    <span>Desconto</span>
+                                    <span>- {formatCurrency(discountAmount)}</span>
+                                </div>
+                            )}
+                            {(watchedFreight || 0) > 0 && (
+                                <div className="flex justify-between text-gray-600">
+                                    <span>Frete</span>
+                                    <span>{formatCurrency(watchedFreight || 0)}</span>
+                                </div>
+                            )}
+                            {(watchedOtherCosts || 0) > 0 && (
+                                <div className="flex justify-between text-gray-600">
+                                    <span>Outras Despesas</span>
+                                    <span>{formatCurrency(watchedOtherCosts || 0)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between font-semibold text-dark text-base pt-1.5 border-t border-gray-100">
+                                <span>Total</span>
+                                <span>{formatCurrency(grandTotal)}</span>
+                            </div>
                         </div>
                     </Card>
 
