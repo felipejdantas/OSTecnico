@@ -221,6 +221,8 @@ export default function ClientSignature() {
                 discount_value: os.discount_value || 0,
                 freight: os.freight || 0,
                 urgency_fee: os.urgency_fee || 0,
+                warranty_days: os.warranty_days,
+                warranty_notes: os.warranty_notes,
                 company: {
                     company_name: os.company_name,
                     cnpj: os.company_cnpj,
@@ -446,7 +448,7 @@ export default function ClientSignature() {
                     pixKey={os.company_pix_key}
                     bankDetails={os.company_bank_details}
                     companyPhone={os.company_phone}
-                    warrantyDays={os.company_warranty_days}
+                    warrantyDays={os.warranty_days || os.company_warranty_days}
                     warrantyText={os.company_warranty_text}
                 />
 

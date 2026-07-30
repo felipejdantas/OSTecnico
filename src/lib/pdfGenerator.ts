@@ -77,6 +77,10 @@ type OSData = {
     discount_value?: number;
     freight?: number;
     urgency_fee?: number;
+    // The order's own warranty (set per-OS in Nova/Editar OS) — takes priority
+    // over the shop-wide company.warranty_days default used only as a fallback.
+    warranty_days?: number | null;
+    warranty_notes?: string | null;
     company?: CompanyInfo;
 };
 
@@ -310,7 +314,7 @@ export async function generateOSPDF(osData: OSData) {
                 String(s.quantity),
                 formatCurrency(s.price),
                 formatCurrency(s.quantity * s.price),
-                formatWarrantyForClient(company?.warranty_days) ?? '-',
+                formatWarrantyForClient(osData.warranty_days || company?.warranty_days) ?? '-',
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },
@@ -331,7 +335,7 @@ export async function generateOSPDF(osData: OSData) {
                 String(i.quantity),
                 formatCurrency(i.unit_price),
                 formatCurrency(i.quantity * i.unit_price),
-                formatWarrantyForClient(i.warranty_days || company?.warranty_days) ?? '-',
+                formatWarrantyForClient(i.warranty_days || osData.warranty_days || company?.warranty_days) ?? '-',
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },
@@ -380,7 +384,8 @@ export async function generateOSPDF(osData: OSData) {
     }
 
     // ---- Payment & warranty info ----
-    if (company?.pix_key || company?.bank_details || company?.warranty_text || company?.warranty_days) {
+    const effectiveWarrantyDays = osData.warranty_days || company?.warranty_days;
+    if (company?.pix_key || company?.bank_details || company?.warranty_text || effectiveWarrantyDays) {
         if (company?.pix_key || company?.bank_details) {
             ensureSpace(25);
             yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Pagamento');
@@ -398,15 +403,20 @@ export async function generateOSPDF(osData: OSData) {
             }
             yPos += 5;
         }
-        if (company?.warranty_text || company?.warranty_days) {
+        if (company?.warranty_text || effectiveWarrantyDays) {
             ensureSpace(20);
             yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Garantia');
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(9);
             doc.setTextColor(0);
-            doc.text(`Condições da garantia${formatWarrantyForClient(company?.warranty_days) ? ` (${formatWarrantyForClient(company?.warranty_days)})` : ''}:`, 15, yPos);
+            doc.text(`Condições da garantia${formatWarrantyForClient(effectiveWarrantyDays) ? ` (${formatWarrantyForClient(effectiveWarrantyDays)})` : ''}:`, 15, yPos);
             yPos += 5;
             doc.setFont('helvetica', 'normal');
+            if (osData.warranty_notes) {
+                const notesLines = doc.splitTextToSize(osData.warranty_notes, pageWidth - 30);
+                doc.text(notesLines, 15, yPos);
+                yPos += notesLines.length * 5 + 2;
+            }
             if (company?.warranty_text) {
                 const warrantyLines = doc.splitTextToSize(company.warranty_text, pageWidth - 30);
                 doc.text(warrantyLines, 15, yPos);

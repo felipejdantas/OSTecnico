@@ -345,6 +345,8 @@ export default function Dashboard() {
                 discount_value: data.discount_value || 0,
                 freight: data.freight || 0,
                 urgency_fee: data.urgency_fee || 0,
+                warranty_days: data.warranty_days,
+                warranty_notes: data.warranty_notes,
                 company: companyData || undefined,
             });
         } catch (error: any) {
