@@ -64,6 +64,102 @@ function RankedBarRow({ label, count, maxCount, suffix }: { label: string; count
     );
 }
 
+// Validated adjacent-safe categorical slots (CVD-checked order) — only used
+// here, where multiple named segments share one bar, so identity actually
+// needs distinct hues instead of one magnitude hue.
+const CATEGORICAL_SLOTS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
+
+// Part-to-whole (composition), not ranking: one horizontal bar split into
+// segments sized by share, 2px surface gaps between them, legend carries the
+// identity (never color-alone) since there are 2+ series in this one chart.
+function CompositionBar({ rows }: { rows: RankedRow[] }) {
+    const total = rows.reduce((sum, r) => sum + r.count, 0);
+    if (total === 0) return null;
+    return (
+        <div>
+            <div className="flex h-6 rounded-md overflow-hidden gap-[2px]">
+                {rows.map((r, i) => (
+                    <div
+                        key={r.label}
+                        title={`${r.label}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
+                        style={{ width: `${(r.count / total) * 100}%`, backgroundColor: CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length] }}
+                    />
+                ))}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
+                {rows.map((r, i) => (
+                    <div key={r.label} className="flex items-center gap-1.5 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length] }} />
+                        <span className="text-gray-600 truncate max-w-[140px]">{r.label}</span>
+                        <span className="text-gray-400">{r.count}x</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// Meter: a ratio against a limit (stock vs. its minimum threshold), not a
+// ranking — the fill's severity deepens the further under the line it sits,
+// and the tick marks exactly where "minimum" is so the gap is legible at a glance.
+function StockMeterRow({ product }: { product: LowStockProduct }) {
+    const { name, unit, stock_quantity, min_stock_alert } = product;
+    const scaleMax = Math.max(min_stock_alert * 1.4, stock_quantity, 1);
+    const fillPct = Math.max((stock_quantity / scaleMax) * 100, stock_quantity > 0 ? 3 : 0);
+    const tickPct = Math.min((min_stock_alert / scaleMax) * 100, 100);
+    const severity = stock_quantity === 0 ? '#d03b3b' : stock_quantity <= min_stock_alert / 2 ? '#ec835a' : '#fab219';
+    return (
+        <div className="text-sm">
+            <div className="flex justify-between gap-2 mb-1">
+                <span className="text-gray-700 truncate">{name}</span>
+                <span className="text-gray-500 flex-shrink-0">{stock_quantity} {unit} <span className="text-gray-300">/ mín {min_stock_alert}</span></span>
+            </div>
+            <div className="relative h-2.5 rounded-full bg-red-50 overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${fillPct}%`, backgroundColor: severity }} />
+                <div className="absolute top-0 bottom-0 w-px bg-gray-400/70" style={{ left: `${tickPct}%` }} title={`Mínimo: ${min_stock_alert} ${unit}`} />
+            </div>
+        </div>
+    );
+}
+
+// Trend over time (line, not columns) — the job here is "is it going up or
+// down," which a line reads at a glance; only the current month is
+// direct-labeled (marks-and-anatomy: never a number on every point), the
+// rest live in each dot's hover/focus title.
+function TrendLine({ months }: { months: MonthCount[] }) {
+    const width = 300;
+    const height = 90;
+    const padX = 12;
+    const padY = 16;
+    const maxCount = Math.max(...months.map(m => m.count), 1);
+    const stepX = (width - padX * 2) / Math.max(months.length - 1, 1);
+    const points = months.map((m, i) => ({
+        x: padX + i * stepX,
+        y: padY + (1 - m.count / maxCount) * (height - padY * 2),
+        ...m,
+    }));
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padY} L ${points[0].x} ${height - padY} Z`;
+    const last = points[points.length - 1];
+
+    return (
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height: `${height}px` }}>
+            <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="#e1e0d9" strokeWidth={1} />
+            <path d={areaPath} fill="#0891b2" opacity={0.1} />
+            <path d={linePath} fill="none" stroke="#0891b2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            {points.map(p => (
+                <g key={p.label}>
+                    <circle cx={p.x} cy={p.y} r={4} fill="#0891b2" stroke="#fff" strokeWidth={2}>
+                        <title>{`${p.label}: ${p.count} OS`}</title>
+                    </circle>
+                    <text x={p.x} y={height - 2} textAnchor="middle" fontSize={9} fill="#898781" className="capitalize">{p.label}</text>
+                </g>
+            ))}
+            <text x={last.x} y={last.y - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#1f2937">{last.count}</text>
+        </svg>
+    );
+}
+
 export default function Dashboard() {
     const { tenantId } = useAuth();
     const [orders, setOrders] = useState<ServiceOrder[]>([]);
@@ -818,11 +914,7 @@ export default function Dashboard() {
                     {topServicesMonth.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhum serviço registrado este mês ainda.</p>
                     ) : (
-                        <div className="space-y-3">
-                            {topServicesMonth.map(row => (
-                                <RankedBarRow key={row.label} label={row.label} count={row.count} maxCount={topServicesMonth[0].count} suffix="x" />
-                            ))}
-                        </div>
+                        <CompositionBar rows={topServicesMonth} />
                     )}
                 </Card>
 
@@ -847,14 +939,9 @@ export default function Dashboard() {
                     {lowStockProducts.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhum produto abaixo do estoque mínimo.</p>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {lowStockProducts.map(p => (
-                                <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
-                                    <span className="text-gray-700 truncate">{p.name}</span>
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 flex-shrink-0">
-                                        {p.stock_quantity} {p.unit}
-                                    </span>
-                                </div>
+                                <StockMeterRow key={p.id} product={p} />
                             ))}
                         </div>
                     )}
@@ -862,19 +949,7 @@ export default function Dashboard() {
 
                 <Card>
                     <h3 className="font-semibold text-base sm:text-lg mb-4">OS abertas por mês</h3>
-                    <div className="flex items-end justify-between gap-2 h-28">
-                        {monthlyVolume.map(m => {
-                            const maxCount = Math.max(...monthlyVolume.map(x => x.count), 1);
-                            const heightPct = m.count > 0 ? Math.max((m.count / maxCount) * 100, 6) : 2;
-                            return (
-                                <div key={m.label} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
-                                    <span className="text-xs text-gray-500">{m.count}</span>
-                                    <div className="w-full rounded-t-md bg-primary-cyan/80" style={{ height: `${heightPct}%` }} />
-                                    <span className="text-xs text-gray-400 capitalize">{m.label}</span>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <TrendLine months={monthlyVolume} />
                 </Card>
             </div>
 
