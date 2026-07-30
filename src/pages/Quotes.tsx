@@ -20,6 +20,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency } from '../lib/orderFinance';
 import { generateQuotePDF } from '../lib/pdfGenerator';
 import { openWhatsApp, buildQuoteLink, buildQuoteMessage } from '../lib/shareLinks';
+import { matchesSearchFields } from '../lib/search';
 
 const quoteSchema = z.object({
     customerId: z.string().optional(),
@@ -499,7 +500,7 @@ export default function Quotes() {
 
     const filteredQuotes = quotes.filter(q =>
         String(q.quote_number).includes(searchTerm) ||
-        (q.customers?.name || q.guest_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+        matchesSearchFields([q.customers?.name, q.guest_name], searchTerm)
     );
 
     const isLocked = editingStatus?.status === 'convertido';

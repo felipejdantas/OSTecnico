@@ -12,6 +12,7 @@ import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { CustomerHistoryModal } from '../components/CustomerHistoryModal';
 import { CustomerDetailModal } from '../components/CustomerDetailModal';
+import { matchesSearchFields } from '../lib/search';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -276,8 +277,9 @@ export default function Customers() {
 
     const filteredCustomers = customers
         .filter(customer =>
-            customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            matchesSearchFields([customer.name, customer.trade_name, customer.company_name], searchTerm) ||
             customer.cpf?.includes(searchTerm) ||
+            customer.cnpj?.includes(searchTerm) ||
             customer.phone?.includes(searchTerm)
         )
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));

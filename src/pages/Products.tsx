@@ -13,6 +13,7 @@ import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { matchesSearchFields } from '../lib/search';
 
 const productSchema = z.object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
@@ -149,9 +150,7 @@ export default function Products() {
     };
 
     const filteredProducts = products.filter(product =>
-        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.category?.toLowerCase().includes(searchTerm.toLowerCase())
+        matchesSearchFields([product.name, product.sku, product.category], searchTerm)
     );
 
     const isLowStock = (p: Product) => p.stock_quantity <= p.min_stock_alert;

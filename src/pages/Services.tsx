@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { matchesSearchFields } from '../lib/search';
 
 const serviceSchema = z.object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
@@ -113,8 +114,7 @@ export default function Services() {
     };
 
     const filteredServices = services.filter(service =>
-        service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        service.description?.toLowerCase().includes(searchTerm.toLowerCase())
+        matchesSearchFields([service.name, service.description], searchTerm)
     );
 
     return (

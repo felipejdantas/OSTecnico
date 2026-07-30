@@ -16,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
 import { generateSalesPDF } from '../lib/pdfGenerator';
 import { openWhatsApp } from '../lib/shareLinks';
+import { matchesSearchFields } from '../lib/search';
 
 const saleSchema = z.object({
     customerId: z.string().min(1, 'Selecione um cliente'),
@@ -305,7 +306,7 @@ export default function SalesOrders() {
 
     const filteredSales = sales.filter(s =>
         String(s.sale_number).includes(searchTerm) ||
-        s.customers?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        matchesSearchFields([s.customers?.name], searchTerm)
     );
 
     return (

@@ -11,6 +11,7 @@ import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { matchesSearchFields } from '../lib/search';
 
 const supplierSchema = z.object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
@@ -113,7 +114,7 @@ export default function Suppliers() {
 
     const filteredSuppliers = suppliers
         .filter(s =>
-            s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            matchesSearchFields([s.name], searchTerm) ||
             s.phone?.includes(searchTerm) ||
             s.document?.includes(searchTerm)
         )

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X, FileText, Users, Package, Truck, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { matchesSearchFields } from '../lib/search';
 
 type ResultItem = { id: string; title: string; subtitle?: string; onSelect: () => void };
 type ResultGroup = { label: string; icon: typeof FileText; items: ResultItem[] };
@@ -57,26 +58,31 @@ export function QuickSearch({ isOpen, onClose }: Props) {
         setLoading(true);
         try {
             const isNumeric = /^\d+$/.test(q);
-            // Comma/parens have special meaning in PostgREST's .or() filter syntax —
-            // strip them so a search term can't break out of the intended filter.
-            const safe = q.replace(/[,()]/g, '');
 
+            // Fetched broadly per tenant (these tables are small for a repair
+            // shop) and matched client-side with matchesSearchFields, so this
+            // search is as forgiving as everywhere else in the app — accent
+            // insensitive and matching words in any order, not just one exact
+            // contiguous substring like a raw ilike would.
             const [osRes, customersRes, productsRes, suppliersRes] = await Promise.all([
                 isNumeric
                     ? supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', tenantId).eq('os_number', parseInt(q)).limit(5)
-                    : supabase.from('service_orders').select('id, os_number, equipment, customers (name)').eq('user_id', tenantId).or(`equipment.ilike.%${safe}%,brand.ilike.%${safe}%`).limit(5),
-                supabase.from('customers').select('id, name, cpf, phone').eq('user_id', tenantId).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,cpf.ilike.%${safe}%`).limit(5),
-                supabase.from('products').select('id, name, sku').eq('user_id', tenantId).or(`name.ilike.%${safe}%,sku.ilike.%${safe}%`).limit(5),
-                supabase.from('suppliers').select('id, name, phone').eq('user_id', tenantId).or(`name.ilike.%${safe}%,phone.ilike.%${safe}%`).limit(5),
+                    : supabase.from('service_orders').select('id, os_number, equipment, brand, customers (name)').eq('user_id', tenantId).limit(300),
+                supabase.from('customers').select('id, name, cpf, phone').eq('user_id', tenantId).limit(300),
+                supabase.from('products').select('id, name, sku').eq('user_id', tenantId).limit(300),
+                supabase.from('suppliers').select('id, name, phone').eq('user_id', tenantId).limit(300),
             ]);
 
             const newGroups: ResultGroup[] = [];
 
-            if ((osRes.data || []).length > 0) {
+            const osMatches = isNumeric
+                ? (osRes.data || [])
+                : (osRes.data || []).filter((o: any) => matchesSearchFields([o.equipment, o.brand], q));
+            if (osMatches.length > 0) {
                 newGroups.push({
                     label: 'Ordens de Serviço',
                     icon: FileText,
-                    items: (osRes.data || []).map((o: any) => ({
+                    items: osMatches.slice(0, 5).map((o: any) => ({
                         id: o.id,
                         title: `OS #${o.os_number}`,
                         subtitle: [o.customers?.name, o.equipment].filter(Boolean).join(' · '),
@@ -84,11 +90,14 @@ export function QuickSearch({ isOpen, onClose }: Props) {
                     })),
                 });
             }
-            if ((customersRes.data || []).length > 0) {
+            const customerMatches = (customersRes.data || []).filter((c: any) =>
+                matchesSearchFields([c.name], q) || c.phone?.includes(q) || c.cpf?.includes(q)
+            );
+            if (customerMatches.length > 0) {
                 newGroups.push({
                     label: 'Clientes',
                     icon: Users,
-                    items: (customersRes.data || []).map((c: any) => ({
+                    items: customerMatches.slice(0, 5).map((c: any) => ({
                         id: c.id,
                         title: c.name,
                         subtitle: c.phone || c.cpf || undefined,
@@ -96,11 +105,12 @@ export function QuickSearch({ isOpen, onClose }: Props) {
                     })),
                 });
             }
-            if ((productsRes.data || []).length > 0) {
+            const productMatches = (productsRes.data || []).filter((p: any) => matchesSearchFields([p.name, p.sku], q));
+            if (productMatches.length > 0) {
                 newGroups.push({
                     label: 'Produtos',
                     icon: Package,
-                    items: (productsRes.data || []).map((p: any) => ({
+                    items: productMatches.slice(0, 5).map((p: any) => ({
                         id: p.id,
                         title: p.name,
                         subtitle: p.sku || undefined,
@@ -108,11 +118,12 @@ export function QuickSearch({ isOpen, onClose }: Props) {
                     })),
                 });
             }
-            if ((suppliersRes.data || []).length > 0) {
+            const supplierMatches = (suppliersRes.data || []).filter((s: any) => matchesSearchFields([s.name], q) || s.phone?.includes(q));
+            if (supplierMatches.length > 0) {
                 newGroups.push({
                     label: 'Fornecedores',
                     icon: Truck,
-                    items: (suppliersRes.data || []).map((s: any) => ({
+                    items: supplierMatches.slice(0, 5).map((s: any) => ({
                         id: s.id,
                         title: s.name,
                         subtitle: s.phone || undefined,

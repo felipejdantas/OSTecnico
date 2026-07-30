@@ -14,6 +14,7 @@ import { PurchaseOrderDetailsModal } from '../components/PurchaseOrderDetailsMod
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/orderFinance';
+import { matchesSearchFields } from '../lib/search';
 
 const purchaseSchema = z.object({
     supplierId: z.string().min(1, 'Selecione um fornecedor'),
@@ -415,7 +416,7 @@ export default function PurchaseOrders() {
 
     const filteredPurchases = purchases.filter(p =>
         String(p.purchase_number).includes(searchTerm) ||
-        p.suppliers?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+        matchesSearchFields([p.suppliers?.name], searchTerm)
     );
 
     const isFinalized = editingStatus?.status === 'finalizado';

@@ -14,6 +14,7 @@ import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type O
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
 import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
+import { matchesSearchFields } from '../lib/search';
 
 type ServiceOrder = {
     id: string;
@@ -589,13 +590,11 @@ export default function Dashboard() {
         if (!normalizedSearch) return true;
 
         const customer = o.customers;
-        const haystack = [
+        if (matchesSearchFields([
             o.equipment, o.brand, o.equipment_type,
             customer?.name, customer?.company_name, customer?.trade_name,
             o.technicians?.name,
-        ].filter(Boolean).join(' ').toLowerCase();
-
-        if (haystack.includes(normalizedSearch)) return true;
+        ], searchTerm)) return true;
         if (String(o.os_number).includes(normalizedSearch)) return true;
 
         if (searchDigits) {
