@@ -344,8 +344,6 @@ export default function CompanySettings() {
                     )}
                 </Card>
 
-                <TeamSection />
-
                 <Card>
                     <h3 className="font-semibold text-base sm:text-lg mb-1">Cláusula de Serviço</h3>
                     <p className="text-xs text-gray-500 mb-4">
@@ -367,6 +365,12 @@ export default function CompanySettings() {
                     </div>
                 </div>
             </form>
+
+            {/* Deliberately outside the <form> above: its required inputs (E-mail,
+                Senha) would otherwise be swept into that form's native HTML5
+                validation on "Salvar Configurações", blocking the save with
+                "Preencha este campo" for a field the user never meant to touch. */}
+            <TeamSection />
         </div>
     );
 }
