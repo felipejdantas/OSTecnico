@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
@@ -114,6 +114,29 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
         setWarrantyDays(undefined);
     };
 
+    // Re-pulls this line's warranty from the product's current cadastro value —
+    // items snapshot warranty_days when added (like unit_price), so editing the
+    // product afterward doesn't touch existing OS lines until this is used.
+    const syncWarranty = async (index: number) => {
+        const item = items[index];
+        const product = products.find(p => p.id === item.product_id);
+        if (!product) return;
+
+        if (orderId && item.id) {
+            const { error } = await supabase
+                .from('service_order_items')
+                .update({ warranty_days: product.warranty_days })
+                .eq('id', item.id);
+            if (error) {
+                console.error('Error syncing warranty:', error);
+                return;
+            }
+        }
+
+        onChange(items.map((it, i) => (i === index ? { ...it, warranty_days: product.warranty_days } : it)));
+        toast.success('Garantia atualizada a partir do cadastro do produto.');
+    };
+
     const removeItem = async (index: number) => {
         const item = items[index];
         if (orderId && item.id) {
@@ -202,14 +225,27 @@ export default function ServiceOrderItemsSection({ orderId, items, onChange, dis
                                     Garantia: {item.warranty_days ? `${item.warranty_days} dias` : 'padrão da OS'}
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => removeItem(index)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                                {item.product_id && (
+                                    <button
+                                        type="button"
+                                        disabled={disabled}
+                                        title="Atualizar garantia a partir do cadastro do produto"
+                                        onClick={() => syncWarranty(index)}
+                                        className="p-2 text-gray-400 hover:text-primary-cyan hover:bg-primary-cyan/10 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() => removeItem(index)}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     ))}
                     <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-dark">
