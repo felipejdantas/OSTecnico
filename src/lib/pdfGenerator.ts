@@ -16,7 +16,7 @@ type AccessoriesData = {
     outro: string;
 };
 
-type OrderItemRow = { product_name: string; quantity: number; unit_price: number };
+type OrderItemRow = { product_name: string; quantity: number; unit_price: number; warranty_days?: number | null };
 type OrderServiceRow = { service_name: string; description?: string | null; quantity: number; price: number };
 type PhotoEntry = string | { url: string; date?: string | null };
 
@@ -303,12 +303,13 @@ export async function generateOSPDF(osData: OSData) {
         yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Serviços');
         autoTable(doc, {
             startY: yPos,
-            head: [['Descrição', 'Qtd', 'Preço', 'Total']],
+            head: [['Descrição', 'Qtd', 'Preço', 'Total', 'Garantia']],
             body: osData.services.map(s => [
                 s.description ? `${s.service_name}\n${s.description}` : s.service_name,
                 String(s.quantity),
                 formatCurrency(s.price),
                 formatCurrency(s.quantity * s.price),
+                company?.warranty_days ? `${company.warranty_days} dias` : '-',
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },
@@ -323,12 +324,13 @@ export async function generateOSPDF(osData: OSData) {
         yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Peças');
         autoTable(doc, {
             startY: yPos,
-            head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total']],
+            head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total', 'Garantia']],
             body: osData.items.map(i => [
                 i.product_name,
                 String(i.quantity),
                 formatCurrency(i.unit_price),
                 formatCurrency(i.quantity * i.unit_price),
+                i.warranty_days ? `${i.warranty_days} dias` : (company?.warranty_days ? `${company.warranty_days} dias` : '-'),
             ]),
             theme: 'striped',
             headStyles: { fillColor: darkGray, textColor: 255 },

@@ -3,7 +3,7 @@ import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { calculateOrderTotal, formatCurrency, type DiscountType } from '../lib/orderFinance';
 
-type LineItem = { name: string; quantity: number; unit_price?: number; price?: number; description?: string };
+type LineItem = { name: string; quantity: number; unit_price?: number; price?: number; description?: string; warranty_days?: number | null };
 
 type Props = {
     items: LineItem[];
@@ -51,6 +51,9 @@ export function PublicBudget({
                                 <div>
                                     <div className="font-medium text-gray-800">{s.name}</div>
                                     {s.description && <div className="text-xs text-gray-500">{s.description}</div>}
+                                    {warrantyDays ? (
+                                        <div className="text-xs text-gray-400 mt-0.5">Garantia: {warrantyDays} dias</div>
+                                    ) : null}
                                 </div>
                                 <div className="text-gray-700 whitespace-nowrap ml-2">{formatCurrency(s.quantity * (s.price ?? 0))}</div>
                             </div>
@@ -67,7 +70,12 @@ export function PublicBudget({
                     <div className="space-y-2">
                         {items.map((it, i) => (
                             <div key={i} className="flex justify-between text-sm bg-gray-50 p-2 rounded-lg">
-                                <div className="text-gray-800">{it.name} <span className="text-gray-400">x{it.quantity}</span></div>
+                                <div>
+                                    <div className="text-gray-800">{it.name} <span className="text-gray-400">x{it.quantity}</span></div>
+                                    <div className="text-xs text-gray-400 mt-0.5">
+                                        Garantia: {it.warranty_days ? `${it.warranty_days} dias` : (warrantyDays ? `${warrantyDays} dias` : '-')}
+                                    </div>
+                                </div>
                                 <div className="text-gray-700 whitespace-nowrap ml-2">{formatCurrency(it.quantity * (it.unit_price ?? 0))}</div>
                             </div>
                         ))}

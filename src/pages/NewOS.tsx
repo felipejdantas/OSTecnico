@@ -243,6 +243,7 @@ export default function NewOS() {
                         product_name: item.product_name,
                         quantity: item.quantity,
                         unit_price: item.unit_price,
+                        warranty_days: item.warranty_days ?? null,
                     }))
                 );
                 if (itemsError) throw itemsError;

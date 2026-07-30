@@ -209,6 +209,7 @@ export default function ClientSignature() {
                     product_name: i.name,
                     quantity: i.quantity,
                     unit_price: i.unit_price,
+                    warranty_days: i.warranty_days,
                 })),
                 services: (os.services || []).map((s: any) => ({
                     service_name: s.name,

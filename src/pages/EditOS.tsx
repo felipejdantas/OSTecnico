@@ -172,6 +172,7 @@ export default function EditOS() {
                 product_name: i.product_name,
                 quantity: i.quantity,
                 unit_price: i.unit_price,
+                warranty_days: i.warranty_days,
             })));
 
             // Fetch services performed on this OS
