@@ -24,6 +24,7 @@ const saleSchema = z.object({
     billingDate: z.string().optional(),
     discountType: z.enum(['fixed', 'percent']),
     discountValue: z.coerce.number().min(0, 'Valor inválido').optional(),
+    freight: z.coerce.number().min(0, 'Valor inválido').optional(),
     otherCosts: z.coerce.number().min(0, 'Valor inválido').optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
@@ -74,7 +75,7 @@ export default function SalesOrders() {
 
         const { data: salesData, error } = await supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
+            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, freight, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
             .eq('user_id', tenantId)
             .order('sale_date', { ascending: false })
             .order('sale_number', { ascending: false });
@@ -105,8 +106,8 @@ export default function SalesOrders() {
                 servicesTotal: 0,
                 discountType: s.discount_type || 'fixed',
                 discountValue: s.discount_value || 0,
-                freight: s.other_costs || 0,
-                urgencyFee: 0,
+                freight: s.freight || 0,
+                urgencyFee: s.other_costs || 0,
             });
             return { ...s, total, itemCount: (itemsBySale[s.id] || []).length };
         });
@@ -122,6 +123,7 @@ export default function SalesOrders() {
         setValue('billingDate', sale.billing_date || '');
         setValue('discountType', sale.discount_type || 'fixed');
         setValue('discountValue', sale.discount_value || 0);
+        setValue('freight', sale.freight || 0);
         setValue('otherCosts', sale.other_costs || 0);
         setValue('warrantyDays', sale.warranty_days ?? undefined);
         setValue('warrantyNotes', sale.warranty_notes || '');
@@ -129,7 +131,7 @@ export default function SalesOrders() {
 
         const { data: saleItems } = await supabase
             .from('sale_items')
-            .select('id, product_id, product_name, quantity, unit_price')
+            .select('id, product_id, product_name, quantity, unit_price, warranty_days')
             .eq('sale_id', sale.id);
         setItems(saleItems || []);
 
@@ -162,6 +164,7 @@ export default function SalesOrders() {
                 billing_date: data.billingDate || null,
                 discount_type: data.discountType,
                 discount_value: data.discountValue || 0,
+                freight: data.freight || 0,
                 other_costs: data.otherCosts || 0,
                 warranty_days: data.warrantyDays ?? null,
                 warranty_notes: data.warrantyNotes || null,
@@ -192,6 +195,7 @@ export default function SalesOrders() {
                         product_name: item.product_name,
                         quantity: item.quantity,
                         unit_price: item.unit_price,
+                        warranty_days: item.warranty_days ?? null,
                     }))
                 );
                 if (itemsError) throw itemsError;
@@ -263,6 +267,7 @@ export default function SalesOrders() {
                 items: itemsData || [],
                 discount_type: data.discount_type || 'fixed',
                 discount_value: data.discount_value || 0,
+                freight: data.freight || 0,
                 other_costs: data.other_costs || 0,
                 payment_status: data.payment_status,
                 warranty_days: data.warranty_days,
@@ -386,7 +391,7 @@ export default function SalesOrders() {
 
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Totais</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="space-y-1">
                                 <label className="text-sm font-medium text-gray-600">Tipo de Desconto</label>
                                 <select
@@ -398,6 +403,7 @@ export default function SalesOrders() {
                                 </select>
                             </div>
                             <Input label="Desconto" type="number" step="0.01" {...register('discountValue')} error={errors.discountValue?.message} />
+                            <Input label="Frete (R$)" type="number" step="0.01" {...register('freight')} error={errors.freight?.message} />
                             <Input label="Outras Despesas (R$)" type="number" step="0.01" {...register('otherCosts')} error={errors.otherCosts?.message} />
                         </div>
                         <div className="flex justify-between pt-4 mt-4 border-t border-gray-100 font-semibold text-dark">

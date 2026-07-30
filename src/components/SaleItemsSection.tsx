@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Package, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { SearchableSelect } from './ui/SearchableSelect';
@@ -13,6 +13,9 @@ export type SaleItem = {
     product_name: string;
     quantity: number;
     unit_price: number;
+    // Garantia (dias) deste produto nesta venda. Copiada do cadastro do
+    // produto ao adicionar. Vazia/0 = usa a garantia padrão da venda.
+    warranty_days?: number | null;
 };
 
 type Product = {
@@ -21,6 +24,7 @@ type Product = {
     sale_price: number;
     stock_quantity: number;
     unit: string;
+    warranty_days: number | null;
 };
 
 type Props = {
@@ -37,6 +41,7 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProductId, setSelectedProductId] = useState('');
     const [quantity, setQuantity] = useState(1);
+    const [warrantyDays, setWarrantyDays] = useState<number | undefined>(undefined);
 
     useEffect(() => {
         if (tenantId) fetchProducts();
@@ -46,13 +51,20 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
         if (!tenantId) return;
         const { data } = await supabase
             .from('products')
-            .select('id, name, sale_price, stock_quantity, unit')
+            .select('id, name, sale_price, stock_quantity, unit, warranty_days')
             .eq('user_id', tenantId)
             .order('name');
         if (data) setProducts(data);
     };
 
     const selectedProduct = products.find(p => p.id === selectedProductId);
+
+    // Prefill with the product's default warranty whenever a new product is picked;
+    // it can still be overridden below before adding.
+    useEffect(() => {
+        setWarrantyDays(selectedProduct?.warranty_days ?? undefined);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProductId]);
 
     const addItem = async () => {
         if (!selectedProduct || quantity < 1) return;
@@ -62,6 +74,7 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
             product_name: selectedProduct.name,
             quantity,
             unit_price: selectedProduct.sale_price,
+            warranty_days: warrantyDays,
         };
 
         if (saleId) {
@@ -82,6 +95,31 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
 
         setSelectedProductId('');
         setQuantity(1);
+        setWarrantyDays(undefined);
+    };
+
+    // Re-pulls this line's name/price/warranty from the product's current
+    // cadastro record — same snapshot-then-sync pattern as the OS's peças.
+    const syncFromProduct = async (index: number) => {
+        const item = items[index];
+        const product = products.find(p => p.id === item.product_id);
+        if (!product) return;
+
+        const updatedFields = {
+            product_name: product.name,
+            unit_price: product.sale_price,
+            warranty_days: product.warranty_days,
+        };
+
+        if (saleId && item.id) {
+            const { error } = await supabase.from('sale_items').update(updatedFields).eq('id', item.id);
+            if (error) {
+                console.error('Error syncing sale item from product:', error);
+                return;
+            }
+        }
+
+        onChange(items.map((it, i) => (i === index ? { ...it, ...updatedFields } : it)));
     };
 
     const removeItem = async (index: number) => {
@@ -130,6 +168,17 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
                     className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
                 />
                 </div>
+                <div className="w-full sm:w-32">
+                <label className="text-xs text-gray-500 mb-1 block">Garantia (dias)</label>
+                <input
+                    type="number"
+                    min={0}
+                    placeholder="Padrão da venda"
+                    value={warrantyDays ?? ''}
+                    onChange={(e) => setWarrantyDays(e.target.value === '' ? undefined : parseInt(e.target.value) || 0)}
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white text-sm text-center"
+                />
+                </div>
                 <Button type="button" onClick={addItem} disabled={!selectedProductId} className="touch-manipulation">
                     <Plus className="w-4 h-4 mr-1" /> Adicionar
                 </Button>
@@ -153,14 +202,29 @@ export default function SaleItemsSection({ saleId, items, onChange }: Props) {
                                 <div className="text-xs text-gray-500">
                                     {item.quantity} x {formatCurrency(item.unit_price)} = {formatCurrency(item.quantity * item.unit_price)}
                                 </div>
+                                <div className="text-xs text-gray-400 mt-0.5">
+                                    Garantia: {item.warranty_days ? `${item.warranty_days} dias` : 'padrão da venda'}
+                                </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => removeItem(index)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center gap-1">
+                                {item.product_id && (
+                                    <button
+                                        type="button"
+                                        title="Atualizar nome, preço e garantia a partir do cadastro do produto"
+                                        onClick={() => syncFromProduct(index)}
+                                        className="p-2 text-gray-400 hover:text-primary-cyan hover:bg-primary-cyan/10 rounded-lg transition-colors touch-manipulation"
+                                    >
+                                        <RefreshCw className="w-4 h-4" />
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => removeItem(index)}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     ))}
                     <div className="flex justify-between pt-2 border-t border-gray-200 font-semibold text-dark">

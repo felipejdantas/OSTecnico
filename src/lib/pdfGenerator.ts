@@ -84,7 +84,7 @@ type OSData = {
     company?: CompanyInfo;
 };
 
-type SalesItemRow = { product_name: string; quantity: number; unit_price: number };
+type SalesItemRow = { product_name: string; quantity: number; unit_price: number; warranty_days?: number | null };
 
 type SalesData = {
     sale_number: number;
@@ -94,6 +94,7 @@ type SalesData = {
     items: SalesItemRow[];
     discount_type?: DiscountType;
     discount_value?: number;
+    freight?: number;
     other_costs?: number;
     payment_status?: string;
     warranty_days?: number | null;
@@ -649,12 +650,13 @@ export async function generateSalesPDF(salesData: SalesData) {
     yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Produtos');
     autoTable(doc, {
         startY: yPos,
-        head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total']],
+        head: [['Descrição', 'Qtd', 'Preço Unit.', 'Total', 'Garantia']],
         body: salesData.items.map(i => [
             i.product_name,
             String(i.quantity),
             formatCurrency(i.unit_price),
             formatCurrency(i.quantity * i.unit_price),
+            formatWarrantyForClient(i.warranty_days || salesData.warranty_days) ?? '-',
         ]),
         theme: 'striped',
         headStyles: { fillColor: darkGray, textColor: 255 },
@@ -669,13 +671,14 @@ export async function generateSalesPDF(salesData: SalesData) {
         servicesTotal: 0,
         discountType: salesData.discount_type || 'fixed',
         discountValue: salesData.discount_value || 0,
-        freight: salesData.other_costs || 0,
-        urgencyFee: 0,
+        freight: salesData.freight || 0,
+        urgencyFee: salesData.other_costs || 0,
     });
 
     ensureSpace(30);
     const financeRows: string[][] = [['Subtotal', formatCurrency(subtotal)]];
     if (discountAmount > 0) financeRows.push(['Desconto', `- ${formatCurrency(discountAmount)}`]);
+    if ((salesData.freight || 0) > 0) financeRows.push(['Frete', formatCurrency(salesData.freight || 0)]);
     if ((salesData.other_costs || 0) > 0) financeRows.push(['Outras Despesas', formatCurrency(salesData.other_costs || 0)]);
     financeRows.push(['Total', formatCurrency(total)]);
 
