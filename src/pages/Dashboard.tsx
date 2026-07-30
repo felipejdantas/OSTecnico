@@ -69,29 +69,37 @@ function RankedBarRow({ label, count, maxCount, suffix }: { label: string; count
 // needs distinct hues instead of one magnitude hue.
 const CATEGORICAL_SLOTS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4'];
 
-// Part-to-whole (composition), not ranking: one horizontal bar split into
-// segments sized by share, 2px surface gaps between them, legend carries the
-// identity (never color-alone) since there are 2+ series in this one chart.
-function CompositionBar({ rows }: { rows: RankedRow[] }) {
+// Part-to-whole (composition): a pie, colored with validated adjacent-safe
+// categorical slots. The legend below is the identity channel (never
+// color-alone) and carries the count/share so the pie itself stays unlabeled.
+function ServicesPie({ rows }: { rows: RankedRow[] }) {
     const total = rows.reduce((sum, r) => sum + r.count, 0);
     if (total === 0) return null;
+
+    let cumulative = 0;
+    const segments = rows.map((r, i) => {
+        const startDeg = (cumulative / total) * 360;
+        cumulative += r.count;
+        const endDeg = (cumulative / total) * 360;
+        return { ...r, color: CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length], startDeg, endDeg };
+    });
+    const gradient = segments.map(s => `${s.color} ${s.startDeg}deg ${s.endDeg}deg`).join(', ');
+
     return (
-        <div>
-            <div className="flex h-6 rounded-md overflow-hidden gap-[2px]">
-                {rows.map((r, i) => (
-                    <div
-                        key={r.label}
-                        title={`${r.label}: ${r.count} (${Math.round((r.count / total) * 100)}%)`}
-                        style={{ width: `${(r.count / total) * 100}%`, backgroundColor: CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length] }}
-                    />
-                ))}
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
-                {rows.map((r, i) => (
-                    <div key={r.label} className="flex items-center gap-1.5 text-xs">
-                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: CATEGORICAL_SLOTS[i % CATEGORICAL_SLOTS.length] }} />
-                        <span className="text-gray-600 truncate max-w-[140px]">{r.label}</span>
-                        <span className="text-gray-400">{r.count}x</span>
+        <div className="flex flex-col items-center">
+            <div
+                className="w-36 h-36 rounded-full flex-shrink-0"
+                style={{ background: `conic-gradient(${gradient})` }}
+                role="img"
+                aria-label={segments.map(s => `${s.label}: ${s.count}`).join(', ')}
+            />
+            <div className="w-full mt-4 space-y-2">
+                {segments.map(s => (
+                    <div key={s.label} className="flex items-center gap-2 text-xs">
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
+                        <span className="text-gray-600 truncate flex-1 min-w-0">{s.label}</span>
+                        <span className="text-gray-400 flex-shrink-0">{s.count}x</span>
+                        <span className="text-gray-300 flex-shrink-0 w-10 text-right">{Math.round((s.count / total) * 100)}%</span>
                     </div>
                 ))}
             </div>
@@ -127,10 +135,10 @@ function StockMeterRow({ product }: { product: LowStockProduct }) {
 // direct-labeled (marks-and-anatomy: never a number on every point), the
 // rest live in each dot's hover/focus title.
 function TrendLine({ months }: { months: MonthCount[] }) {
-    const width = 300;
-    const height = 90;
-    const padX = 12;
-    const padY = 16;
+    const width = 800;
+    const height = 260;
+    const padX = 30;
+    const padY = 36;
     const maxCount = Math.max(...months.map(m => m.count), 1);
     const stepX = (width - padX * 2) / Math.max(months.length - 1, 1);
     const points = months.map((m, i) => ({
@@ -146,16 +154,16 @@ function TrendLine({ months }: { months: MonthCount[] }) {
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full" style={{ height: `${height}px` }}>
             <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="#e1e0d9" strokeWidth={1} />
             <path d={areaPath} fill="#0891b2" opacity={0.1} />
-            <path d={linePath} fill="none" stroke="#0891b2" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={linePath} fill="none" stroke="#0891b2" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
             {points.map(p => (
                 <g key={p.label}>
-                    <circle cx={p.x} cy={p.y} r={4} fill="#0891b2" stroke="#fff" strokeWidth={2}>
+                    <circle cx={p.x} cy={p.y} r={6} fill="#0891b2" stroke="#fff" strokeWidth={2.5}>
                         <title>{`${p.label}: ${p.count} OS`}</title>
                     </circle>
-                    <text x={p.x} y={height - 2} textAnchor="middle" fontSize={9} fill="#898781" className="capitalize">{p.label}</text>
+                    <text x={p.x} y={height - 10} textAnchor="middle" fontSize={14} fill="#898781" className="capitalize">{p.label}</text>
                 </g>
             ))}
-            <text x={last.x} y={last.y - 8} textAnchor="middle" fontSize={11} fontWeight={600} fill="#1f2937">{last.count}</text>
+            <text x={last.x} y={last.y - 16} textAnchor="middle" fontSize={18} fontWeight={700} fill="#1f2937">{last.count}</text>
         </svg>
     );
 }
@@ -683,12 +691,12 @@ export default function Dashboard() {
                             className="cursor-pointer hover:shadow-md transition-shadow"
                             onClick={() => openList(s)}
                         >
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs sm:text-sm text-gray-600">{STATUS_CONFIG[s].shortLabel}</p>
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">{STATUS_CONFIG[s].shortLabel}</p>
                                     <p className="text-2xl sm:text-3xl font-bold text-dark">{count}</p>
                                 </div>
-                                <span className={`w-3 h-3 rounded-full flex-shrink-0 ${STATUS_CONFIG[s].dot}`} />
+                                <span className={`w-3 h-3 rounded-full flex-shrink-0 mt-1 ${STATUS_CONFIG[s].dot}`} />
                             </div>
                         </Card>
                     );
@@ -908,24 +916,24 @@ export default function Dashboard() {
             </Card>
 
             {/* Attention panel: monthly rankings + stock alerts + volume trend */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card>
                     <h3 className="font-semibold text-base sm:text-lg mb-4">Serviços mais realizados no mês</h3>
                     {topServicesMonth.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhum serviço registrado este mês ainda.</p>
                     ) : (
-                        <CompositionBar rows={topServicesMonth} />
+                        <ServicesPie rows={topServicesMonth} />
                     )}
                 </Card>
 
                 <Card>
-                    <h3 className="font-semibold text-base sm:text-lg mb-4">Peças mais usadas no mês</h3>
+                    <h3 className="font-semibold text-base sm:text-lg mb-4">Produtos mais vendidos</h3>
                     {topPartsMonth.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhuma peça usada este mês ainda.</p>
                     ) : (
                         <div className="space-y-3">
                             {topPartsMonth.map(row => (
-                                <RankedBarRow key={row.label} label={row.label} count={row.count} maxCount={topPartsMonth[0].count} suffix="x" />
+                                <RankedBarRow key={row.label} label={row.label} count={row.count} maxCount={topPartsMonth[0].count} />
                             ))}
                         </div>
                     )}
@@ -946,12 +954,12 @@ export default function Dashboard() {
                         </div>
                     )}
                 </Card>
-
-                <Card>
-                    <h3 className="font-semibold text-base sm:text-lg mb-4">OS abertas por mês</h3>
-                    <TrendLine months={monthlyVolume} />
-                </Card>
             </div>
+
+            <Card>
+                <h3 className="font-semibold text-base sm:text-lg mb-4">OS abertas por mês</h3>
+                <TrendLine months={monthlyVolume} />
+            </Card>
 
             <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => navigate('/orcamentos')}>
