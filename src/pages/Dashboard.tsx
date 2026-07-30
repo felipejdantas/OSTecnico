@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X, Search, Calculator } from 'lucide-react';
 import { Card } from '../components/ui/Card';
@@ -43,6 +43,26 @@ type ServiceOrder = {
 };
 
 type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
+type RankedRow = { label: string; count: number; revenue: number };
+type LowStockProduct = { id: string; name: string; unit: string; stock_quantity: number; min_stock_alert: number };
+type MonthCount = { label: string; count: number };
+
+// Single-series horizontal bar (magnitude, one hue) — no legend needed, the
+// card title already names the series. Direct-labeled since there are only ~5 rows.
+function RankedBarRow({ label, count, maxCount, suffix }: { label: string; count: number; maxCount: number; suffix?: string }) {
+    const widthPct = maxCount > 0 ? Math.max((count / maxCount) * 100, 4) : 0;
+    return (
+        <div className="text-sm">
+            <div className="flex justify-between gap-2 mb-1">
+                <span className="text-gray-700 truncate">{label}</span>
+                <span className="text-gray-500 flex-shrink-0">{count}{suffix}</span>
+            </div>
+            <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full rounded-full bg-primary-cyan" style={{ width: `${widthPct}%` }} />
+            </div>
+        </div>
+    );
+}
 
 export default function Dashboard() {
     const { tenantId } = useAuth();
@@ -53,6 +73,9 @@ export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
+    const [topServicesMonth, setTopServicesMonth] = useState<RankedRow[]>([]);
+    const [topPartsMonth, setTopPartsMonth] = useState<RankedRow[]>([]);
+    const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
     const navigate = useNavigate();
 
     const openList = (filter: 'todos' | 'em_andamento' | OrderStatus) => {
@@ -61,8 +84,28 @@ export default function Dashboard() {
     };
 
     useEffect(() => {
-        if (tenantId) fetchOrders();
+        if (tenantId) {
+            fetchOrders();
+            fetchLowStock();
+        }
     }, [tenantId]);
+
+    const fetchLowStock = async () => {
+        if (!tenantId) return;
+        const { data, error } = await supabase
+            .from('products')
+            .select('id, name, unit, stock_quantity, min_stock_alert')
+            .eq('user_id', tenantId);
+        if (error) {
+            console.error('Error fetching low stock products:', error);
+            return;
+        }
+        const low = (data || [])
+            .filter(p => p.stock_quantity <= p.min_stock_alert)
+            .sort((a, b) => a.stock_quantity - b.stock_quantity)
+            .slice(0, 5);
+        setLowStockProducts(low);
+    };
 
     // Reveals the list automatically once the shop starts typing a search,
     // so they don't have to click "expand" first to see results.
@@ -156,8 +199,8 @@ export default function Dashboard() {
             const servicesByOrder: Record<string, { quantity: number; price: number }[]> = {};
             if (orderIds.length > 0) {
                 const [{ data: itemsData }, { data: servicesData }] = await Promise.all([
-                    supabase.from('service_order_items').select('service_order_id, quantity, unit_price').in('service_order_id', orderIds),
-                    supabase.from('service_order_services').select('service_order_id, quantity, price').in('service_order_id', orderIds),
+                    supabase.from('service_order_items').select('service_order_id, product_name, quantity, unit_price, created_at').in('service_order_id', orderIds),
+                    supabase.from('service_order_services').select('service_order_id, service_name, quantity, price, created_at').in('service_order_id', orderIds),
                 ]);
                 for (const item of itemsData || []) {
                     (itemsByOrder[item.service_order_id] ||= []).push(item);
@@ -165,6 +208,24 @@ export default function Dashboard() {
                 for (const line of servicesData || []) {
                     (servicesByOrder[line.service_order_id] ||= []).push(line);
                 }
+
+                // "This month" ranking — what actually left the shop recently, not
+                // all-time totals (which would just crown whatever's been sold longest).
+                const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                const rankByName = (rows: { name: string; quantity: number; price: number; created_at: string }[]): RankedRow[] => {
+                    const totals = new Map<string, RankedRow>();
+                    for (const row of rows) {
+                        if (new Date(row.created_at) < startOfMonth) continue;
+                        const entry = totals.get(row.name) || { label: row.name, count: 0, revenue: 0 };
+                        entry.count += row.quantity;
+                        entry.revenue += row.quantity * row.price;
+                        totals.set(row.name, entry);
+                    }
+                    return [...totals.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+                };
+
+                setTopPartsMonth(rankByName((itemsData || []).map((i: any) => ({ name: i.product_name, quantity: i.quantity, price: i.unit_price, created_at: i.created_at }))));
+                setTopServicesMonth(rankByName((servicesData || []).map((s: any) => ({ name: s.service_name, quantity: s.quantity, price: s.price, created_at: s.created_at }))));
             }
 
             const enrichedOrders: ServiceOrder[] = fetchedOrders.map((o: any) => {
@@ -443,9 +504,22 @@ export default function Dashboard() {
 
     const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
 
-    // Top summary cards only surface the active workflow stages the shop
-    // triages day to day; the filter chips below still cover every status.
-    const topStatuses: OrderStatus[] = ['recebido', 'em_diagnostico', 'aguardando_aprovacao', 'aguardando_peca', 'em_reparo', 'pronto'];
+    // OS volume for the last 6 months, derived from what's already loaded —
+    // no extra round trip needed since `orders` already holds full history.
+    const monthlyVolume = useMemo<MonthCount[]>(() => {
+        const months: MonthCount[] = [];
+        const now = new Date();
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const label = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+            const count = orders.filter(o => {
+                const created = new Date(o.created_at);
+                return created.getFullYear() === d.getFullYear() && created.getMonth() === d.getMonth();
+            }).length;
+            months.push({ label, count });
+        }
+        return months;
+    }, [orders]);
 
     return (
         <div className="space-y-4 sm:space-y-6">
@@ -503,9 +577,9 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Stats Cards: only the statuses the shop actively triages day to day */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
-                {topStatuses.map(s => {
+            {/* Stats Cards: every status, including entregue/cancelado */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3 sm:gap-4">
+                {allStatuses.map(s => {
                     const count = orders.filter(o => o.status === s).length;
                     return (
                         <Card
@@ -556,29 +630,14 @@ export default function Dashboard() {
                     <p className="text-sm text-gray-400 mt-2">Clique para ver as ordens de serviço, ou clique em um card acima para filtrar por status.</p>
                 ) : (
                     <>
-                        {/* Status filter chips */}
-                        <div className="flex flex-wrap gap-2 mt-4 mb-4">
-                            <button
-                                type="button"
-                                onClick={() => setStatusFilter('todos')}
-                                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === 'todos' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                Todos ({orders.length})
-                            </button>
-                            {allStatuses.map(s => {
-                                const count = orders.filter(o => o.status === s).length;
-                                return (
-                                    <button
-                                        key={s}
-                                        type="button"
-                                        onClick={() => setStatusFilter(s)}
-                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${statusFilter === s ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        {STATUS_CONFIG[s].shortLabel} ({count})
-                                    </button>
-                                );
-                            })}
-                        </div>
+                        {statusFilter !== 'todos' && (
+                            <div className="flex items-center gap-2 mt-4 text-xs text-gray-500">
+                                Filtrando por: <span className="px-2 py-0.5 rounded-full font-medium bg-primary-cyan/10 text-primary-cyan">{statusFilter === 'em_andamento' ? 'Em andamento' : STATUS_CONFIG[statusFilter].shortLabel}</span>
+                                <button type="button" onClick={() => setStatusFilter('todos')} className="text-primary-cyan hover:underline">
+                                    Limpar filtro
+                                </button>
+                            </div>
+                        )}
 
                         {loading ? (
                             <p className="text-center text-gray-500 py-8">Carregando...</p>
@@ -751,6 +810,73 @@ export default function Dashboard() {
                     </>
                 )}
             </Card>
+
+            {/* Attention panel: monthly rankings + stock alerts + volume trend */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                    <h3 className="font-semibold text-base sm:text-lg mb-4">Serviços mais realizados no mês</h3>
+                    {topServicesMonth.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">Nenhum serviço registrado este mês ainda.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {topServicesMonth.map(row => (
+                                <RankedBarRow key={row.label} label={row.label} count={row.count} maxCount={topServicesMonth[0].count} suffix="x" />
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
+                <Card>
+                    <h3 className="font-semibold text-base sm:text-lg mb-4">Peças mais usadas no mês</h3>
+                    {topPartsMonth.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">Nenhuma peça usada este mês ainda.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {topPartsMonth.map(row => (
+                                <RankedBarRow key={row.label} label={row.label} count={row.count} maxCount={topPartsMonth[0].count} suffix="x" />
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
+                <Card>
+                    <div className="flex items-center gap-2 mb-4">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                        <h3 className="font-semibold text-base sm:text-lg">Estoque abaixo do mínimo</h3>
+                    </div>
+                    {lowStockProducts.length === 0 ? (
+                        <p className="text-sm text-gray-400 text-center py-4">Nenhum produto abaixo do estoque mínimo.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {lowStockProducts.map(p => (
+                                <div key={p.id} className="flex items-center justify-between gap-2 text-sm">
+                                    <span className="text-gray-700 truncate">{p.name}</span>
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700 flex-shrink-0">
+                                        {p.stock_quantity} {p.unit}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </Card>
+
+                <Card>
+                    <h3 className="font-semibold text-base sm:text-lg mb-4">OS abertas por mês</h3>
+                    <div className="flex items-end justify-between gap-2 h-28">
+                        {monthlyVolume.map(m => {
+                            const maxCount = Math.max(...monthlyVolume.map(x => x.count), 1);
+                            const heightPct = m.count > 0 ? Math.max((m.count / maxCount) * 100, 6) : 2;
+                            return (
+                                <div key={m.label} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
+                                    <span className="text-xs text-gray-500">{m.count}</span>
+                                    <div className="w-full rounded-t-md bg-primary-cyan/80" style={{ height: `${heightPct}%` }} />
+                                    <span className="text-xs text-gray-400 capitalize">{m.label}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </Card>
+            </div>
 
             <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => navigate('/orcamentos')}>
