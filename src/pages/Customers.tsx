@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, MapPin, Phone, User, Edit2, Search, Trash2, Building2, Loader2, History } from 'lucide-react';
+import { Plus, MapPin, Phone, User, Edit2, Search, Trash2, Building2, Loader2, History, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -33,6 +33,22 @@ const customerSchema = z.object({
 
 type CustomerForm = z.infer<typeof customerSchema>;
 
+// Wizard steps — same fields the single-screen form already had, just grouped.
+// "Empresa" only exists in the sequence for pessoa jurídica.
+type Step = 'basicos' | 'empresa' | 'contato' | 'endereco';
+const STEP_TITLES: Record<Step, string> = {
+    basicos: 'Dados do Cliente',
+    empresa: 'Dados da Empresa',
+    contato: 'Contato',
+    endereco: 'Endereço',
+};
+const STEP_FIELDS: Record<Step, (keyof CustomerForm)[]> = {
+    basicos: ['name', 'cpf', 'email'],
+    empresa: ['cnpj', 'companyName', 'tradeName', 'stateRegistration', 'municipalRegistration'],
+    contato: ['phone'],
+    endereco: ['cep', 'address', 'number', 'complement'],
+};
+
 export default function Customers() {
     const { tenantId } = useAuth();
     const location = useLocation();
@@ -41,11 +57,35 @@ export default function Customers() {
     const [customers, setCustomers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
     const [historyCustomer, setHistoryCustomer] = useState<{ id: string; name: string } | null>(null);
-    const { register, handleSubmit, setValue, reset, watch, formState: { errors } } = useForm<CustomerForm>({
+    const [step, setStep] = useState<Step>('basicos');
+    const { register, handleSubmit, setValue, reset, watch, trigger, formState: { errors } } = useForm<CustomerForm>({
         resolver: zodResolver(customerSchema),
         defaultValues: { personType: 'fisica' },
     });
     const personType = watch('personType');
+
+    const steps: Step[] = personType === 'juridica'
+        ? ['basicos', 'empresa', 'contato', 'endereco']
+        : ['basicos', 'contato', 'endereco'];
+    const stepIndex = steps.indexOf(step);
+
+    const goNext = async () => {
+        const valid = await trigger(STEP_FIELDS[step]);
+        if (!valid) return;
+        if (stepIndex === steps.length - 1) {
+            handleSubmit(onSubmit)();
+        } else {
+            setStep(steps[stepIndex + 1]);
+        }
+    };
+
+    const goBack = () => {
+        if (stepIndex === 0) {
+            handleCancel();
+        } else {
+            setStep(steps[stepIndex - 1]);
+        }
+    };
 
     useEffect(() => {
         if (tenantId) fetchCustomers();
@@ -133,6 +173,7 @@ export default function Customers() {
         setValue('tradeName', customer.trade_name || '');
         setValue('stateRegistration', customer.state_registration || '');
         setValue('municipalRegistration', customer.municipal_registration || '');
+        setStep('basicos');
         setIsFormOpen(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -140,6 +181,7 @@ export default function Customers() {
     const handleCancel = () => {
         setIsFormOpen(false);
         setEditingId(null);
+        setStep('basicos');
         reset({ personType: 'fisica' });
     };
 
@@ -256,49 +298,64 @@ export default function Customers() {
             {isFormOpen && (
                 <Card className="animate-in fade-in slide-in-from-top-4 duration-300">
                     <div className="mb-4 pb-4 border-b border-gray-100">
-                        <h3 className="font-semibold text-lg text-primary-cyan">
-                            {editingId ? 'Editar Cliente' : 'Novo Cliente'}
-                        </h3>
-                    </div>
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-3 mb-3">
                             <button
                                 type="button"
-                                onClick={() => setValue('personType', 'fisica')}
-                                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'fisica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                onClick={goBack}
+                                className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                                title={stepIndex === 0 ? 'Cancelar' : 'Voltar'}
                             >
-                                Pessoa Física
+                                <ArrowLeft className="w-5 h-5" />
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setValue('personType', 'juridica')}
-                                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'juridica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
-                                Pessoa Jurídica
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
-                            <Input label={personType === 'juridica' ? 'CPF do Responsável' : 'CPF'} {...register('cpf')} error={errors.cpf?.message} />
-                            <Input label="Telefone (WhatsApp)" {...register('phone')} error={errors.phone?.message} />
-                            <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
-                            <Input
-                                label="CEP"
-                                {...register('cep')}
-                                onBlur={handleCepBlur}
-                                error={errors.cep?.message}
-                            />
-                            <div className="md:col-span-2">
-                                <Input label="Endereço Completo" {...register('address')} error={errors.address?.message} readOnly />
+                            <div>
+                                <h3 className="font-semibold text-lg text-primary-cyan leading-tight">
+                                    {editingId ? 'Editar Cliente' : 'Novo Cliente'}
+                                </h3>
+                                <p className="text-xs text-gray-500">{STEP_TITLES[step]}</p>
                             </div>
-                            <Input label="Número" {...register('number')} error={errors.number?.message} />
-                            <Input label="Complemento" {...register('complement')} error={errors.complement?.message} />
                         </div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                <div
+                                    className="h-full rounded-full bg-primary-cyan transition-all duration-300"
+                                    style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }}
+                                />
+                            </div>
+                            <span className="text-xs text-gray-400 flex-shrink-0">{stepIndex + 1}/{steps.length}</span>
+                        </div>
+                    </div>
 
-                        {personType === 'juridica' && (
-                            <div className="pt-2 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
-                                <div className="flex items-center gap-2 mb-3 pt-4">
+                    <form onSubmit={(e) => { e.preventDefault(); goNext(); }} className="space-y-4">
+                        {step === 'basicos' && (
+                            <>
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setValue('personType', 'fisica')}
+                                        className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'fisica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                        Pessoa Física
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setValue('personType', 'juridica')}
+                                        className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${personType === 'juridica' ? 'bg-primary-cyan text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                    >
+                                        Pessoa Jurídica
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
+                                    <Input label={personType === 'juridica' ? 'CPF do Responsável' : 'CPF'} {...register('cpf')} error={errors.cpf?.message} />
+                                    <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
+                                </div>
+                            </>
+                        )}
+
+                        {step === 'empresa' && (
+                            <div>
+                                <div className="flex items-center gap-2 mb-3">
                                     <Building2 className="w-4 h-4 text-primary-cyan" />
                                     <h4 className="text-sm font-semibold text-gray-700">Dados da Empresa</h4>
                                 </div>
@@ -330,9 +387,32 @@ export default function Customers() {
                                 </p>
                             </div>
                         )}
+
+                        {step === 'contato' && (
+                            <Input label="Telefone (WhatsApp)" {...register('phone')} error={errors.phone?.message} />
+                        )}
+
+                        {step === 'endereco' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Input
+                                    label="CEP"
+                                    {...register('cep')}
+                                    onBlur={handleCepBlur}
+                                    error={errors.cep?.message}
+                                />
+                                <div className="md:col-span-2">
+                                    <Input label="Endereço Completo" {...register('address')} error={errors.address?.message} readOnly />
+                                </div>
+                                <Input label="Número" {...register('number')} error={errors.number?.message} />
+                                <Input label="Complemento" {...register('complement')} error={errors.complement?.message} />
+                            </div>
+                        )}
+
                         <div className="flex justify-end gap-3 pt-4">
                             <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
-                            <Button type="submit">{editingId ? 'Salvar Alterações' : 'Salvar Cliente'}</Button>
+                            <Button type="submit">
+                                {stepIndex === steps.length - 1 ? (editingId ? 'Salvar Alterações' : 'Salvar Cliente') : 'Avançar'}
+                            </Button>
                         </div>
                     </form>
                 </Card>
