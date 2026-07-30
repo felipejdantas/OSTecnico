@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, ArrowUpCircle, ArrowDownCircle,
-    CalendarDays, CalendarRange, Calendar, Plus, Trash2, X, Truck, FileSpreadsheet,
+    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -160,6 +160,7 @@ export default function CashFlow() {
     const [entryModal, setEntryModal] = useState<'entrada' | 'saida' | null>(null);
     const [entryForm, setEntryForm] = useState<ManualEntryForm>(manualEntrySchema);
     const [isSubmittingEntry, setIsSubmittingEntry] = useState(false);
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
 
     useEffect(() => {
         if (tenantId) fetchAll();
@@ -194,8 +195,32 @@ export default function CashFlow() {
 
     const openEntryModal = (type: 'entrada' | 'saida') => {
         const today = new Date().toISOString().slice(0, 10);
+        setEditingEntryId(null);
         setEntryForm({ ...manualEntrySchema, entry_date: today, competence_date: today });
         setEntryModal(type);
+    };
+
+    const openEditEntryModal = async (row: LedgerRow) => {
+        const { data, error } = await supabase.from('cash_entries').select('*').eq('id', row.id).single();
+        if (error || !data) {
+            toast.error('Erro ao carregar lançamento.');
+            return;
+        }
+        setEditingEntryId(row.id);
+        setEntryForm({
+            entry_date: data.entry_date,
+            competence_date: data.competence_date || data.entry_date,
+            category: data.category || '',
+            amount: String(data.amount),
+            description: data.description || '',
+            related_party: data.related_party || '',
+        });
+        setEntryModal(data.type === 'saida' ? 'saida' : 'entrada');
+    };
+
+    const closeEntryModal = () => {
+        setEntryModal(null);
+        setEditingEntryId(null);
     };
 
     const submitManualEntry = async () => {
@@ -212,21 +237,34 @@ export default function CashFlow() {
 
         setIsSubmittingEntry(true);
         try {
-            const { error } = await supabase.from('cash_entries').insert([{
-                user_id: tenantId,
-                entry_date: entryForm.entry_date,
-                competence_date: entryForm.competence_date || entryForm.entry_date,
-                type: entryModal,
-                category: entryForm.category.trim() || null,
-                amount,
-                description: entryForm.description.trim(),
-                related_party: entryForm.related_party.trim() || null,
-                source: 'manual',
-            }]);
-            if (error) throw error;
+            if (editingEntryId) {
+                const { error } = await supabase.from('cash_entries').update({
+                    entry_date: entryForm.entry_date,
+                    competence_date: entryForm.competence_date || entryForm.entry_date,
+                    category: entryForm.category.trim() || null,
+                    amount,
+                    description: entryForm.description.trim(),
+                    related_party: entryForm.related_party.trim() || null,
+                }).eq('id', editingEntryId);
+                if (error) throw error;
+                toast.success('Lançamento atualizado com sucesso!');
+            } else {
+                const { error } = await supabase.from('cash_entries').insert([{
+                    user_id: tenantId,
+                    entry_date: entryForm.entry_date,
+                    competence_date: entryForm.competence_date || entryForm.entry_date,
+                    type: entryModal,
+                    category: entryForm.category.trim() || null,
+                    amount,
+                    description: entryForm.description.trim(),
+                    related_party: entryForm.related_party.trim() || null,
+                    source: 'manual',
+                }]);
+                if (error) throw error;
+                toast.success(entryModal === 'entrada' ? 'Entrada lançada com sucesso!' : 'Saída lançada com sucesso!');
+            }
 
-            toast.success(entryModal === 'entrada' ? 'Entrada lançada com sucesso!' : 'Saída lançada com sucesso!');
-            setEntryModal(null);
+            closeEntryModal();
             fetchAll();
         } catch (error: any) {
             toast.error('Erro ao lançar: ' + error.message);
@@ -473,14 +511,24 @@ export default function CashFlow() {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 {r.origin === 'cash' && r.source === 'manual' && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => deleteManualEntry(r)}
-                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title="Excluir lançamento"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditEntryModal(r)}
+                                                            className="p-2 text-gray-400 hover:text-primary-cyan hover:bg-primary-cyan/10 rounded-lg transition-colors"
+                                                            title="Editar lançamento"
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => deleteManualEntry(r)}
+                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Excluir lançamento"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </td>
                                         </tr>
@@ -522,9 +570,14 @@ export default function CashFlow() {
                                                 </button>
                                             )}
                                             {r.origin === 'cash' && r.source === 'manual' && (
-                                                <button type="button" onClick={() => deleteManualEntry(r)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                <>
+                                                    <button type="button" onClick={() => openEditEntryModal(r)} className="p-1.5 text-gray-400 hover:text-primary-cyan hover:bg-primary-cyan/10 rounded-lg">
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button type="button" onClick={() => deleteManualEntry(r)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
@@ -536,13 +589,15 @@ export default function CashFlow() {
             </Card>
 
             {entryModal && (
-                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEntryModal(null)}>
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeEntryModal}>
                     <Card className="max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-bold text-lg text-dark">
-                                {entryModal === 'entrada' ? 'Nova Entrada' : 'Nova Saída'}
+                                {editingEntryId
+                                    ? (entryModal === 'entrada' ? 'Editar Entrada' : 'Editar Saída')
+                                    : (entryModal === 'entrada' ? 'Nova Entrada' : 'Nova Saída')}
                             </h3>
-                            <button type="button" onClick={() => setEntryModal(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                            <button type="button" onClick={closeEntryModal} className="p-1 hover:bg-gray-100 rounded-lg">
                                 <X className="w-5 h-5 text-gray-400" />
                             </button>
                         </div>
@@ -592,9 +647,9 @@ export default function CashFlow() {
                         </div>
 
                         <div className="flex justify-end gap-3 pt-6">
-                            <Button type="button" variant="outline" onClick={() => setEntryModal(null)}>Cancelar</Button>
+                            <Button type="button" variant="outline" onClick={closeEntryModal}>Cancelar</Button>
                             <Button type="button" onClick={submitManualEntry} disabled={isSubmittingEntry}>
-                                {isSubmittingEntry ? 'Salvando...' : 'Salvar'}
+                                {isSubmittingEntry ? 'Salvando...' : editingEntryId ? 'Salvar Alterações' : 'Salvar'}
                             </Button>
                         </div>
                     </Card>
