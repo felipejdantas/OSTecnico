@@ -158,6 +158,10 @@ export default function SalesOrders() {
             toast.error('Adicione pelo menos um produto à venda.');
             return;
         }
+        if (paymentStatus === 'pago' && grandTotal <= 0) {
+            toast.error('Não é possível faturar uma venda sem valor — adicione um produto primeiro.');
+            return;
+        }
         if (editingId && !confirm('Tem certeza que deseja atualizar esta venda?')) return;
 
         setIsSubmitting(true);
@@ -231,6 +235,10 @@ export default function SalesOrders() {
 
     const togglePaymentStatus = async (sale: any) => {
         const newStatus: PaymentStatus = sale.payment_status === 'pago' ? 'nao_pago' : 'pago';
+        if (newStatus === 'pago' && sale.total <= 0) {
+            toast.error('Não é possível faturar uma venda sem valor — adicione um produto primeiro.');
+            return;
+        }
         try {
             const { error } = await supabase
                 .from('sales_orders')

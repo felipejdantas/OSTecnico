@@ -533,13 +533,17 @@ export default function Dashboard() {
         }
     };
 
-    const togglePaymentStatus = async (orderId: string, currentStatus: PaymentStatus) => {
-        const newStatus: PaymentStatus = currentStatus === 'pago' ? 'nao_pago' : 'pago';
+    const togglePaymentStatus = async (order: ServiceOrder) => {
+        const newStatus: PaymentStatus = order.payment_status === 'pago' ? 'nao_pago' : 'pago';
+        if (newStatus === 'pago' && order.total <= 0) {
+            toast.error('Não é possível faturar uma OS sem valor — adicione uma peça ou serviço primeiro.');
+            return;
+        }
         try {
             const { error } = await supabase
                 .from('service_orders')
                 .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
-                .eq('id', orderId);
+                .eq('id', order.id);
 
             if (error) throw error;
             toast.success(newStatus === 'pago' ? 'Marcado como Faturado!' : 'Marcado como A Receber!');
@@ -816,7 +820,7 @@ export default function Dashboard() {
                                                 </select>
                                                 <button
                                                     type="button"
-                                                    onClick={() => togglePaymentStatus(order.id, order.payment_status)}
+                                                    onClick={() => togglePaymentStatus(order)}
                                                     className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].color}`}
                                                     title="Clique para alternar entre Faturado / A Receber"
                                                 >

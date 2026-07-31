@@ -183,6 +183,10 @@ export default function CashFlow() {
     const togglePaymentStatus = async (row: LedgerRow) => {
         if (row.origin === 'cash' || !row.payment_status) return;
         const newStatus: PaymentStatus = row.payment_status === 'pago' ? 'nao_pago' : 'pago';
+        if (newStatus === 'pago' && row.amount <= 0) {
+            toast.error('Não é possível faturar um registro sem valor.');
+            return;
+        }
         const table = row.origin === 'os' ? 'service_orders' : 'sales_orders';
         const { error } = await supabase
             .from(table)
