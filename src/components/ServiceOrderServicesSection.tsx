@@ -42,12 +42,17 @@ export default function ServiceOrderServicesSection({ orderId, lines, onChange, 
     const [customDescription, setCustomDescription] = useState('');
     const [customPrice, setCustomPrice] = useState(0);
 
-    // The actual reset (budget_approved_at + status) happens server-side via a DB
-    // trigger, as a side effect of the line insert/delete that already ran by the
-    // time this is called — this just surfaces it in the UI.
+    // Both budget-approval reset AND the recebido/em_diagnostico -> aguardando_aprovacao
+    // advance happen server-side via DB triggers as a side effect of the line
+    // insert/delete that already ran by the time this is called — this just
+    // re-syncs the form so it doesn't resubmit a stale cached status on next Salvar.
+    // Must run even when there was no prior approval (that's exactly the case the
+    // auto-advance trigger targets), so the resync itself isn't gated on budgetApprovedAt.
     const invalidateApproval = async () => {
-        if (!orderId || !budgetApprovedAt) return;
-        toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        if (!orderId) return;
+        if (budgetApprovedAt) {
+            toast('Orçamento alterado — o cliente vai precisar aprovar novamente.', { icon: '⚠️' });
+        }
         await onApprovalReset?.();
     };
 
