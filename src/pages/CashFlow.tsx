@@ -291,6 +291,9 @@ export default function CashFlow() {
 
     const monthLabel = monthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     const changeMonth = (delta: number) => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + delta, 1));
+    const now = new Date();
+    const isViewingCurrentMonth = monthDate.getFullYear() === now.getFullYear() && monthDate.getMonth() === now.getMonth();
+    const monthTileLabel = isViewingCurrentMonth ? 'Este Mês' : monthDate.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
 
     const changeDay = (delta: number) => setDayDate(prev => {
         const next = new Date(prev);
@@ -308,12 +311,8 @@ export default function CashFlow() {
     monday.setDate(today.getDate() - diffToMonday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    const currentMonthStart = toDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
-    const currentMonthEnd = toDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-
     const dayStat = computeStats(allRows, dayDateStr, dayDateStr);
     const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday));
-    const currentMonthStat = computeStats(allRows, currentMonthStart, currentMonthEnd);
 
     const browsedMonthStart = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
     const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
@@ -408,15 +407,32 @@ export default function CashFlow() {
                     )}
                 </Card>
                 <Card className="bg-gradient-to-br from-primary-cyan/10 to-primary-cyan/5">
-                    <div className="flex items-center gap-2 text-gray-600 mb-1">
-                        <Calendar className="w-4 h-4" />
-                        <p className="text-xs sm:text-sm">Este Mês</p>
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2 text-gray-600">
+                            <Calendar className="w-4 h-4" />
+                            <p className="text-xs sm:text-sm capitalize">{monthTileLabel}</p>
+                        </div>
+                        <div className="flex items-center -mr-1.5">
+                            <button type="button" onClick={() => changeMonth(-1)} className="p-1 hover:bg-white/60 rounded-lg transition-colors touch-manipulation" aria-label="Mês anterior">
+                                <ChevronLeft className="w-4 h-4 text-primary-cyan" />
+                            </button>
+                            <button type="button" onClick={() => changeMonth(1)} className="p-1 hover:bg-white/60 rounded-lg transition-colors touch-manipulation" aria-label="Próximo mês">
+                                <ChevronRight className="w-4 h-4 text-primary-cyan" />
+                            </button>
+                        </div>
                     </div>
-                    <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(currentMonthStat.saldo)}</p>
+                    <p className="text-xl sm:text-2xl font-bold text-dark">{loading ? '...' : formatCurrency(monthSaldo)}</p>
                     {!loading && (
                         <p className="text-xs mt-0.5">
-                            <span className="text-green-600">+{formatCurrency(currentMonthStat.entradas)}</span>{' / '}
-                            <span className="text-red-500">-{formatCurrency(currentMonthStat.saidas)}</span>
+                            <span className="text-green-600">+{formatCurrency(monthEntradas)}</span>{' / '}
+                            <span className="text-red-500">-{formatCurrency(monthSaidas)}</span>
+                        </p>
+                    )}
+                    {!loading && !isViewingCurrentMonth && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            <button type="button" onClick={() => setMonthDate(new Date())} className="text-primary-cyan hover:underline">
+                                voltar para este mês
+                            </button>
                         </p>
                     )}
                 </Card>
