@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, AlertTriangle, X, Search, Calculator } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, X, Search, Calculator } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -45,9 +45,43 @@ type ServiceOrder = {
 
 type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
 type RankedRow = { label: string; count: number; revenue: number };
+type RawRankingRow = { name: string; quantity: number; price: number; created_at: string };
 type LowStockProduct = { id: string; name: string; unit: string; stock_quantity: number; min_stock_alert: number };
 type TrendPoint = { label: string; count: number };
 type TrendGranularity = 'dia' | 'semana' | 'mes';
+
+// Aggregates raw item/service rows by name within [monthStart, monthEnd), keeping
+// only the top 5 by quantity — used for the "mais vendidos/realizados no mês" panels.
+function rankByNameInMonth(rows: RawRankingRow[], monthDate: Date): RankedRow[] {
+    const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1);
+    const totals = new Map<string, RankedRow>();
+    for (const row of rows) {
+        const created = new Date(row.created_at);
+        if (created < monthStart || created >= monthEnd) continue;
+        const entry = totals.get(row.name) || { label: row.name, count: 0, revenue: 0 };
+        entry.count += row.quantity;
+        entry.revenue += row.quantity * row.price;
+        totals.set(row.name, entry);
+    }
+    return [...totals.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+}
+
+// Small inline month browser for a card header — mirrors the Fluxo de Caixa
+// "Este Mês" tile's arrows, just compact enough to sit next to a title.
+function MonthNav({ label, onPrev, onNext }: { label: string; onPrev: () => void; onNext: () => void }) {
+    return (
+        <div className="flex items-center gap-0.5 text-xs text-gray-400 flex-shrink-0">
+            <button type="button" onClick={onPrev} className="p-1 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Mês anterior">
+                <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <span className="capitalize w-10 text-center">{label}</span>
+            <button type="button" onClick={onNext} className="p-1 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Próximo mês">
+                <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+        </div>
+    );
+}
 
 // Single-series horizontal bar (magnitude, one hue) — no legend needed, the
 // card title already names the series. Direct-labeled since there are only ~5 rows.
@@ -133,9 +167,9 @@ function StockMeterRow({ product }: { product: LowStockProduct }) {
 }
 
 // Trend over time (line, not columns) — the job here is "is it going up or
-// down," which a line reads at a glance; only the current month is
-// direct-labeled (marks-and-anatomy: never a number on every point), the
-// rest live in each dot's hover/focus title.
+// down," which a line reads at a glance. Every point is direct-labeled with
+// its count (the user wants the number visible, not just on hover); the
+// current/last point stays visually emphasized (bold, larger) as the anchor.
 function TrendLine({ months }: { months: TrendPoint[] }) {
     const width = 800;
     const height = 260;
@@ -157,15 +191,27 @@ function TrendLine({ months }: { months: TrendPoint[] }) {
             <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="#e1e0d9" strokeWidth={1} />
             <path d={areaPath} fill="#0891b2" opacity={0.1} />
             <path d={linePath} fill="none" stroke="#0891b2" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-            {points.map(p => (
-                <g key={p.label}>
-                    <circle cx={p.x} cy={p.y} r={6} fill="#0891b2" stroke="#fff" strokeWidth={2.5}>
-                        <title>{`${p.label}: ${p.count} OS`}</title>
-                    </circle>
-                    <text x={p.x} y={height - 10} textAnchor="middle" fontSize={12} fill="#898781" className="capitalize">{p.label}</text>
-                </g>
-            ))}
-            <text x={last.x} y={last.y - 16} textAnchor="middle" fontSize={18} fontWeight={700} fill="#1f2937">{last.count}</text>
+            {points.map(p => {
+                const isLast = p === last;
+                return (
+                    <g key={p.label}>
+                        <circle cx={p.x} cy={p.y} r={isLast ? 6 : 5} fill="#0891b2" stroke="#fff" strokeWidth={2.5}>
+                            <title>{`${p.label}: ${p.count} OS`}</title>
+                        </circle>
+                        <text
+                            x={p.x}
+                            y={p.y - (isLast ? 16 : 12)}
+                            textAnchor="middle"
+                            fontSize={isLast ? 18 : 12}
+                            fontWeight={isLast ? 700 : 600}
+                            fill={isLast ? '#1f2937' : '#52514e'}
+                        >
+                            {p.count}
+                        </text>
+                        <text x={p.x} y={height - 10} textAnchor="middle" fontSize={12} fill="#898781" className="capitalize">{p.label}</text>
+                    </g>
+                );
+            })}
         </svg>
     );
 }
@@ -179,8 +225,9 @@ export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
-    const [topServicesMonth, setTopServicesMonth] = useState<RankedRow[]>([]);
-    const [topPartsMonth, setTopPartsMonth] = useState<RankedRow[]>([]);
+    const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
+    const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
+    const [rankingMonth, setRankingMonth] = useState(() => new Date());
     const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
     const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>('mes');
     const navigate = useNavigate();
@@ -316,23 +363,10 @@ export default function Dashboard() {
                     (servicesByOrder[line.service_order_id] ||= []).push(line);
                 }
 
-                // "This month" ranking — what actually left the shop recently, not
-                // all-time totals (which would just crown whatever's been sold longest).
-                const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-                const rankByName = (rows: { name: string; quantity: number; price: number; created_at: string }[]): RankedRow[] => {
-                    const totals = new Map<string, RankedRow>();
-                    for (const row of rows) {
-                        if (new Date(row.created_at) < startOfMonth) continue;
-                        const entry = totals.get(row.name) || { label: row.name, count: 0, revenue: 0 };
-                        entry.count += row.quantity;
-                        entry.revenue += row.quantity * row.price;
-                        totals.set(row.name, entry);
-                    }
-                    return [...totals.values()].sort((a, b) => b.count - a.count).slice(0, 5);
-                };
-
-                setTopPartsMonth(rankByName((itemsData || []).map((i: any) => ({ name: i.product_name, quantity: i.quantity, price: i.unit_price, created_at: i.created_at }))));
-                setTopServicesMonth(rankByName((servicesData || []).map((s: any) => ({ name: s.service_name, quantity: s.quantity, price: s.price, created_at: s.created_at }))));
+                // Kept raw (not pre-filtered to a month) so the "mais vendidos/realizados"
+                // panels can browse past months client-side without refetching.
+                setRawItemRows((itemsData || []).map((i: any) => ({ name: i.product_name, quantity: i.quantity, price: i.unit_price, created_at: i.created_at })));
+                setRawServiceRows((servicesData || []).map((s: any) => ({ name: s.service_name, quantity: s.quantity, price: s.price, created_at: s.created_at })));
             }
 
             const enrichedOrders: ServiceOrder[] = fetchedOrders.map((o: any) => {
@@ -666,6 +700,11 @@ export default function Dashboard() {
         return points;
     }, [orders, trendGranularity]);
 
+    const topServicesMonth = useMemo(() => rankByNameInMonth(rawServiceRows, rankingMonth), [rawServiceRows, rankingMonth]);
+    const topPartsMonth = useMemo(() => rankByNameInMonth(rawItemRows, rankingMonth), [rawItemRows, rankingMonth]);
+    const changeRankingMonth = (delta: number) => setRankingMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+    const rankingMonthLabel = rankingMonth.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+
     return (
         <div className="space-y-4 sm:space-y-6">
             {showOverdueAlert && overdueBudgets.length > 0 && (
@@ -959,7 +998,10 @@ export default function Dashboard() {
             {/* Attention panel: monthly rankings + stock alerts + volume trend */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card>
-                    <h3 className="font-semibold text-base sm:text-lg mb-4">Serviços mais realizados no mês</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-base sm:text-lg">Serviços mais realizados no mês</h3>
+                        <MonthNav label={rankingMonthLabel} onPrev={() => changeRankingMonth(-1)} onNext={() => changeRankingMonth(1)} />
+                    </div>
                     {topServicesMonth.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhum serviço registrado este mês ainda.</p>
                     ) : (
@@ -968,7 +1010,10 @@ export default function Dashboard() {
                 </Card>
 
                 <Card>
-                    <h3 className="font-semibold text-base sm:text-lg mb-4">Produtos mais vendidos</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-semibold text-base sm:text-lg">Produtos mais vendidos</h3>
+                        <MonthNav label={rankingMonthLabel} onPrev={() => changeRankingMonth(-1)} onNext={() => changeRankingMonth(1)} />
+                    </div>
                     {topPartsMonth.length === 0 ? (
                         <p className="text-sm text-gray-400 text-center py-4">Nenhuma peça usada este mês ainda.</p>
                     ) : (
