@@ -24,13 +24,16 @@ const productSchema = z.object({
     sale_price: z.coerce.number().min(0, 'Valor inválido'),
     stock_quantity: z.coerce.number().int('Deve ser um número inteiro'),
     min_stock_alert: z.coerce.number().int('Deve ser um número inteiro').min(0),
-    warranty_days: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
+    // Cadastro pede em meses (mais natural pro lojista); convertido pra dias
+    // só na hora de salvar, já que warranty_days (dias) é o que todo o resto
+    // do app (OS, Venda, PDF) espera.
+    warranty_months: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
 });
 
 type ProductFormInput = z.input<typeof productSchema>;
 type ProductForm = z.output<typeof productSchema>;
 
-type Product = ProductForm & { id: string; photos?: string[] };
+type Product = Omit<ProductForm, 'warranty_months'> & { id: string; photos?: string[]; warranty_days: number | null };
 
 export default function Products() {
     const { tenantId } = useAuth();
@@ -73,7 +76,7 @@ export default function Products() {
         setValue('sale_price', product.sale_price);
         setValue('stock_quantity', product.stock_quantity);
         setValue('min_stock_alert', product.min_stock_alert);
-        setValue('warranty_days', product.warranty_days ?? undefined);
+        setValue('warranty_months', product.warranty_days ? Math.round(product.warranty_days / 30) : undefined);
         setExistingPhotos(product.photos || []);
         setIsFormOpen(true);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -105,11 +108,13 @@ export default function Products() {
         try {
             const newPhotoUrls = await Promise.all(newImages.map(uploadFile));
             const photos = [...existingPhotos, ...newPhotoUrls];
+            const { warranty_months, ...rest } = data;
+            const row = { ...rest, warranty_days: warranty_months ? warranty_months * 30 : null };
 
             if (editingId) {
                 const { error } = await supabase
                     .from('products')
-                    .update({ ...data, photos })
+                    .update({ ...row, photos })
                     .eq('id', editingId)
                     .eq('user_id', tenantId);
 
@@ -118,7 +123,7 @@ export default function Products() {
             } else {
                 const { error } = await supabase
                     .from('products')
-                    .insert([{ ...data, photos, user_id: tenantId }]);
+                    .insert([{ ...row, photos, user_id: tenantId }]);
 
                 if (error) throw error;
                 toast.success('Produto salvo com sucesso!');
@@ -188,11 +193,11 @@ export default function Products() {
                             <Input label="Quantidade em Estoque" type="number" {...register('stock_quantity')} error={errors.stock_quantity?.message} />
                             <Input label="Alerta de Estoque Mínimo" type="number" {...register('min_stock_alert')} error={errors.min_stock_alert?.message} />
                             <Input
-                                label="Garantia Padrão (dias)"
+                                label="Garantia Padrão (meses)"
                                 type="number"
-                                placeholder="Ex: 90, 365... deixe em branco p/ usar a garantia padrão da OS"
-                                {...register('warranty_days')}
-                                error={errors.warranty_days?.message}
+                                placeholder="Ex: 3, 12... deixe em branco p/ usar a garantia padrão da OS"
+                                {...register('warranty_months')}
+                                error={errors.warranty_months?.message}
                             />
                         </div>
 
