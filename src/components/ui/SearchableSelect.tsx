@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { matchesSearchFields } from '../../lib/search';
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -23,13 +24,6 @@ interface SearchableSelectProps {
     disabled?: boolean;
 }
 
-function normalize(text: string) {
-    return text
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '');
-}
-
 export function SearchableSelect({ options, value, onChange, placeholder = 'Selecione...', error, className, disabled }: SearchableSelectProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -49,12 +43,8 @@ export function SearchableSelect({ options, value, onChange, placeholder = 'Sele
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const normalizedQuery = normalize(query.trim());
-    const filtered = normalizedQuery
-        ? options.filter(o =>
-            normalize(o.label).includes(normalizedQuery) ||
-            (o.sublabel && normalize(o.sublabel).includes(normalizedQuery))
-        )
+    const filtered = query.trim()
+        ? options.filter(o => matchesSearchFields([o.label, o.sublabel], query))
         : options;
 
     return (
