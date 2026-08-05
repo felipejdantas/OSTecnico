@@ -11,6 +11,12 @@ type AuthContextType = {
     // Every query/insert scoped by "user_id" must use this instead of user.id, or a team
     // member's session ends up reading/writing their own empty tenant instead of the shop's data.
     tenantId: string | null;
+    // True only for the account owner (user.id === tenantId), false for a team
+    // member logged in with their own login. Gates owner-only UI (Usuários da
+    // Equipe) — the actual enforcement lives in RLS/the create-team-user edge
+    // function already; this just keeps a técnico from seeing a section they
+    // can't use anyway.
+    isOwner: boolean;
     loading: boolean;
     signOut: () => Promise<void>;
 };
@@ -19,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
     session: null,
     user: null,
     tenantId: null,
+    isOwner: false,
     loading: true,
     signOut: async () => { },
 });
@@ -94,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user,
         tenantId,
+        isOwner: !!user && !!tenantId && user.id === tenantId,
         loading,
         signOut,
     };

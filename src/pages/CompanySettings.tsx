@@ -158,7 +158,7 @@ type SettingsForm = z.output<typeof settingsSchema>;
 const DEFAULT_WARRANTY_TEXT = 'A garantia prevista cobre exclusivamente o defeito relacionado ao serviço executado e/ou à peça substituída nesta Ordem de Serviço, contada a partir da data de entrega do equipamento, conforme o Código de Defesa do Consumidor (Lei nº 8.078/90, art. 26, inciso II). Não estão cobertos: danos decorrentes de mau uso, quedas, impactos, oxidação ou contato com líquidos; violação do lacre ou intervenção técnica de terceiros após a entrega; defeitos não relacionados ao reparo original; ou desgaste natural de outros componentes do equipamento. Constatada a reincidência do defeito coberto dentro do prazo de garantia, o reparo será refeito sem cobrança de mão de obra. Esta garantia contratual complementa, e não substitui, a garantia legal prevista no Código de Defesa do Consumidor.';
 
 export default function CompanySettings() {
-    const { tenantId } = useAuth();
+    const { tenantId, isOwner } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
@@ -370,7 +370,10 @@ export default function CompanySettings() {
                 Senha) would otherwise be swept into that form's native HTML5
                 validation on "Salvar Configurações", blocking the save with
                 "Preencha este campo" for a field the user never meant to touch. */}
-            <TeamSection />
+            {/* Owner-only: a técnico can't create/remove team members anyway (RLS +
+                a check inside the create-team-user edge function already refuse it),
+                this just keeps them from seeing a section they can't use. */}
+            {isOwner && <TeamSection />}
         </div>
     );
 }
