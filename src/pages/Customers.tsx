@@ -18,10 +18,13 @@ import { useAuth } from '../contexts/AuthContext';
 
 const customerSchema = z.object({
     personType: z.enum(['fisica', 'juridica']),
-    name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+    // Nome/CPF só existem pra pessoa física — pessoa jurídica usa Razão
+    // Social/Nome Fantasia (etapa "Dados da Empresa") em vez disso. Exigidos
+    // condicionalmente no superRefine abaixo, não aqui.
+    name: z.string().optional(),
     phone: z.string().min(10, 'Telefone inválido'),
     email: z.union([z.literal(''), z.string().email('E-mail inválido')]).optional(),
-    cpf: z.string().min(11, 'CPF inválido'),
+    cpf: z.string().optional(),
     cep: z.string().min(8, 'CEP inválido'),
     address: z.string().min(5, 'Endereço obrigatório'),
     number: z.string().min(1, 'Número obrigatório'),
@@ -31,6 +34,22 @@ const customerSchema = z.object({
     tradeName: z.string().optional(),
     stateRegistration: z.string().optional(),
     municipalRegistration: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (data.personType === 'fisica') {
+        if (!data.name || data.name.trim().length < 3) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'Nome deve ter pelo menos 3 caracteres' });
+        }
+        if (!data.cpf || data.cpf.replace(/\D/g, '').length < 11) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'CPF inválido' });
+        }
+    } else {
+        if (!data.cnpj || !data.cnpj.trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cnpj'], message: 'CNPJ obrigatório' });
+        }
+        if (!data.companyName || !data.companyName.trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['companyName'], message: 'Razão Social obrigatória' });
+        }
+    }
 });
 
 type CustomerForm = z.infer<typeof customerSchema>;
@@ -44,12 +63,13 @@ const STEP_TITLES: Record<Step, string> = {
     contato: 'Contato',
     endereco: 'Endereço',
 };
-const STEP_FIELDS: Record<Step, (keyof CustomerForm)[]> = {
-    basicos: ['name', 'cpf', 'email'],
-    empresa: ['cnpj', 'companyName', 'tradeName', 'stateRegistration', 'municipalRegistration'],
-    contato: ['phone'],
-    endereco: ['cep', 'address', 'number', 'complement'],
-};
+
+function getStepFields(step: Step, personType: 'fisica' | 'juridica'): (keyof CustomerForm)[] {
+    if (step === 'basicos') return personType === 'juridica' ? ['email'] : ['name', 'cpf', 'email'];
+    if (step === 'empresa') return ['cnpj', 'companyName', 'tradeName', 'stateRegistration', 'municipalRegistration'];
+    if (step === 'contato') return ['phone'];
+    return ['cep', 'address', 'number', 'complement'];
+}
 
 export default function Customers() {
     const { tenantId } = useAuth();
@@ -73,7 +93,7 @@ export default function Customers() {
     const stepIndex = steps.indexOf(step);
 
     const goNext = async () => {
-        const valid = await trigger(STEP_FIELDS[step]);
+        const valid = await trigger(getStepFields(step, personType));
         if (!valid) return;
         if (stepIndex === steps.length - 1) {
             handleSubmit(onSubmit)();
@@ -195,10 +215,14 @@ export default function Customers() {
 
         const { personType, cnpj, companyName, tradeName, stateRegistration, municipalRegistration, ...rest } = data;
         const isJuridica = personType === 'juridica';
+        // Pessoa jurídica não pede Nome/CPF na etapa "Dados do Cliente" — o nome
+        // exibido em todo o app vira o Nome Fantasia (ou Razão Social, se a
+        // empresa não tiver fantasia cadastrada na Receita).
+        const finalName = isJuridica ? (tradeName?.trim() || companyName?.trim() || '') : (rest.name || '');
 
         // Catch duplicate CPF/CNPJ before hitting the DB, so the error names the
         // conflicting customer instead of a generic constraint-violation message.
-        const cpfDigits = normalizeDoc(rest.cpf);
+        const cpfDigits = isJuridica ? '' : normalizeDoc(rest.cpf);
         const cnpjDigits = isJuridica ? normalizeDoc(cnpj) : '';
         const duplicate = customers.find(c => {
             if (c.id === editingId) return false;
@@ -216,6 +240,8 @@ export default function Customers() {
 
         const row = {
             ...rest,
+            name: finalName,
+            cpf: isJuridica ? null : rest.cpf,
             person_type: personType,
             cnpj: isJuridica ? cnpj : null,
             company_name: isJuridica ? companyName : null,
@@ -350,10 +376,19 @@ export default function Customers() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
-                                    <Input label={personType === 'juridica' ? 'CPF do Responsável' : 'CPF'} {...register('cpf')} error={errors.cpf?.message} />
+                                    {personType === 'fisica' && (
+                                        <>
+                                            <Input label="Nome Completo" {...register('name')} error={errors.name?.message} />
+                                            <Input label="CPF" {...register('cpf')} error={errors.cpf?.message} />
+                                        </>
+                                    )}
                                     <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
                                 </div>
+                                {personType === 'juridica' && (
+                                    <p className="text-xs text-gray-400">
+                                        Nome e CPF não se aplicam aqui — na próxima etapa você informa o CNPJ e a Razão Social/Nome Fantasia da empresa.
+                                    </p>
+                                )}
                             </>
                         )}
 
@@ -366,7 +401,7 @@ export default function Customers() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="md:col-span-2 flex gap-2 items-end">
                                         <div className="flex-1">
-                                            <Input label="CNPJ" {...register('cnpj')} placeholder="00.000.000/0000-00" />
+                                            <Input label="CNPJ" {...register('cnpj')} placeholder="00.000.000/0000-00" error={errors.cnpj?.message} />
                                         </div>
                                         <Button
                                             type="button"
@@ -381,8 +416,8 @@ export default function Customers() {
                                             {isSearchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar CNPJ'}
                                         </Button>
                                     </div>
-                                    <Input label="Razão Social" {...register('companyName')} />
-                                    <Input label="Nome Fantasia" {...register('tradeName')} />
+                                    <Input label="Razão Social" {...register('companyName')} error={errors.companyName?.message} />
+                                    <Input label="Nome Fantasia" {...register('tradeName')} placeholder="Se vazio, a Razão Social vira o nome do cliente" />
                                     <Input label="Inscrição Estadual" {...register('stateRegistration')} placeholder="Preencha manualmente" />
                                     <Input label="Inscrição Municipal" {...register('municipalRegistration')} placeholder="Preencha manualmente" />
                                 </div>
