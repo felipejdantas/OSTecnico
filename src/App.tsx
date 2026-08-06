@@ -16,6 +16,7 @@ import ImportNFe from './pages/ImportNFe';
 import Services from './pages/Services';
 import CashFlow from './pages/CashFlow';
 import CompanySettings from './pages/CompanySettings';
+import Assistencias from './pages/Assistencias';
 import ClientSignature from './pages/ClientSignature';
 import PublicQuote from './pages/PublicQuote';
 import Login from './pages/Login';
@@ -30,6 +31,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return <Navigate to="/login" />;
+  }
+
+  return <>{children}</>;
+}
+
+function RequireMaster({ children }: { children: React.ReactNode }) {
+  const { isMaster, loading } = useAuth();
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  }
+
+  if (!isMaster) {
+    return <Navigate to="/" />;
   }
 
   return <>{children}</>;
@@ -88,6 +103,7 @@ function App() {
           <Route path="/caixa" element={<ProtectedRoute><Layout><CashFlow /></Layout></ProtectedRoute>} />
           <Route path="/faturamento" element={<Navigate to="/caixa" replace />} />
           <Route path="/configuracoes" element={<ProtectedRoute><Layout><CompanySettings /></Layout></ProtectedRoute>} />
+          <Route path="/admin/assistencias" element={<ProtectedRoute><RequireMaster><Layout><Assistencias /></Layout></RequireMaster></ProtectedRoute>} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

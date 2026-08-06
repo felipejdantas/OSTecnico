@@ -17,6 +17,11 @@ type AuthContextType = {
     // function already; this just keeps a técnico from seeing a section they
     // can't use anyway.
     isOwner: boolean;
+    // True for an account listed in master_admins — can provision brand new
+    // assistências (new tenant owners), independent of/in addition to owning
+    // their own shop. Unrelated to isOwner: a master may or may not also run
+    // their own tenant.
+    isMaster: boolean;
     loading: boolean;
     signOut: () => Promise<void>;
 };
@@ -26,6 +31,7 @@ const AuthContext = createContext<AuthContextType>({
     user: null,
     tenantId: null,
     isOwner: false,
+    isMaster: false,
     loading: true,
     signOut: async () => { },
 });
@@ -38,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<Session | null>(null);
     const [user, setUser] = useState<User | null>(null);
     const [tenantId, setTenantId] = useState<string | null>(null);
+    const [isMaster, setIsMaster] = useState(false);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -93,6 +100,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => { cancelled = true; };
     }, [user]);
 
+    useEffect(() => {
+        if (!user) {
+            setIsMaster(false);
+            return;
+        }
+
+        let cancelled = false;
+        (async () => {
+            const { data } = await supabase
+                .from('master_admins')
+                .select('user_id')
+                .eq('user_id', user.id)
+                .maybeSingle();
+            if (!cancelled) setIsMaster(!!data);
+        })();
+
+        return () => { cancelled = true; };
+    }, [user]);
+
     const signOut = async () => {
         await supabase.auth.signOut();
     };
@@ -102,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         tenantId,
         isOwner: !!user && !!tenantId && user.id === tenantId,
+        isMaster,
         loading,
         signOut,
     };

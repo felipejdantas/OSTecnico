@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
     Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet,
     Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown, Search, Calculator, FileSpreadsheet,
+    Building2,
 } from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,72 +12,83 @@ import { QuickSearch } from './QuickSearch';
 type MenuItem = { icon: typeof Home; label: string; path: string };
 type MenuGroup = { title?: string; items: MenuItem[] };
 
-const menuGroups: MenuGroup[] = [
-    {
-        items: [
-            { icon: Home, label: 'Dashboard', path: '/' },
-            { icon: FilePlus, label: 'Nova OS', path: '/nova-os' },
-            { icon: Calculator, label: 'Orçamentos', path: '/orcamentos' },
-        ],
-    },
-    {
-        title: 'Cadastro',
-        items: [
-            { icon: Users, label: 'Clientes', path: '/clientes' },
-            { icon: Wrench, label: 'Técnicos', path: '/tecnicos' },
-            { icon: Truck, label: 'Fornecedores', path: '/fornecedores' },
-            { icon: Package, label: 'Produtos', path: '/produtos' },
-            { icon: Hammer, label: 'Serviços', path: '/servicos' },
-        ],
-    },
-    {
-        title: 'Vendas',
-        items: [
-            { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
-        ],
-    },
-    {
-        title: 'Compras',
-        items: [
-            { icon: ClipboardList, label: 'Pedidos de Compra', path: '/compras' },
-            { icon: FileSpreadsheet, label: 'Importar NF-e', path: '/importar-nfe' },
-            { icon: Boxes, label: 'Estoque', path: '/estoque' },
-        ],
-    },
-    {
-        title: 'Financeiro',
-        items: [
-            { icon: Wallet, label: 'Fluxo de Caixa', path: '/caixa' },
-        ],
-    },
-    {
-        items: [
-            { icon: Settings, label: 'Configurações', path: '/configuracoes' },
-        ],
-    },
-];
+function buildMenuGroups(isMaster: boolean): MenuGroup[] {
+    return [
+        {
+            items: [
+                { icon: Home, label: 'Dashboard', path: '/' },
+                { icon: FilePlus, label: 'Nova OS', path: '/nova-os' },
+                { icon: Calculator, label: 'Orçamentos', path: '/orcamentos' },
+            ],
+        },
+        {
+            title: 'Cadastro',
+            items: [
+                { icon: Users, label: 'Clientes', path: '/clientes' },
+                { icon: Wrench, label: 'Técnicos', path: '/tecnicos' },
+                { icon: Truck, label: 'Fornecedores', path: '/fornecedores' },
+                { icon: Package, label: 'Produtos', path: '/produtos' },
+                { icon: Hammer, label: 'Serviços', path: '/servicos' },
+            ],
+        },
+        {
+            title: 'Vendas',
+            items: [
+                { icon: ShoppingCart, label: 'Pedidos de Venda', path: '/vendas' },
+            ],
+        },
+        {
+            title: 'Compras',
+            items: [
+                { icon: ClipboardList, label: 'Pedidos de Compra', path: '/compras' },
+                { icon: FileSpreadsheet, label: 'Importar NF-e', path: '/importar-nfe' },
+                { icon: Boxes, label: 'Estoque', path: '/estoque' },
+            ],
+        },
+        {
+            title: 'Financeiro',
+            items: [
+                { icon: Wallet, label: 'Fluxo de Caixa', path: '/caixa' },
+            ],
+        },
+        {
+            items: [
+                { icon: Settings, label: 'Configurações', path: '/configuracoes' },
+            ],
+        },
+        // Master-only: manages other assistências (tenant owners), not this shop's
+        // own data — only ever shown to an account listed in master_admins.
+        ...(isMaster ? [{
+            title: 'Administrador',
+            items: [
+                { icon: Building2, label: 'Assistências', path: '/admin/assistencias' },
+            ],
+        }] : []),
+    ];
+}
 
-function activeGroupTitle(pathname: string): string | undefined {
-    return menuGroups.find(g => g.items.some(i => i.path === pathname))?.title;
+function activeGroupTitle(pathname: string, groups: MenuGroup[]): string | undefined {
+    return groups.find(g => g.items.some(i => i.path === pathname))?.title;
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isQuickSearchOpen, setIsQuickSearchOpen] = useState(false);
     const location = useLocation();
-    const { signOut, user } = useAuth();
+    const { signOut, user, isMaster } = useAuth();
+    const menuGroups = buildMenuGroups(isMaster);
 
     // Only the group containing the current page starts open; everything else stays
     // collapsed until the user taps it, so the menu doesn't grow as more areas are added.
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-        const active = activeGroupTitle(location.pathname);
+        const active = activeGroupTitle(location.pathname, menuGroups);
         return new Set(menuGroups.filter(g => g.title && g.title !== active).map(g => g.title!));
     });
 
     // Whenever navigation lands in a different group, make sure that group is visible —
     // without forcing closed any group the user had manually opened.
     useEffect(() => {
-        const active = activeGroupTitle(location.pathname);
+        const active = activeGroupTitle(location.pathname, menuGroups);
         if (!active) return;
         setCollapsedGroups(prev => {
             if (!prev.has(active)) return prev;
