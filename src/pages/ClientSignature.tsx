@@ -8,6 +8,7 @@ import { SignaturePad, type SignaturePadRef } from '../components/SignaturePad';
 import { ImageViewer } from '../components/ImageViewer';
 import { StatusTimeline } from '../components/StatusTimeline';
 import { PublicBudget } from '../components/PublicBudget';
+import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { getStatusConfig } from '../lib/orderStatus';
 import { generateOSPDF } from '../lib/pdfGenerator';
@@ -39,12 +40,17 @@ type HistoryEntry = { status: string; note: string | null; created_at: string };
 
 export default function ClientSignature() {
     const { token } = useParams<{ token: string }>();
+    const { user: staffUser, loading: authLoading } = useAuth();
     const [os, setOs] = useState<any>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
     // Named documentNumber, not "document" — that would shadow window.document.
     const [documentNumber, setDocumentNumber] = useState('');
     const [isVerified, setIsVerified] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
+    // While AuthContext resolves the session and, if there is one, we ask the
+    // DB whether that logged-in user is staff for this specific order — keeps
+    // the CPF form from flashing on screen for a técnico who's about to skip it.
+    const [checkingStaffAccess, setCheckingStaffAccess] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [notFound, setNotFound] = useState(false);
@@ -83,6 +89,27 @@ export default function ClientSignature() {
             if (!data) setNotFound(true);
         })();
     }, [token]);
+
+    // Staff (the shop's owner or a técnico) shouldn't have to type the customer's
+    // own CPF/CNPJ to open a link they already have access to via their own login —
+    // skip the gate when the logged-in user belongs to the tenant that owns this
+    // order. Anonymous visitors (the actual customer) still go through verifyDocument.
+    useEffect(() => {
+        if (!token || authLoading) return;
+        if (!staffUser) {
+            setCheckingStaffAccess(false);
+            return;
+        }
+        (async () => {
+            const { data } = await supabase.rpc('public_order_staff_access', { p_token: token });
+            if (data) {
+                setIsVerified(true);
+                const order = await fetchOrder();
+                if (order) await fetchHistory();
+            }
+            setCheckingStaffAccess(false);
+        })();
+    }, [token, authLoading, staffUser, fetchOrder, fetchHistory]);
 
     // Live-update the tracking page whenever the shop posts a new status update —
     // only wired up once the client has verified their document and the order's
@@ -289,6 +316,14 @@ export default function ClientSignature() {
                     <h2 className="text-2xl font-bold text-dark mb-2">Link Inválido</h2>
                     <p className="text-gray-600">Ordem de serviço não encontrada ou link inválido.</p>
                 </Card>
+            </div>
+        );
+    }
+
+    if (!isVerified && (authLoading || checkingStaffAccess)) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-cyan mx-auto"></div>
             </div>
         );
     }
