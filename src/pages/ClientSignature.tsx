@@ -41,7 +41,8 @@ export default function ClientSignature() {
     const { token } = useParams<{ token: string }>();
     const [os, setOs] = useState<any>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
-    const [cpf, setCpf] = useState('');
+    // Named documentNumber, not "document" — that would shadow window.document.
+    const [documentNumber, setDocumentNumber] = useState('');
     const [isVerified, setIsVerified] = useState(false);
     const [isVerifying, setIsVerifying] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,14 +73,20 @@ export default function ClientSignature() {
         setHistory(data || []);
     }, [token]);
 
+    // Distinguishes "dead/mistyped link" from "valid link, wrong document" up
+    // front — a lightweight existence check that reveals nothing about the
+    // order itself, so a bad link doesn't just loop "CPF incorreto" forever.
     useEffect(() => {
+        if (!token) return;
         (async () => {
-            const order = await fetchOrder();
-            if (order) await fetchHistory();
+            const { data } = await supabase.rpc('public_order_token_exists', { p_token: token });
+            if (!data) setNotFound(true);
         })();
-    }, [fetchOrder, fetchHistory]);
+    }, [token]);
 
-    // Live-update the tracking page whenever the shop posts a new status update
+    // Live-update the tracking page whenever the shop posts a new status update —
+    // only wired up once the client has verified their document and the order's
+    // actually loaded, since before that there's nothing on screen to update.
     useEffect(() => {
         if (!os?.id) return;
 
@@ -101,20 +108,27 @@ export default function ClientSignature() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [os?.id]);
 
-    const verifyCPF = async () => {
+    // Security gate: nothing about the order (customer name, address, budget,
+    // photos...) is fetched until the CPF/CNPJ on file matches what's typed here —
+    // so if the link reaches the wrong person, they see only this form, never the
+    // order's contents. Accepts CNPJ too since a pessoa jurídica customer has no
+    // CPF on file at all (see Customers.tsx).
+    const verifyDocument = async () => {
         if (!token) return;
         setIsVerifying(true);
         setError('');
         try {
-            const { data, error } = await supabase.rpc('verify_order_cpf', { p_token: token, p_cpf: cpf });
+            const { data, error } = await supabase.rpc('verify_order_cpf', { p_token: token, p_document: documentNumber });
             if (error) throw error;
             if (data) {
                 setIsVerified(true);
+                const order = await fetchOrder();
+                if (order) await fetchHistory();
             } else {
-                setError('CPF incorreto. Por favor, verifique e tente novamente.');
+                setError('CPF/CNPJ incorreto. Por favor, verifique e tente novamente.');
             }
         } catch (err) {
-            setError('Não foi possível verificar o CPF. Tente novamente.');
+            setError('Não foi possível verificar o CPF/CNPJ. Tente novamente.');
         } finally {
             setIsVerifying(false);
         }
@@ -144,7 +158,7 @@ export default function ClientSignature() {
 
             const { data: success, error: signError } = await supabase.rpc('sign_public_order', {
                 p_token: token,
-                p_cpf: cpf,
+                p_document: documentNumber,
                 p_signature_url: urlData.publicUrl,
             });
 
@@ -274,6 +288,47 @@ export default function ClientSignature() {
                     </div>
                     <h2 className="text-2xl font-bold text-dark mb-2">Link Inválido</h2>
                     <p className="text-gray-600">Ordem de serviço não encontrada ou link inválido.</p>
+                </Card>
+            </div>
+        );
+    }
+
+    if (!isVerified) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-primary-cyan/5 to-primary-green/5 flex items-center justify-center p-4">
+                <Card className="max-w-md w-full">
+                    <div className="text-center mb-6">
+                        <img src="/logo-full.jpg" alt="Dantas Info" className="h-16 mx-auto mb-4" />
+                        <h1 className="text-xl font-bold text-dark">Acompanhe sua Ordem de Serviço</h1>
+                    </div>
+                    <h2 className="text-lg font-bold text-dark mb-2">Verificação de Identidade</h2>
+                    <p className="text-gray-600 mb-6 text-sm">
+                        Por segurança, confirme o CPF ou CNPJ do cliente pra ver os dados desta ordem de serviço — assim, se o link cair em outras mãos, ninguém mais consegue abrir.
+                    </p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="text-sm font-medium text-gray-600 mb-1 block">CPF ou CNPJ</label>
+                            <input
+                                type="text"
+                                value={documentNumber}
+                                onChange={(e) => setDocumentNumber(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') verifyDocument(); }}
+                                placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                                maxLength={18}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 bg-white text-lg"
+                            />
+                        </div>
+
+                        {error && (
+                            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                                {error}
+                            </div>
+                        )}
+
+                        <Button onClick={verifyDocument} size="lg" className="w-full" disabled={isVerifying || !documentNumber.trim()}>
+                            {isVerifying ? 'Verificando...' : 'Ver Ordem de Serviço'}
+                        </Button>
+                    </div>
                 </Card>
             </div>
         );
@@ -523,58 +578,27 @@ export default function ClientSignature() {
                     </Card>
                 )}
 
-                {/* Signature: only after the client has reviewed everything above */}
+                {/* Signature: only after the client has reviewed everything above. No
+                    separate verification gate needed here — the whole page is already
+                    behind one (see the isVerified check above). */}
                 {needsSignature && !justSigned && (
-                    !isVerified ? (
-                        <Card>
-                            <h2 className="text-xl font-bold text-dark mb-4">Verificação de Identidade</h2>
-                            <p className="text-gray-600 mb-6">
-                                Para assinar a ordem de serviço, por favor confirme seu CPF.
-                            </p>
+                    <Card>
+                        <h2 className="text-xl font-bold text-dark mb-4">Sua Assinatura</h2>
+                        <p className="text-gray-600 mb-4 text-sm">
+                            Declaro que as informações acima conferem com o estado do equipamento entregue e autorizo a realização do serviço.
+                        </p>
+                        <SignaturePad ref={sigPadRef} />
 
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-600 mb-1 block">CPF</label>
-                                    <input
-                                        type="text"
-                                        value={cpf}
-                                        onChange={(e) => setCpf(e.target.value)}
-                                        placeholder="000.000.000-00"
-                                        maxLength={14}
-                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 bg-white text-lg"
-                                    />
-                                </div>
-
-                                {error && (
-                                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                                        {error}
-                                    </div>
-                                )}
-
-                                <Button onClick={verifyCPF} size="lg" className="w-full" disabled={isVerifying}>
-                                    {isVerifying ? 'Verificando...' : 'Verificar CPF'}
-                                </Button>
+                        {error && (
+                            <div className="p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                                {error}
                             </div>
-                        </Card>
-                    ) : (
-                        <Card>
-                            <h2 className="text-xl font-bold text-dark mb-4">Sua Assinatura</h2>
-                            <p className="text-gray-600 mb-4 text-sm">
-                                Declaro que as informações acima conferem com o estado do equipamento entregue e autorizo a realização do serviço.
-                            </p>
-                            <SignaturePad ref={sigPadRef} />
+                        )}
 
-                            {error && (
-                                <div className="p-3 mt-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
-                                    {error}
-                                </div>
-                            )}
-
-                            <Button onClick={handleSubmit} size="lg" className="w-full mt-4" disabled={isSubmitting}>
-                                {isSubmitting ? 'Salvando...' : 'Confirmar Assinatura'}
-                            </Button>
-                        </Card>
-                    )
+                        <Button onClick={handleSubmit} size="lg" className="w-full mt-4" disabled={isSubmitting}>
+                            {isSubmitting ? 'Salvando...' : 'Confirmar Assinatura'}
+                        </Button>
+                    </Card>
                 )}
             </div>
         </div>
