@@ -165,7 +165,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                                     <button
                                         type="button"
                                         onClick={() => toggleGroup(group.title!)}
-                                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide hover:text-gray-600 touch-manipulation"
+                                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-dark touch-manipulation"
                                     >
                                         {group.title}
                                         <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isCollapsed && "-rotate-90")} />
@@ -186,13 +186,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                                                     className={cn(
                                                         "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group touch-manipulation min-h-[44px]",
                                                         isActive
-                                                            ? "bg-primary-cyan/10 text-primary-cyan font-medium"
-                                                            : "text-gray-500 hover:bg-gray-50 hover:text-dark active:bg-gray-100"
+                                                            ? "bg-primary-cyan/10 text-primary-cyan font-medium shadow-sm shadow-primary-cyan/10 ring-1 ring-primary-cyan/10"
+                                                            : "text-gray-600 hover:bg-gray-50 hover:text-dark active:bg-gray-100"
                                                     )}
                                                 >
                                                     <Icon className={cn(
                                                         "w-5 h-5 transition-colors flex-shrink-0",
-                                                        isActive ? "text-primary-cyan" : "text-gray-400 group-hover:text-primary-cyan"
+                                                        isActive ? "text-primary-cyan" : "text-gray-500 group-hover:text-primary-cyan"
                                                     )} />
                                                     <span className="text-sm sm:text-base">{item.label}</span>
                                                 </Link>
