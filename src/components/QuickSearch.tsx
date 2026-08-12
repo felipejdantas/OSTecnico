@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, X, FileText, Users, Package, Truck, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { matchesSearchFields } from '../lib/search';
+import { matchesSearchFields, matchesDigits } from '../lib/search';
 
 type ResultItem = { id: string; title: string; subtitle?: string; onSelect: () => void };
 type ResultGroup = { label: string; icon: typeof FileText; items: ResultItem[] };
@@ -77,7 +77,7 @@ export function QuickSearch({ isOpen, onClose }: Props) {
 
             const osMatches = isNumeric
                 ? (osRes.data || [])
-                : (osRes.data || []).filter((o: any) => matchesSearchFields([o.equipment, o.brand], q));
+                : (osRes.data || []).filter((o: any) => matchesSearchFields([o.equipment, o.brand, o.customers?.name], q));
             if (osMatches.length > 0) {
                 newGroups.push({
                     label: 'Ordens de Serviço',
@@ -91,7 +91,7 @@ export function QuickSearch({ isOpen, onClose }: Props) {
                 });
             }
             const customerMatches = (customersRes.data || []).filter((c: any) =>
-                matchesSearchFields([c.name], q) || c.phone?.includes(q) || c.cpf?.includes(q)
+                matchesSearchFields([c.name], q) || matchesDigits(c.phone, q) || matchesDigits(c.cpf, q)
             );
             if (customerMatches.length > 0) {
                 newGroups.push({
@@ -118,7 +118,7 @@ export function QuickSearch({ isOpen, onClose }: Props) {
                     })),
                 });
             }
-            const supplierMatches = (suppliersRes.data || []).filter((s: any) => matchesSearchFields([s.name], q) || s.phone?.includes(q));
+            const supplierMatches = (suppliersRes.data || []).filter((s: any) => matchesSearchFields([s.name], q) || matchesDigits(s.phone, q));
             if (supplierMatches.length > 0) {
                 newGroups.push({
                     label: 'Fornecedores',
