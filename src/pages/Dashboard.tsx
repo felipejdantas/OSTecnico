@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { WarrantyBadge } from '../components/WarrantyBadge';
+import { DaysInShopBadge } from '../components/DaysInShopBadge';
 
 import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
@@ -20,6 +21,7 @@ type ServiceOrder = {
     id: string;
     os_number: number;
     created_at: string;
+    entry_date: string | null;
     equipment: string;
     brand: string | null;
     equipment_type: string | null;
@@ -323,6 +325,7 @@ export default function Dashboard() {
           id,
           os_number,
           created_at,
+          entry_date,
           equipment,
           brand,
           equipment_type,
@@ -883,6 +886,7 @@ export default function Dashboard() {
                                                     </span>
                                                 )}
                                                 <WarrantyBadge completedDate={order.completed_date} warrantyDays={order.warranty_days} />
+                                                <DaysInShopBadge entryDate={order.entry_date} status={order.status} />
                                             </div>
 
                                             {/* Customer name highlighted */}

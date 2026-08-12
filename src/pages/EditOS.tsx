@@ -10,6 +10,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WarrantyBadge } from '../components/WarrantyBadge';
+import { DaysInShopBadge } from '../components/DaysInShopBadge';
 import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 
@@ -101,6 +102,7 @@ export default function EditOS() {
     const watchedCompletedDate = watch('completedDate');
     const watchedWarrantyDays = watch('warrantyDays') as number | undefined;
     const watchedStatus = watch('status');
+    const watchedEntryDate = watch('entryDate');
     // Once an OS is finished (pronto/entregue), everything except the status field itself
     // becomes read-only, to avoid accidental edits to a job that's already done. Changing
     // the status back is the only way to unlock it again.
@@ -359,6 +361,7 @@ export default function EditOS() {
                             <div className="flex items-center gap-2 flex-wrap">
                                 <h2 className="text-xl sm:text-2xl font-bold text-dark">Editar Ordem de Serviço</h2>
                                 <WarrantyBadge completedDate={watchedCompletedDate} warrantyDays={watchedWarrantyDays} />
+                                <DaysInShopBadge entryDate={watchedEntryDate} status={watchedStatus} />
                             </div>
                             <p className="text-sm text-gray-500">Edite todas as informações da OS</p>
                         </div>

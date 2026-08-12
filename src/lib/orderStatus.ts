@@ -92,6 +92,13 @@ export function getStatusConfig(status: string): StatusConfig {
     return STATUS_CONFIG[status as OrderStatus] ?? STATUS_CONFIG.recebido;
 }
 
+// "Closed" means the equipment is no longer sitting at the shop, one way or
+// another — used to stop counters like days-in-shop that only make sense
+// while the order is still active.
+export function isOrderClosed(status: string | null | undefined): boolean {
+    return status === 'entregue' || status === 'cancelado';
+}
+
 /**
  * Updates a service order's status and appends the change to status_history
  * in one place, so every status change (Dashboard quick action, EditOS save)
