@@ -54,9 +54,16 @@ export default function SalesOrders() {
         },
     });
     const watchedDiscountType = watch('discountType');
-    const watchedDiscountValue = watch('discountValue') as number | undefined;
-    const watchedFreight = watch('freight') as number | undefined;
-    const watchedOtherCosts = watch('otherCosts') as number | undefined;
+    // watch() returns whatever the <input> last put in form state — a string,
+    // since these fields don't use valueAsNumber — so "as number" here was a
+    // type-only cast with no runtime effect. That string then hit calculateOrderTotal's
+    // "+" as concatenation (149 + "8" + 0 === "14980"), not addition. Number(...)
+    // makes it a real number before it reaches any arithmetic. zodResolver's
+    // z.coerce.number() already does this for the final onSubmit payload, which is
+    // why saved totals were correct — only the live preview while typing was wrong.
+    const watchedDiscountValue = Number(watch('discountValue')) || 0;
+    const watchedFreight = Number(watch('freight')) || 0;
+    const watchedOtherCosts = Number(watch('otherCosts')) || 0;
 
     useEffect(() => {
         if (tenantId) fetchAll();
