@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, Ban, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -12,7 +12,10 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { matchesSearchFields } from '../lib/search';
 import { formatCurrency } from '../lib/orderFinance';
-import { dueDateForMonth, isPaidForMonth, type FixedCost } from '../lib/fixedCosts';
+import {
+    toDateStr, buildUpcomingInstallments, installmentStatusLabel,
+    type FixedCost, type FixedCostInstallment,
+} from '../lib/fixedCosts';
 
 const fixedCostSchema = z.object({
     title: z.string().min(2, 'Informe o nome do custo'),
@@ -25,42 +28,70 @@ const fixedCostSchema = z.object({
 type FixedCostFormInput = z.input<typeof fixedCostSchema>;
 type FixedCostForm = z.output<typeof fixedCostSchema>;
 
-type PaidEntry = { id: string; fixed_cost_id: string; entry_date: string; amount: number };
-
-// Local calendar date (YYYY-MM-DD), matching CashFlow.tsx's toDateStr — avoids
-// toISOString() rolling the date forward in the evening for UTC-3.
-function toDateStr(d: Date) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
+type InstallmentRow = FixedCostInstallment & { fixedCost: FixedCost };
 
 export default function FixedCosts() {
     const { tenantId } = useAuth();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
-    const [paidEntries, setPaidEntries] = useState<PaidEntry[]>([]);
+    const [installments, setInstallments] = useState<FixedCostInstallment[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [payingInstallment, setPayingInstallment] = useState<InstallmentRow | null>(null);
+    const [payDate, setPayDate] = useState('');
+    const [payAmount, setPayAmount] = useState('');
+    const [isPaying, setIsPaying] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
+
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FixedCostFormInput, any, FixedCostForm>({
         resolver: zodResolver(fixedCostSchema),
         defaultValues: { active: true },
     });
 
     useEffect(() => {
-        if (tenantId) fetchAll();
+        if (tenantId) init();
     }, [tenantId]);
+
+    // Keeps the pending horizon topped up automatically (no server-side cron
+    // for this yet) — safe to call every load since it upserts, ignoring
+    // months that already have an installment.
+    const init = async () => {
+        await fetchAll();
+        await generateUpcoming(true);
+        await fetchAll();
+    };
 
     const fetchAll = async () => {
         if (!tenantId) return;
-        const [costsRes, entriesRes] = await Promise.all([
+        const [costsRes, installmentsRes] = await Promise.all([
             supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).order('due_day'),
-            supabase.from('cash_entries').select('id, fixed_cost_id, entry_date, amount').eq('user_id', tenantId).not('fixed_cost_id', 'is', null),
+            supabase.from('os_fixed_cost_installments').select('*').eq('user_id', tenantId).order('due_date'),
         ]);
         if (costsRes.error) console.error('Error fetching fixed costs:', costsRes.error);
         else setFixedCosts(costsRes.data || []);
-        setPaidEntries((entriesRes.data || []) as PaidEntry[]);
+        if (installmentsRes.error) console.error('Error fetching installments:', installmentsRes.error);
+        else setInstallments((installmentsRes.data || []) as FixedCostInstallment[]);
+    };
+
+    // Always re-fetches active fixed costs directly instead of relying on the
+    // `fixedCosts` state — this runs right after fetchAll() in a couple of
+    // places, before React has necessarily re-rendered with the fresh state.
+    const generateUpcoming = async (silent = false) => {
+        if (!tenantId) return;
+        const { data: active } = await supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).eq('active', true);
+        if (!active || active.length === 0) return;
+        setIsGenerating(true);
+        try {
+            const rows = active.flatMap((fc: FixedCost) => buildUpcomingInstallments(fc).map(r => ({ ...r, user_id: tenantId })));
+            if (rows.length === 0) return;
+            const { error } = await supabase.from('os_fixed_cost_installments').upsert(rows, { onConflict: 'fixed_cost_id,due_date', ignoreDuplicates: true });
+            if (error) throw error;
+            if (!silent) { toast.success('Parcelas geradas!'); fetchAll(); }
+        } catch (error: any) {
+            if (!silent) toast.error('Erro ao gerar parcelas: ' + error.message);
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     const handleEdit = (fc: FixedCost) => {
@@ -75,7 +106,7 @@ export default function FixedCosts() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const handleCancel = () => {
+    const handleCancelForm = () => {
         setIsFormOpen(false);
         setEditingId(null);
         reset({ active: true, title: '', amount: undefined, category: '', dueDay: undefined, notes: '' } as any);
@@ -102,15 +133,17 @@ export default function FixedCosts() {
                 if (error) throw error;
                 toast.success('Custo fixo cadastrado com sucesso!');
             }
-            handleCancel();
-            fetchAll();
+            handleCancelForm();
+            await fetchAll();
+            await generateUpcoming(true);
+            await fetchAll();
         } catch (error: any) {
             toast.error('Erro ao salvar custo fixo: ' + error.message);
         }
     };
 
-    const handleDelete = async (id: string, title: string) => {
-        if (!tenantId || !confirm(`Tem certeza que deseja excluir o custo fixo "${title}"? Lançamentos já pagos no Fluxo de Caixa não são afetados.`)) return;
+    const handleDeleteFixedCost = async (id: string, title: string) => {
+        if (!tenantId || !confirm(`Tem certeza que deseja excluir "${title}"? Todas as parcelas geradas (inclusive já pagas) são excluídas junto — o histórico permanece no Fluxo de Caixa.`)) return;
         try {
             const { error } = await supabase.from('os_fixed_costs').delete().eq('id', id).eq('user_id', tenantId);
             if (error) throw error;
@@ -121,86 +154,109 @@ export default function FixedCosts() {
         }
     };
 
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
+    const openPayModal = (row: InstallmentRow) => {
+        setPayingInstallment(row);
+        setPayDate(toDateStr(new Date()));
+        setPayAmount(String(row.amount));
+    };
 
-    const markAsPaid = async (fc: FixedCost) => {
-        if (!tenantId) return;
-        const entryDateStr = toDateStr(dueDateForMonth(fc.due_day, year, month));
+    const confirmPayment = async () => {
+        if (!tenantId || !payingInstallment) return;
+        const amount = parseFloat(payAmount.replace(',', '.'));
+        if (!amount || amount <= 0) {
+            toast.error('Informe um valor válido.');
+            return;
+        }
+        setIsPaying(true);
         try {
-            const { error } = await supabase.from('cash_entries').insert([{
+            const { data: entry, error: entryError } = await supabase.from('cash_entries').insert([{
                 user_id: tenantId,
-                entry_date: entryDateStr,
-                competence_date: entryDateStr,
+                entry_date: payDate,
+                competence_date: payingInstallment.due_date,
                 type: 'saida',
-                category: fc.category,
-                amount: fc.amount,
-                description: fc.title,
+                category: payingInstallment.fixedCost.category,
+                amount,
+                description: payingInstallment.fixedCost.title,
                 related_party: null,
                 source: 'fixo',
-                fixed_cost_id: fc.id,
-            }]);
-            if (error) throw error;
+                fixed_cost_id: payingInstallment.fixed_cost_id,
+            }]).select('id').single();
+            if (entryError) throw entryError;
+
+            const { error: updateError } = await supabase.from('os_fixed_cost_installments').update({
+                status: 'pago',
+                paid_at: payDate,
+                paid_amount: amount,
+                cash_entry_id: entry.id,
+            }).eq('id', payingInstallment.id);
+            if (updateError) throw updateError;
+
             toast.success('Pagamento registrado no Fluxo de Caixa!');
+            setPayingInstallment(null);
             fetchAll();
         } catch (error: any) {
             toast.error('Erro ao registrar pagamento: ' + error.message);
+        } finally {
+            setIsPaying(false);
         }
     };
 
-    const undoPayment = async (fc: FixedCost) => {
-        const match = paidEntries.find(e => {
-            if (e.fixed_cost_id !== fc.id) return false;
-            const d = new Date(e.entry_date + 'T00:00:00');
-            return d.getFullYear() === year && d.getMonth() === month;
-        });
-        if (!match) return;
-        if (!confirm(`Desfazer o pagamento de "${fc.title}" deste mês? O lançamento sai do Fluxo de Caixa.`)) return;
-        const { error } = await supabase.from('cash_entries').delete().eq('id', match.id);
-        if (error) { toast.error('Erro ao desfazer pagamento: ' + error.message); return; }
-        toast.success('Pagamento desfeito.');
+    const undoPayment = async (row: InstallmentRow) => {
+        if (!confirm(`Desfazer o pagamento de "${row.fixedCost.title}" (venc. ${new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')})? O lançamento sai do Fluxo de Caixa.`)) return;
+        try {
+            if (row.cash_entry_id) {
+                const { error } = await supabase.from('cash_entries').delete().eq('id', row.cash_entry_id);
+                if (error) throw error;
+            }
+            const { error } = await supabase.from('os_fixed_cost_installments').update({
+                status: 'pendente', paid_at: null, paid_amount: null, cash_entry_id: null,
+            }).eq('id', row.id);
+            if (error) throw error;
+            toast.success('Pagamento desfeito.');
+            fetchAll();
+        } catch (error: any) {
+            toast.error('Erro ao desfazer pagamento: ' + error.message);
+        }
+    };
+
+    const cancelInstallment = async (row: InstallmentRow) => {
+        if (!confirm(`Cancelar a parcela de "${row.fixedCost.title}" (venc. ${new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')})?`)) return;
+        const { error } = await supabase.from('os_fixed_cost_installments').update({ status: 'cancelado' }).eq('id', row.id);
+        if (error) { toast.error('Erro ao cancelar: ' + error.message); return; }
+        toast.success('Parcela cancelada.');
         fetchAll();
     };
 
-    const filteredCosts = fixedCosts.filter(fc =>
-        matchesSearchFields([fc.title, fc.category], searchTerm)
-    );
-
-    const statusFor = (fc: FixedCost) => {
-        if (!fc.active) return { label: 'Inativo', color: 'bg-gray-100 text-gray-500' };
-        if (isPaidForMonth(fc.id, year, month, paidEntries)) return { label: 'Pago este mês', color: 'bg-green-100 text-green-700' };
-        const dueDate = dueDateForMonth(fc.due_day, year, month);
-        const daysUntil = Math.round((dueDate.getTime() - new Date(year, month, today.getDate()).getTime()) / (1000 * 60 * 60 * 24));
-        if (daysUntil < 0) return { label: `Vencido há ${Math.abs(daysUntil)}d`, color: 'bg-red-100 text-red-700' };
-        if (daysUntil <= 5) return { label: daysUntil === 0 ? 'Vence hoje' : `Vence em ${daysUntil}d`, color: 'bg-amber-100 text-amber-700' };
-        return { label: `Todo dia ${fc.due_day}`, color: 'bg-gray-100 text-gray-500' };
+    const deleteInstallment = async (row: InstallmentRow) => {
+        if (!confirm(`Excluir esta parcela de "${row.fixedCost.title}"? A próxima geração automática pode recriá-la se ainda estiver dentro do horizonte de meses.`)) return;
+        const { error } = await supabase.from('os_fixed_cost_installments').delete().eq('id', row.id);
+        if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
+        toast.success('Parcela excluída.');
+        fetchAll();
     };
 
-    const paymentAction = (fc: FixedCost) => {
-        if (!fc.active) return null;
-        const paid = isPaidForMonth(fc.id, year, month, paidEntries);
-        return paid ? (
-            <button type="button" onClick={() => undoPayment(fc)} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-red-600">
-                <Undo2 className="w-3.5 h-3.5" /> Desfazer pagamento
-            </button>
-        ) : (
-            <button type="button" onClick={() => markAsPaid(fc)} className="inline-flex items-center gap-1.5 text-xs font-medium text-primary-cyan hover:text-primary-cyan-dark">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Marcar como pago
-            </button>
-        );
-    };
+    const fixedCostById = new Map(fixedCosts.map(fc => [fc.id, fc]));
+    const installmentRows: InstallmentRow[] = installments
+        .map(inst => ({ ...inst, fixedCost: fixedCostById.get(inst.fixed_cost_id) }))
+        .filter((r): r is InstallmentRow => !!r.fixedCost)
+        .filter(r => matchesSearchFields([r.fixedCost.title, r.fixedCost.category], searchTerm))
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
     return (
         <div className="space-y-6">
             <div className="sticky top-0 z-30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-sm py-3 border-b border-gray-100 -mx-2 px-2 sm:-mx-0 sm:px-0">
                 <div>
                     <h2 className="text-2xl font-bold text-dark">Custos Fixos</h2>
-                    <p className="text-gray-500">Aluguel, energia, cartão... cadastre uma vez e receba aviso perto do vencimento</p>
+                    <p className="text-gray-500">Contas a pagar recorrentes — aluguel, energia, cartão...</p>
                 </div>
-                <Button onClick={() => { if (isFormOpen) handleCancel(); else setIsFormOpen(true); }}>
-                    {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4 mr-2" /> Novo Custo Fixo</>}
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => generateUpcoming(false)} disabled={isGenerating}>
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} /> Gerar Próximas Parcelas
+                    </Button>
+                    <Button onClick={() => { if (isFormOpen) handleCancelForm(); else setIsFormOpen(true); }}>
+                        {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4 mr-2" /> Novo Custo Fixo</>}
+                    </Button>
+                </div>
             </div>
 
             {isFormOpen && (
@@ -227,10 +283,10 @@ export default function FixedCosts() {
                         </div>
                         <label className="flex items-center gap-2 text-sm text-gray-600">
                             <input type="checkbox" {...register('active')} className="w-4 h-4 rounded border-gray-300 text-primary-cyan focus:ring-primary-cyan/50" />
-                            Ativo (gera aviso de vencimento no Dashboard)
+                            Ativo (continua gerando parcelas futuras)
                         </label>
                         <div className="flex justify-end gap-3 pt-4">
-                            <Button type="button" variant="outline" onClick={handleCancel}>Cancelar</Button>
+                            <Button type="button" variant="outline" onClick={handleCancelForm}>Cancelar</Button>
                             <Button type="submit">{editingId ? 'Salvar Alterações' : 'Salvar Custo Fixo'}</Button>
                         </div>
                     </form>
@@ -254,48 +310,58 @@ export default function FixedCosts() {
                     <table className="w-full text-sm text-left">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3">Nome</th>
+                                <th className="px-6 py-3">Custo Fixo</th>
                                 <th className="px-6 py-3">Categoria</th>
+                                <th className="px-6 py-3">Vencimento</th>
                                 <th className="px-6 py-3">Valor</th>
                                 <th className="px-6 py-3">Situação</th>
                                 <th className="px-6 py-3 text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredCosts.length === 0 ? (
+                            {installmentRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                                        Nenhum custo fixo cadastrado
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                                        Nenhuma parcela encontrada. Cadastre um custo fixo pra começar.
                                     </td>
                                 </tr>
                             ) : (
-                                filteredCosts.map((fc) => {
-                                    const status = statusFor(fc);
+                                installmentRows.map((row) => {
+                                    const status = installmentStatusLabel(row);
                                     return (
-                                        <tr key={fc.id} className="bg-white border-b hover:bg-gray-50">
+                                        <tr key={row.id} className="bg-white border-b hover:bg-gray-50">
                                             <td className="px-6 py-4 font-medium text-gray-900">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
                                                         <Repeat className="w-4 h-4" />
                                                     </div>
-                                                    <div>
-                                                        <div className="font-semibold">{fc.title}</div>
-                                                        {paymentAction(fc)}
-                                                    </div>
+                                                    <div className="font-semibold">{row.fixedCost.title}</div>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 text-gray-500">{fc.category || '-'}</td>
-                                            <td className="px-6 py-4 font-medium">{formatCurrency(fc.amount)}</td>
+                                            <td className="px-6 py-4 text-gray-500">{row.fixedCost.category || '-'}</td>
+                                            <td className="px-6 py-4 text-gray-600">{new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                            <td className="px-6 py-4 font-medium">{formatCurrency(row.paid_amount ?? row.amount)}</td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>{status.label}</span>
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                <DropdownMenu
-                                                    items={[
-                                                        { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(fc) },
-                                                        { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(fc.id, fc.title), variant: 'danger' as const },
-                                                    ]}
-                                                />
+                                                {row.status === 'pendente' && (
+                                                    <DropdownMenu items={[
+                                                        { label: 'Dar Baixa', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => openPayModal(row) },
+                                                        { label: 'Cancelar Parcela', icon: <Ban className="w-4 h-4" />, onClick: () => cancelInstallment(row) },
+                                                        { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
+                                                    ]} />
+                                                )}
+                                                {row.status === 'pago' && (
+                                                    <DropdownMenu items={[
+                                                        { label: 'Desfazer Pagamento', icon: <Undo2 className="w-4 h-4" />, onClick: () => undoPayment(row) },
+                                                    ]} />
+                                                )}
+                                                {row.status === 'cancelado' && (
+                                                    <DropdownMenu items={[
+                                                        { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
+                                                    ]} />
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -307,35 +373,45 @@ export default function FixedCosts() {
 
                 {/* Mobile Cards */}
                 <div className="md:hidden space-y-3 p-4">
-                    {filteredCosts.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">Nenhum custo fixo cadastrado</div>
+                    {installmentRows.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">Nenhuma parcela encontrada</div>
                     ) : (
-                        filteredCosts.map((fc) => {
-                            const status = statusFor(fc);
+                        installmentRows.map((row) => {
+                            const status = installmentStatusLabel(row);
                             return (
-                                <div key={fc.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 active:bg-gray-50 transition-colors">
+                                <div key={row.id} className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-3 flex-1 min-w-0">
                                             <div className="w-10 h-10 rounded-full bg-primary-cyan/10 text-primary-cyan flex items-center justify-center flex-shrink-0">
                                                 <Repeat className="w-5 h-5" />
                                             </div>
                                             <div className="min-w-0">
-                                                <div className="font-semibold text-gray-900 truncate">{fc.title}</div>
-                                                <div className="text-xs text-gray-400">{fc.category || 'Sem categoria'}</div>
+                                                <div className="font-semibold text-gray-900 truncate">{row.fixedCost.title}</div>
+                                                <div className="text-xs text-gray-400">{new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')} · {row.fixedCost.category || 'Sem categoria'}</div>
                                             </div>
                                         </div>
-                                        <DropdownMenu
-                                            items={[
-                                                { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(fc) },
-                                                { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(fc.id, fc.title), variant: 'danger' as const },
-                                            ]}
-                                        />
+                                        {row.status === 'pendente' && (
+                                            <DropdownMenu items={[
+                                                { label: 'Dar Baixa', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => openPayModal(row) },
+                                                { label: 'Cancelar Parcela', icon: <Ban className="w-4 h-4" />, onClick: () => cancelInstallment(row) },
+                                                { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
+                                            ]} />
+                                        )}
+                                        {row.status === 'pago' && (
+                                            <DropdownMenu items={[
+                                                { label: 'Desfazer Pagamento', icon: <Undo2 className="w-4 h-4" />, onClick: () => undoPayment(row) },
+                                            ]} />
+                                        )}
+                                        {row.status === 'cancelado' && (
+                                            <DropdownMenu items={[
+                                                { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
+                                            ]} />
+                                        )}
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="font-medium text-gray-900">{formatCurrency(fc.amount)}</span>
+                                        <span className="font-medium text-gray-900">{formatCurrency(row.paid_amount ?? row.amount)}</span>
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.color}`}>{status.label}</span>
                                     </div>
-                                    {paymentAction(fc)}
                                 </div>
                             );
                         })
@@ -343,10 +419,50 @@ export default function FixedCosts() {
                 </div>
             </Card>
 
-            <Card className="bg-amber-50/50 border-amber-100 text-xs text-amber-800 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>O aviso de vencimento aparece no Dashboard quando faltam 5 dias ou menos, e continua até você marcar como pago (ou o pagamento vira automaticamente um lançamento de "Saída" no Fluxo de Caixa).</p>
+            {/* Modelos de Custo Fixo: the recurring templates themselves — separate
+                from the installments table above, since editing a template doesn't
+                touch installments already generated. */}
+            <Card className="p-0 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                    <h3 className="font-semibold text-sm text-gray-700">Modelos de Custo Fixo Cadastrados</h3>
+                </div>
+                <div className="divide-y divide-gray-100">
+                    {fixedCosts.length === 0 ? (
+                        <p className="px-4 py-6 text-center text-gray-500 text-sm">Nenhum custo fixo cadastrado ainda.</p>
+                    ) : (
+                        fixedCosts.map(fc => (
+                            <div key={fc.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                                <div className="min-w-0 flex items-center gap-2">
+                                    <span className="font-medium text-gray-800 truncate">{fc.title}</span>
+                                    <span className="text-xs text-gray-400">{fc.category || 'Sem categoria'} · todo dia {fc.due_day} · {formatCurrency(fc.amount)}</span>
+                                    {!fc.active && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inativo</span>}
+                                </div>
+                                <DropdownMenu items={[
+                                    { label: 'Editar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(fc) },
+                                    { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDeleteFixedCost(fc.id, fc.title), variant: 'danger' as const },
+                                ]} />
+                            </div>
+                        ))
+                    )}
+                </div>
             </Card>
+
+            {payingInstallment && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setPayingInstallment(null)}>
+                    <Card className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="font-bold text-lg text-dark mb-1">Dar Baixa</h3>
+                        <p className="text-sm text-gray-500 mb-4">{payingInstallment.fixedCost.title} · venc. {new Date(payingInstallment.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                        <div className="space-y-4">
+                            <Input label="Data do Pagamento" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                            <Input label="Valor Pago (R$)" type="number" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-6">
+                            <Button type="button" variant="outline" onClick={() => setPayingInstallment(null)}>Cancelar</Button>
+                            <Button type="button" onClick={confirmPayment} disabled={isPaying}>{isPaying ? 'Salvando...' : 'Confirmar Pagamento'}</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

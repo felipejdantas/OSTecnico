@@ -16,7 +16,9 @@ import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type 
 import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
 import { matchesSearchFields } from '../lib/search';
-import { getFixedCostAlerts, type FixedCostAlert } from '../lib/fixedCosts';
+import { isDueSoonOrOverdue, installmentStatusLabel, toDateStr, type FixedCost, type FixedCostInstallment } from '../lib/fixedCosts';
+
+type FixedCostAlertRow = { installment: FixedCostInstallment; fixedCost: FixedCost };
 
 type ServiceOrder = {
     id: string;
@@ -228,7 +230,7 @@ export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
-    const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlert[]>([]);
+    const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlertRow[]>([]);
     const [showFixedCostAlert, setShowFixedCostAlert] = useState(false);
     const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
     const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
@@ -250,19 +252,26 @@ export default function Dashboard() {
         }
     }, [tenantId]);
 
-    // Recurring costs (aluguel, energia, cartão...) due within a few days, or
-    // already overdue and not yet marked as paid this month — see lib/fixedCosts.ts.
+    // Recurring cost installments (aluguel, energia, cartão...) due within a
+    // few days, or already overdue and still unpaid — see lib/fixedCosts.ts.
+    // Installments are pre-generated rows (os_fixed_cost_installments), kept
+    // topped up by FixedCosts.tsx, not computed on the fly here.
     const fetchFixedCostAlerts = async () => {
         if (!tenantId) return;
-        const [costsRes, entriesRes] = await Promise.all([
-            supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).eq('active', true),
-            supabase.from('cash_entries').select('fixed_cost_id, entry_date').eq('user_id', tenantId).not('fixed_cost_id', 'is', null),
+        const [costsRes, installmentsRes] = await Promise.all([
+            supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId),
+            supabase.from('os_fixed_cost_installments').select('*').eq('user_id', tenantId).eq('status', 'pendente'),
         ]);
-        if (costsRes.error) {
-            console.error('Error fetching fixed costs:', costsRes.error);
+        if (costsRes.error || installmentsRes.error) {
+            console.error('Error fetching fixed cost alerts:', costsRes.error || installmentsRes.error);
             return;
         }
-        const alerts = getFixedCostAlerts(costsRes.data || [], entriesRes.data || []);
+        const fixedCostById = new Map((costsRes.data || []).map((fc: FixedCost) => [fc.id, fc]));
+        const alerts: FixedCostAlertRow[] = (installmentsRes.data || [])
+            .filter((inst: FixedCostInstallment) => isDueSoonOrOverdue(inst))
+            .map((inst: FixedCostInstallment) => ({ installment: inst, fixedCost: fixedCostById.get(inst.fixed_cost_id) }))
+            .filter((r): r is FixedCostAlertRow => !!r.fixedCost)
+            .sort((a, b) => a.installment.due_date.localeCompare(b.installment.due_date));
         setFixedCostAlerts(alerts);
         if (alerts.length > 0) setShowFixedCostAlert(true);
     };
@@ -789,18 +798,20 @@ export default function Dashboard() {
                         </div>
 
                         <div className="space-y-2 max-h-80 overflow-y-auto">
-                            {fixedCostAlerts.map(({ fixedCost, daysUntil, status }) => (
-                                <button
-                                    key={fixedCost.id}
-                                    onClick={() => { setShowFixedCostAlert(false); navigate('/custos-fixos'); }}
-                                    className={`w-full text-left p-3 border rounded-lg transition-colors ${status === 'overdue' ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'}`}
-                                >
-                                    <p className="font-semibold text-dark">{fixedCost.title} · {formatCurrency(fixedCost.amount)}</p>
-                                    <p className={`text-xs ${status === 'overdue' ? 'text-red-700' : 'text-amber-700'}`}>
-                                        {status === 'overdue' ? `Vencido há ${Math.abs(daysUntil)} dia(s)` : daysUntil === 0 ? 'Vence hoje' : `Vence em ${daysUntil} dia(s)`}
-                                    </p>
-                                </button>
-                            ))}
+                            {fixedCostAlerts.map(({ installment, fixedCost }) => {
+                                const status = installmentStatusLabel(installment);
+                                const overdue = installment.due_date < toDateStr(new Date());
+                                return (
+                                    <button
+                                        key={installment.id}
+                                        onClick={() => { setShowFixedCostAlert(false); navigate('/custos-fixos'); }}
+                                        className={`w-full text-left p-3 border rounded-lg transition-colors ${overdue ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'}`}
+                                    >
+                                        <p className="font-semibold text-dark">{fixedCost.title} · {formatCurrency(installment.amount)}</p>
+                                        <p className={`text-xs ${overdue ? 'text-red-700' : 'text-amber-700'}`}>{status.label}</p>
+                                    </button>
+                                );
+                            })}
                         </div>
 
                         <Button variant="outline" className="w-full mt-4" onClick={() => setShowFixedCostAlert(false)}>
@@ -1073,20 +1084,22 @@ export default function Dashboard() {
                         </button>
                     </div>
                     <div className="space-y-2">
-                        {fixedCostAlerts.map(({ fixedCost, daysUntil, status }) => (
-                            <div
-                                key={fixedCost.id}
-                                className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${status === 'overdue' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
-                            >
-                                <div className="min-w-0">
-                                    <p className="font-medium text-dark truncate">{fixedCost.title}</p>
-                                    <p className={`text-xs ${status === 'overdue' ? 'text-red-700' : 'text-amber-700'}`}>
-                                        {status === 'overdue' ? `Vencido há ${Math.abs(daysUntil)}d` : daysUntil === 0 ? 'Vence hoje' : `Vence em ${daysUntil}d`}
-                                    </p>
+                        {fixedCostAlerts.map(({ installment, fixedCost }) => {
+                            const status = installmentStatusLabel(installment);
+                            const overdue = installment.due_date < toDateStr(new Date());
+                            return (
+                                <div
+                                    key={installment.id}
+                                    className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${overdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
+                                >
+                                    <div className="min-w-0">
+                                        <p className="font-medium text-dark truncate">{fixedCost.title}</p>
+                                        <p className={`text-xs ${overdue ? 'text-red-700' : 'text-amber-700'}`}>{status.label}</p>
+                                    </div>
+                                    <span className="font-semibold text-dark flex-shrink-0">{formatCurrency(installment.amount)}</span>
                                 </div>
-                                <span className="font-semibold text-dark flex-shrink-0">{formatCurrency(fixedCost.amount)}</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </Card>
             )}
