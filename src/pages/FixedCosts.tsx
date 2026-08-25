@@ -37,6 +37,7 @@ export default function FixedCosts() {
     const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([]);
     const [installments, setInstallments] = useState<FixedCostInstallment[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [showHistory, setShowHistory] = useState(false);
     const [payingInstallment, setPayingInstallment] = useState<InstallmentRow | null>(null);
     const [payDate, setPayDate] = useState('');
     const [payAmount, setPayAmount] = useState('');
@@ -262,6 +263,7 @@ export default function FixedCosts() {
     const installmentRows: InstallmentRow[] = installments
         .map(inst => ({ ...inst, fixedCost: fixedCostById.get(inst.fixed_cost_id) }))
         .filter((r): r is InstallmentRow => !!r.fixedCost)
+        .filter(r => showHistory || r.status === 'pendente')
         .filter(r => matchesSearchFields([r.fixedCost.title, r.fixedCost.category], searchTerm))
         .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
@@ -312,15 +314,24 @@ export default function FixedCosts() {
             )}
 
             <Card className="p-0 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                    <Search className="w-5 h-5 text-gray-400" />
+                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3 flex-wrap">
+                    <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     <input
                         type="text"
                         placeholder="Buscar por nome ou categoria..."
-                        className="bg-transparent border-none focus:outline-none w-full text-sm"
+                        className="bg-transparent border-none focus:outline-none flex-1 min-w-[160px] text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    <label className="flex items-center gap-2 text-xs text-gray-500 flex-shrink-0 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={showHistory}
+                            onChange={(e) => setShowHistory(e.target.checked)}
+                            className="w-3.5 h-3.5 rounded border-gray-300 text-primary-cyan focus:ring-primary-cyan/50"
+                        />
+                        Mostrar pagas/canceladas
+                    </label>
                 </div>
 
                 {/* Desktop Table */}
@@ -340,7 +351,9 @@ export default function FixedCosts() {
                             {installmentRows.length === 0 ? (
                                 <tr>
                                     <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                                        Nenhuma parcela encontrada. Cadastre um custo fixo pra começar.
+                                        {fixedCosts.length === 0
+                                            ? 'Nenhuma parcela encontrada. Cadastre um custo fixo pra começar.'
+                                            : showHistory ? 'Nenhuma parcela encontrada.' : 'Tudo em dia — nenhuma parcela pendente. Marque "Mostrar pagas/canceladas" pra ver o histórico.'}
                                     </td>
                                 </tr>
                             ) : (
@@ -392,7 +405,11 @@ export default function FixedCosts() {
                 {/* Mobile Cards */}
                 <div className="md:hidden space-y-3 p-4">
                     {installmentRows.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">Nenhuma parcela encontrada</div>
+                        <div className="text-center py-8 text-gray-500 text-sm px-4">
+                            {fixedCosts.length === 0
+                                ? 'Nenhuma parcela encontrada. Cadastre um custo fixo pra começar.'
+                                : showHistory ? 'Nenhuma parcela encontrada.' : 'Tudo em dia — nenhuma parcela pendente.'}
+                        </div>
                     ) : (
                         installmentRows.map((row) => {
                             const status = installmentStatusLabel(row);
