@@ -36,6 +36,7 @@ const osSchema = z.object({
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
     status: z.string(),
     technicianObservation: z.string().optional(),
+    problemResolution: z.string().optional(),
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
     completedDate: z.string().optional(),
@@ -144,6 +145,7 @@ export default function EditOS() {
             setValue('problemDescription', os.problem_description);
             setValue('status', os.status);
             setValue('technicianObservation', os.technician_observation || '');
+            setValue('problemResolution', os.problem_resolution || '');
             setValue('entryDate', os.entry_date || '');
             setValue('estimatedCompletionDate', os.estimated_completion_date || '');
             setValue('completedDate', os.completed_date || '');
@@ -267,6 +269,7 @@ export default function EditOS() {
                     technical_tests: technicalTests,
                     accessories_received: accessories,
                     technician_observation: data.technicianObservation,
+                    problem_resolution: data.problemResolution,
                     photos: allPhotos,
                     status: data.status,
                     entry_date: data.entryDate,
@@ -507,9 +510,21 @@ export default function EditOS() {
 
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4 text-primary-green">Observação do Técnico</h3>
+                            <p className="text-xs text-gray-500 mb-2">Anotações durante o diagnóstico/reparo — o que foi observado no equipamento.</p>
                             <textarea
                                 {...register('technicianObservation')}
                                 disabled={isLocked}
+                                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
+                            />
+                        </Card>
+
+                        <Card>
+                            <h3 className="font-semibold text-base sm:text-lg mb-4 text-primary-green">Resolução do Problema</h3>
+                            <p className="text-xs text-gray-500 mb-2">O que foi feito para resolver — preencha antes de marcar como Pronto/Entregue, pois o campo trava junto com o resto da OS.</p>
+                            <textarea
+                                {...register('problemResolution')}
+                                disabled={isLocked}
+                                placeholder="Ex: Substituída fonte de alimentação, reaplicada pasta térmica e testado por 24h sem apresentar falhas."
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                             />
                         </Card>

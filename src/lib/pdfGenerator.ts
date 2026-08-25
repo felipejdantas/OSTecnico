@@ -67,6 +67,7 @@ type OSData = {
     technical_tests: ChecklistItem[];
     accessories_received: AccessoriesData;
     technician_observation?: string;
+    problem_resolution?: string;
     status: string;
     client_signed_at?: string;
     client_signature_url?: string;
@@ -246,6 +247,21 @@ export async function generateOSPDF(osData: OSData) {
         const obsLines = doc.splitTextToSize(osData.technician_observation, pageWidth - 30);
         doc.text(obsLines, 15, yPos);
         yPos += obsLines.length * 5 + 8;
+    }
+
+    // ---- Resolução do Problema ----
+    if (osData.problem_resolution) {
+        ensureSpace(20);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Resolução do Problema:', 15, yPos);
+        yPos += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const resolutionLines = doc.splitTextToSize(osData.problem_resolution, pageWidth - 30);
+        doc.text(resolutionLines, 15, yPos);
+        yPos += resolutionLines.length * 5 + 8;
     }
 
     // ---- Accessories ----

@@ -540,6 +540,7 @@ export default function Dashboard() {
                 technical_tests: data.technical_tests || [],
                 accessories_received: data.accessories_received || { fonte: false, cabo: false, mochila: false, outro: '' },
                 technician_observation: data.technician_observation,
+                problem_resolution: data.problem_resolution,
                 status: data.status,
                 client_signed_at: data.client_signed_at,
                 client_signature_url: data.client_signature_url,
