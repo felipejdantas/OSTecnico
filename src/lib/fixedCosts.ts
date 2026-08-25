@@ -24,12 +24,6 @@ export type FixedCostInstallment = {
 // An installment only warns once it's within this many days of its due date.
 export const DUE_SOON_THRESHOLD_DAYS = 5;
 
-// How many months ahead to keep pending installments generated for — topped
-// up on every page load and via "Gerar Próximas Parcelas", since there's no
-// DB-side cron/trigger doing this automatically (same limitation the FIN 2.0
-// fixed-costs system already has, per CEREBRO).
-export const GENERATION_HORIZON_MONTHS = 6;
-
 // Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
 // date forward in the evening for UTC-3.
 export function toDateStr(d: Date): string {
@@ -56,27 +50,29 @@ export function nextDueDateOnOrAfter(dueDay: number, from: Date): Date {
     return dueDateForMonth(dueDay, from.getFullYear() + Math.floor(nextMonth / 12), nextMonth % 12);
 }
 
-function addMonth(d: Date, dueDay: number): Date {
+// Advances one due-day cycle forward from `d` (e.g. from 10/07 to 10/08).
+export function addMonth(d: Date, dueDay: number): Date {
     const nm = d.getMonth() + 1;
     return dueDateForMonth(dueDay, d.getFullYear() + Math.floor(nm / 12), nm % 12);
 }
 
-// Builds the next `count` installment rows for a fixed cost, starting from
-// the next due date on/after `from`. Caller upserts with onConflict on
-// (fixed_cost_id, due_date) + ignoreDuplicates, so calling this again over an
-// already-generated horizon is a safe no-op — only genuinely new months get inserted.
-export function buildUpcomingInstallments(
+// Builds exactly one installment row for a fixed cost — only ever one pending
+// installment per fixed cost at a time, not a pre-generated horizon. Pass the
+// due_date of that fixed cost's most recent installment (whatever its status)
+// to continue the sequence month-by-month from there; omit it (null/undefined)
+// for a brand new fixed cost, which starts from the next due date on/after
+// `from`. Caller upserts with onConflict on (fixed_cost_id, due_date) +
+// ignoreDuplicates, so calling this again when the row already exists is a
+// safe no-op.
+export function buildNextInstallment(
     fixedCost: Pick<FixedCost, 'id' | 'due_day' | 'amount'>,
-    count: number = GENERATION_HORIZON_MONTHS,
+    afterDueDate?: string | null,
     from: Date = new Date()
-): { fixed_cost_id: string; due_date: string; amount: number }[] {
-    const rows: { fixed_cost_id: string; due_date: string; amount: number }[] = [];
-    let cursor = nextDueDateOnOrAfter(fixedCost.due_day, from);
-    for (let i = 0; i < count; i++) {
-        rows.push({ fixed_cost_id: fixedCost.id, due_date: toDateStr(cursor), amount: fixedCost.amount });
-        cursor = addMonth(cursor, fixedCost.due_day);
-    }
-    return rows;
+): { fixed_cost_id: string; due_date: string; amount: number } {
+    const dueDate = afterDueDate
+        ? addMonth(new Date(afterDueDate + 'T00:00:00'), fixedCost.due_day)
+        : nextDueDateOnOrAfter(fixedCost.due_day, from);
+    return { fixed_cost_id: fixedCost.id, due_date: toDateStr(dueDate), amount: fixedCost.amount };
 }
 
 function daysUntil(dueDateStr: string, today: Date): number {

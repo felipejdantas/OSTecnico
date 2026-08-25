@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, Ban, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, Ban } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -13,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { matchesSearchFields } from '../lib/search';
 import { formatCurrency } from '../lib/orderFinance';
 import {
-    toDateStr, buildUpcomingInstallments, installmentStatusLabel,
+    toDateStr, buildNextInstallment, installmentStatusLabel,
     type FixedCost, type FixedCostInstallment,
 } from '../lib/fixedCosts';
 
@@ -41,7 +41,6 @@ export default function FixedCosts() {
     const [payDate, setPayDate] = useState('');
     const [payAmount, setPayAmount] = useState('');
     const [isPaying, setIsPaying] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
 
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FixedCostFormInput, any, FixedCostForm>({
         resolver: zodResolver(fixedCostSchema),
@@ -52,12 +51,9 @@ export default function FixedCosts() {
         if (tenantId) init();
     }, [tenantId]);
 
-    // Keeps the pending horizon topped up automatically (no server-side cron
-    // for this yet) — safe to call every load since it upserts, ignoring
-    // months that already have an installment.
     const init = async () => {
         await fetchAll();
-        await generateUpcoming(true);
+        await ensureNextInstallments();
         await fetchAll();
     };
 
@@ -73,25 +69,36 @@ export default function FixedCosts() {
         else setInstallments((installmentsRes.data || []) as FixedCostInstallment[]);
     };
 
-    // Always re-fetches active fixed costs directly instead of relying on the
-    // `fixedCosts` state — this runs right after fetchAll() in a couple of
-    // places, before React has necessarily re-rendered with the fresh state.
-    const generateUpcoming = async (silent = false) => {
+    // Only one pending installment per active fixed cost at a time — never a
+    // pre-generated horizon. For each active fixed cost, looks at its most
+    // recent installment (by due_date): if it's still "pendente", there's
+    // already something to pay, so nothing happens; once it's resolved
+    // (pago/cancelado) or doesn't exist yet, the next month's installment is
+    // generated. Always re-fetches fixed costs/installments directly instead
+    // of relying on component state, since this runs right after fetchAll()
+    // in several places, before React necessarily re-renders with fresh state.
+    const ensureNextInstallments = async () => {
         if (!tenantId) return;
-        const { data: active } = await supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).eq('active', true);
-        if (!active || active.length === 0) return;
-        setIsGenerating(true);
-        try {
-            const rows = active.flatMap((fc: FixedCost) => buildUpcomingInstallments(fc).map(r => ({ ...r, user_id: tenantId })));
-            if (rows.length === 0) return;
-            const { error } = await supabase.from('os_fixed_cost_installments').upsert(rows, { onConflict: 'fixed_cost_id,due_date', ignoreDuplicates: true });
-            if (error) throw error;
-            if (!silent) { toast.success('Parcelas geradas!'); fetchAll(); }
-        } catch (error: any) {
-            if (!silent) toast.error('Erro ao gerar parcelas: ' + error.message);
-        } finally {
-            setIsGenerating(false);
+        const [costsRes, instRes] = await Promise.all([
+            supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).eq('active', true),
+            supabase.from('os_fixed_cost_installments').select('fixed_cost_id, due_date, status').eq('user_id', tenantId),
+        ]);
+        const active: FixedCost[] = costsRes.data || [];
+        if (active.length === 0) return;
+
+        const latestByFixedCost = new Map<string, { due_date: string; status: string }>();
+        for (const inst of instRes.data || []) {
+            const current = latestByFixedCost.get(inst.fixed_cost_id);
+            if (!current || inst.due_date > current.due_date) latestByFixedCost.set(inst.fixed_cost_id, inst);
         }
+
+        const rows = active
+            .filter(fc => latestByFixedCost.get(fc.id)?.status !== 'pendente')
+            .map(fc => ({ ...buildNextInstallment(fc, latestByFixedCost.get(fc.id)?.due_date ?? null), user_id: tenantId }));
+        if (rows.length === 0) return;
+
+        const { error } = await supabase.from('os_fixed_cost_installments').upsert(rows, { onConflict: 'fixed_cost_id,due_date', ignoreDuplicates: true });
+        if (error) console.error('Error generating next installment:', error);
     };
 
     const handleEdit = (fc: FixedCost) => {
@@ -135,7 +142,7 @@ export default function FixedCosts() {
             }
             handleCancelForm();
             await fetchAll();
-            await generateUpcoming(true);
+            await ensureNextInstallments();
             await fetchAll();
         } catch (error: any) {
             toast.error('Erro ao salvar custo fixo: ' + error.message);
@@ -193,7 +200,9 @@ export default function FixedCosts() {
 
             toast.success('Pagamento registrado no Fluxo de Caixa!');
             setPayingInstallment(null);
-            fetchAll();
+            await fetchAll();
+            await ensureNextInstallments();
+            await fetchAll();
         } catch (error: any) {
             toast.error('Erro ao registrar pagamento: ' + error.message);
         } finally {
@@ -212,6 +221,16 @@ export default function FixedCosts() {
                 status: 'pendente', paid_at: null, paid_amount: null, cash_entry_id: null,
             }).eq('id', row.id);
             if (error) throw error;
+
+            // Paying this installment auto-generated the following month's — undoing
+            // the payment should undo that too, so there's only ever one pendente
+            // installment per fixed cost again. Only removes it if it was never
+            // touched itself (still pendente, no payment linked to it).
+            const next = installments.find(i =>
+                i.fixed_cost_id === row.fixed_cost_id && i.due_date > row.due_date && i.status === 'pendente' && !i.cash_entry_id
+            );
+            if (next) await supabase.from('os_fixed_cost_installments').delete().eq('id', next.id);
+
             toast.success('Pagamento desfeito.');
             fetchAll();
         } catch (error: any) {
@@ -220,19 +239,23 @@ export default function FixedCosts() {
     };
 
     const cancelInstallment = async (row: InstallmentRow) => {
-        if (!confirm(`Cancelar a parcela de "${row.fixedCost.title}" (venc. ${new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')})?`)) return;
+        if (!confirm(`Cancelar a parcela de "${row.fixedCost.title}" (venc. ${new Date(row.due_date + 'T00:00:00').toLocaleDateString('pt-BR')})? A próxima parcela é gerada em seguida.`)) return;
         const { error } = await supabase.from('os_fixed_cost_installments').update({ status: 'cancelado' }).eq('id', row.id);
         if (error) { toast.error('Erro ao cancelar: ' + error.message); return; }
         toast.success('Parcela cancelada.');
-        fetchAll();
+        await fetchAll();
+        await ensureNextInstallments();
+        await fetchAll();
     };
 
     const deleteInstallment = async (row: InstallmentRow) => {
-        if (!confirm(`Excluir esta parcela de "${row.fixedCost.title}"? A próxima geração automática pode recriá-la se ainda estiver dentro do horizonte de meses.`)) return;
+        if (!confirm(`Excluir esta parcela de "${row.fixedCost.title}"? Se for a única parcela pendente desse custo fixo, uma nova é gerada em seguida.`)) return;
         const { error } = await supabase.from('os_fixed_cost_installments').delete().eq('id', row.id);
         if (error) { toast.error('Erro ao excluir: ' + error.message); return; }
         toast.success('Parcela excluída.');
-        fetchAll();
+        await fetchAll();
+        await ensureNextInstallments();
+        await fetchAll();
     };
 
     const fixedCostById = new Map(fixedCosts.map(fc => [fc.id, fc]));
@@ -249,14 +272,9 @@ export default function FixedCosts() {
                     <h2 className="text-2xl font-bold text-dark">Custos Fixos</h2>
                     <p className="text-gray-500">Contas a pagar recorrentes — aluguel, energia, cartão...</p>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => generateUpcoming(false)} disabled={isGenerating}>
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} /> Gerar Próximas Parcelas
-                    </Button>
-                    <Button onClick={() => { if (isFormOpen) handleCancelForm(); else setIsFormOpen(true); }}>
-                        {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4 mr-2" /> Novo Custo Fixo</>}
-                    </Button>
-                </div>
+                <Button onClick={() => { if (isFormOpen) handleCancelForm(); else setIsFormOpen(true); }}>
+                    {isFormOpen ? 'Cancelar' : <><Plus className="w-4 h-4 mr-2" /> Novo Custo Fixo</>}
+                </Button>
             </div>
 
             {isFormOpen && (
