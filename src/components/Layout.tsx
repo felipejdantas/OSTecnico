@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import {
     Users, Wrench, FilePlus, Menu, Home, LogOut, Package, Settings, Hammer, Wallet,
     Boxes, ShoppingCart, Truck, ClipboardList, ChevronDown, Search, Calculator, FileSpreadsheet,
-    Building2,
+    Building2, Repeat,
 } from 'lucide-react';
 import { cn } from './ui/Button';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,6 +49,7 @@ function buildMenuGroups(isMaster: boolean): MenuGroup[] {
             title: 'Financeiro',
             items: [
                 { icon: Wallet, label: 'Fluxo de Caixa', path: '/caixa' },
+                { icon: Repeat, label: 'Custos Fixos', path: '/custos-fixos' },
             ],
         },
         {

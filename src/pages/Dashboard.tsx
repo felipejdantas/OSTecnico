@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, X, Search, Calculator } from 'lucide-react';
+import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, X, Search, Calculator, Repeat } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -16,6 +16,7 @@ import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type 
 import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
 import { matchesSearchFields } from '../lib/search';
+import { getFixedCostAlerts, type FixedCostAlert } from '../lib/fixedCosts';
 
 type ServiceOrder = {
     id: string;
@@ -227,6 +228,8 @@ export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
+    const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlert[]>([]);
+    const [showFixedCostAlert, setShowFixedCostAlert] = useState(false);
     const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
     const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
     const [rankingMonth, setRankingMonth] = useState(() => new Date());
@@ -243,8 +246,26 @@ export default function Dashboard() {
         if (tenantId) {
             fetchOrders();
             fetchLowStock();
+            fetchFixedCostAlerts();
         }
     }, [tenantId]);
+
+    // Recurring costs (aluguel, energia, cartão...) due within a few days, or
+    // already overdue and not yet marked as paid this month — see lib/fixedCosts.ts.
+    const fetchFixedCostAlerts = async () => {
+        if (!tenantId) return;
+        const [costsRes, entriesRes] = await Promise.all([
+            supabase.from('os_fixed_costs').select('*').eq('user_id', tenantId).eq('active', true),
+            supabase.from('cash_entries').select('fixed_cost_id, entry_date').eq('user_id', tenantId).not('fixed_cost_id', 'is', null),
+        ]);
+        if (costsRes.error) {
+            console.error('Error fetching fixed costs:', costsRes.error);
+            return;
+        }
+        const alerts = getFixedCostAlerts(costsRes.data || [], entriesRes.data || []);
+        setFixedCostAlerts(alerts);
+        if (alerts.length > 0) setShowFixedCostAlert(true);
+    };
 
     const fetchLowStock = async () => {
         if (!tenantId) return;
@@ -749,6 +770,46 @@ export default function Dashboard() {
                 </div>
             )}
 
+            {showFixedCostAlert && fixedCostAlerts.length > 0 && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                    <Card className="max-w-lg w-full border-2 border-amber-300">
+                        <div className="flex items-start gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                <Repeat className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="font-bold text-lg text-dark">Custos fixos a vencer</h3>
+                                <p className="text-sm text-gray-500">
+                                    {fixedCostAlerts.length === 1 ? 'Este custo fixo está' : `Estes ${fixedCostAlerts.length} custos fixos estão`} vencendo ou já venceram este mês.
+                                </p>
+                            </div>
+                            <button onClick={() => setShowFixedCostAlert(false)} className="p-1 hover:bg-gray-100 rounded-lg flex-shrink-0">
+                                <X className="w-5 h-5 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                            {fixedCostAlerts.map(({ fixedCost, daysUntil, status }) => (
+                                <button
+                                    key={fixedCost.id}
+                                    onClick={() => { setShowFixedCostAlert(false); navigate('/custos-fixos'); }}
+                                    className={`w-full text-left p-3 border rounded-lg transition-colors ${status === 'overdue' ? 'bg-red-50 border-red-200 hover:bg-red-100' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'}`}
+                                >
+                                    <p className="font-semibold text-dark">{fixedCost.title} · {formatCurrency(fixedCost.amount)}</p>
+                                    <p className={`text-xs ${status === 'overdue' ? 'text-red-700' : 'text-amber-700'}`}>
+                                        {status === 'overdue' ? `Vencido há ${Math.abs(daysUntil)} dia(s)` : daysUntil === 0 ? 'Vence hoje' : `Vence em ${daysUntil} dia(s)`}
+                                    </p>
+                                </button>
+                            ))}
+                        </div>
+
+                        <Button variant="outline" className="w-full mt-4" onClick={() => setShowFixedCostAlert(false)}>
+                            Fechar
+                        </Button>
+                    </Card>
+                </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h2 className="text-xl sm:text-2xl font-bold text-dark">Dashboard</h2>
@@ -999,6 +1060,36 @@ export default function Dashboard() {
                     </>
                 )}
             </Card>
+
+            {fixedCostAlerts.length > 0 && (
+                <Card className="border-amber-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                            <Repeat className="w-4 h-4 text-amber-500" />
+                            <h3 className="font-semibold text-base sm:text-lg">Custos fixos a vencer</h3>
+                        </div>
+                        <button type="button" onClick={() => navigate('/custos-fixos')} className="text-xs font-medium text-primary-cyan hover:underline">
+                            Ver todos
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {fixedCostAlerts.map(({ fixedCost, daysUntil, status }) => (
+                            <div
+                                key={fixedCost.id}
+                                className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${status === 'overdue' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
+                            >
+                                <div className="min-w-0">
+                                    <p className="font-medium text-dark truncate">{fixedCost.title}</p>
+                                    <p className={`text-xs ${status === 'overdue' ? 'text-red-700' : 'text-amber-700'}`}>
+                                        {status === 'overdue' ? `Vencido há ${Math.abs(daysUntil)}d` : daysUntil === 0 ? 'Vence hoje' : `Vence em ${daysUntil}d`}
+                                    </p>
+                                </div>
+                                <span className="font-semibold text-dark flex-shrink-0">{formatCurrency(fixedCost.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </Card>
+            )}
 
             {/* Attention panel: monthly rankings + stock alerts + volume trend */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
