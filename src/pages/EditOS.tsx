@@ -11,6 +11,7 @@ import { Card } from '../components/ui/Card';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { WarrantyBadge } from '../components/WarrantyBadge';
 import { DaysInShopBadge } from '../components/DaysInShopBadge';
+import { ServiceOrderNotes } from '../components/ServiceOrderNotes';
 import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 
@@ -517,6 +518,14 @@ export default function EditOS() {
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
                             />
                         </Card>
+
+                        {id && tenantId && (
+                            <Card>
+                                <h3 className="font-semibold text-base sm:text-lg mb-1 text-primary-green">Atualizações</h3>
+                                <p className="text-xs text-gray-500 mb-4">Registre o andamento ao longo do tempo — cada atualização fica salva com data e hora, sem apagar as anteriores. Visível pro cliente no link de acompanhamento.</p>
+                                <ServiceOrderNotes serviceOrderId={id} tenantId={tenantId} />
+                            </Card>
+                        )}
 
                         <Card>
                             <h3 className="font-semibold text-base sm:text-lg mb-4 text-primary-green">Resolução do Problema</h3>

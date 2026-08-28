@@ -37,12 +37,14 @@ const ChecklistView = ({ title, items }: { title: string, items: any[] }) => {
 };
 
 type HistoryEntry = { status: string; note: string | null; created_at: string };
+type NoteEntry = { note: string; created_at: string };
 
 export default function ClientSignature() {
     const { token } = useParams<{ token: string }>();
     const { user: staffUser, loading: authLoading } = useAuth();
     const [os, setOs] = useState<any>(null);
     const [history, setHistory] = useState<HistoryEntry[]>([]);
+    const [notes, setNotes] = useState<NoteEntry[]>([]);
     // Named documentNumber, not "document" — that would shadow window.document.
     const [documentNumber, setDocumentNumber] = useState('');
     const [isVerified, setIsVerified] = useState(false);
@@ -79,6 +81,12 @@ export default function ClientSignature() {
         setHistory(data || []);
     }, [token]);
 
+    const fetchNotes = useCallback(async () => {
+        if (!token) return;
+        const { data } = await supabase.rpc('get_public_order_notes', { p_token: token });
+        setNotes(data || []);
+    }, [token]);
+
     // Distinguishes "dead/mistyped link" from "valid link, wrong document" up
     // front — a lightweight existence check that reveals nothing about the
     // order itself, so a bad link doesn't just loop "CPF incorreto" forever.
@@ -105,11 +113,11 @@ export default function ClientSignature() {
             if (data) {
                 setIsVerified(true);
                 const order = await fetchOrder();
-                if (order) await fetchHistory();
+                if (order) { await fetchHistory(); await fetchNotes(); }
             }
             setCheckingStaffAccess(false);
         })();
-    }, [token, authLoading, staffUser, fetchOrder, fetchHistory]);
+    }, [token, authLoading, staffUser, fetchOrder, fetchHistory, fetchNotes]);
 
     // Live-update the tracking page whenever the shop posts a new status update —
     // only wired up once the client has verified their document and the order's
@@ -126,6 +134,11 @@ export default function ClientSignature() {
                     await fetchOrder();
                     await fetchHistory();
                 }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'service_order_notes', filter: `service_order_id=eq.${os.id}` },
+                fetchNotes
             )
             .subscribe();
 
@@ -150,7 +163,7 @@ export default function ClientSignature() {
             if (data) {
                 setIsVerified(true);
                 const order = await fetchOrder();
-                if (order) await fetchHistory();
+                if (order) { await fetchHistory(); await fetchNotes(); }
             } else {
                 setError('CPF/CNPJ incorreto. Por favor, verifique e tente novamente.');
             }
@@ -198,6 +211,7 @@ export default function ClientSignature() {
             setJustSigned(true);
             await fetchOrder();
             await fetchHistory();
+            await fetchNotes();
         } catch (err: any) {
             console.error('Error submitting signature:', err);
             setError('Erro ao salvar assinatura: ' + err.message);
@@ -298,6 +312,7 @@ export default function ClientSignature() {
             }
             await fetchOrder();
             await fetchHistory();
+            await fetchNotes();
         } catch (err: any) {
             console.error('Error approving budget:', err);
             setError('Erro ao aprovar orçamento: ' + err.message);
@@ -516,9 +531,25 @@ export default function ClientSignature() {
 
                     {/* Observações */}
                     {os.technician_observation && (
-                        <div>
+                        <div className={notes.length > 0 ? 'mb-4' : ''}>
                             <h3 className="font-semibold text-gray-900 text-sm mb-2">Observações</h3>
                             <p className="text-sm text-gray-700 whitespace-pre-line">{os.technician_observation}</p>
+                        </div>
+                    )}
+
+                    {/* Atualizações: técnico pode registrar o andamento ao longo do
+                        tempo, sem apagar as anteriores — mais recente primeiro. */}
+                    {notes.length > 0 && (
+                        <div className={os.technician_observation ? 'pt-4 border-t border-gray-100' : ''}>
+                            <h3 className="font-semibold text-gray-900 text-sm mb-2">Atualizações</h3>
+                            <div className="space-y-3">
+                                {[...notes].reverse().map((n, i) => (
+                                    <div key={i} className="text-sm">
+                                        <p className="text-xs text-gray-400 mb-0.5">{new Date(n.created_at).toLocaleString('pt-BR')}</p>
+                                        <p className="text-gray-700 whitespace-pre-line">{n.note}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </Card>
