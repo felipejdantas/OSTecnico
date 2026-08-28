@@ -21,6 +21,11 @@ type LedgerRow = {
     amount: number; // signed: positive entrada, negative saida
     payment_status?: PaymentStatus;
     source?: 'manual' | 'compra' | 'nfe' | 'fixo';
+    // When this row was actually posted (OS/Venda: paid_at once faturado,
+    // falling back to created_at while still a receivable; cash_entries:
+    // created_at) — the tie-break for same-`date` rows, so whatever was just
+    // launched shows above older entries dated the same day.
+    postedAt: string;
 };
 
 type PeriodStats = { entradas: number; saidas: number; saldo: number };
@@ -34,17 +39,17 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
     const [osRes, salesRes, cashRes] = await Promise.all([
         supabase
             .from('service_orders')
-            .select('id, os_number, completed_date, billing_date, discount_type, discount_value, freight, urgency_fee, payment_status, customers (name)')
+            .select('id, os_number, completed_date, billing_date, discount_type, discount_value, freight, urgency_fee, payment_status, paid_at, created_at, customers (name)')
             .eq('user_id', userId)
             .neq('status', 'cancelado')
             .or('completed_date.not.is.null,billing_date.not.is.null'),
         supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, billing_date, discount_type, discount_value, freight, other_costs, payment_status, customers (name)')
+            .select('id, sale_number, sale_date, billing_date, discount_type, discount_value, freight, other_costs, payment_status, paid_at, created_at, customers (name)')
             .eq('user_id', userId),
         supabase
             .from('cash_entries')
-            .select('id, entry_date, type, category, amount, description, related_party, source')
+            .select('id, entry_date, type, category, amount, description, related_party, source, created_at')
             .eq('user_id', userId),
     ]);
 
@@ -81,6 +86,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             category: null,
             amount: total,
             payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
+            postedAt: o.paid_at || o.created_at,
         };
     });
 
@@ -102,6 +108,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             category: null,
             amount: total,
             payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
+            postedAt: s.paid_at || s.created_at,
         };
     });
 
@@ -114,6 +121,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
         category: e.category,
         amount: e.type === 'saida' ? -Number(e.amount) : Number(e.amount),
         source: e.source,
+        postedAt: e.created_at,
     }));
 
     return [...osRows, ...saleRows, ...cashRows];
@@ -318,7 +326,7 @@ export default function CashFlow() {
     const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
     const rows = allRows
         .filter(r => r.date >= browsedMonthStart && r.date <= browsedMonthEnd)
-        .sort((a, b) => b.date.localeCompare(a.date));
+        .sort((a, b) => b.date.localeCompare(a.date) || b.postedAt.localeCompare(a.postedAt));
 
     const realizedRows = rows.filter(isRealized);
     const monthEntradas = realizedRows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
