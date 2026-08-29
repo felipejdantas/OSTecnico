@@ -67,6 +67,7 @@ type OSData = {
     technical_tests: ChecklistItem[];
     accessories_received: AccessoriesData;
     technician_observation?: string;
+    notes?: { note: string; created_at: string }[];
     problem_resolution?: string;
     status: string;
     client_signed_at?: string;
@@ -247,6 +248,33 @@ export async function generateOSPDF(osData: OSData) {
         const obsLines = doc.splitTextToSize(osData.technician_observation, pageWidth - 30);
         doc.text(obsLines, 15, yPos);
         yPos += obsLines.length * 5 + 8;
+    }
+
+    // ---- Atualizações (timestamped log, appended over time — separate from
+    // the single Observações field above) ----
+    if (osData.notes && osData.notes.length > 0) {
+        ensureSpace(20);
+        doc.setTextColor(0);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Atualizações:', 15, yPos);
+        yPos += 5;
+        // Newest first, matching the tracking page and Editar OS.
+        for (const entry of [...osData.notes].reverse()) {
+            ensureSpace(14);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            doc.text(new Date(entry.created_at).toLocaleString('pt-BR'), 15, yPos);
+            yPos += 4;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            const noteLines = doc.splitTextToSize(entry.note, pageWidth - 30);
+            doc.text(noteLines, 15, yPos);
+            yPos += noteLines.length * 5 + 4;
+        }
+        yPos += 4;
     }
 
     // ---- Resolução do Problema ----

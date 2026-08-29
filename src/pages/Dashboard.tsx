@@ -534,7 +534,7 @@ export default function Dashboard() {
         if (!tenantId) return;
 
         try {
-            const [{ data, error }, { data: itemsData }, { data: servicesData }, { data: companyData }] = await Promise.all([
+            const [{ data, error }, { data: itemsData }, { data: servicesData }, { data: companyData }, { data: notesData }] = await Promise.all([
                 supabase
                     .from('service_orders')
                     .select(`
@@ -548,6 +548,7 @@ export default function Dashboard() {
                 supabase.from('service_order_items').select('*').eq('service_order_id', orderId),
                 supabase.from('service_order_services').select('*').eq('service_order_id', orderId),
                 supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle(),
+                supabase.from('service_order_notes').select('note, created_at').eq('service_order_id', orderId).order('created_at'),
             ]);
 
             if (error) throw error;
@@ -570,6 +571,7 @@ export default function Dashboard() {
                 technical_tests: data.technical_tests || [],
                 accessories_received: data.accessories_received || { fonte: false, cabo: false, mochila: false, outro: '' },
                 technician_observation: data.technician_observation,
+                notes: notesData || [],
                 problem_resolution: data.problem_resolution,
                 status: data.status,
                 client_signed_at: data.client_signed_at,

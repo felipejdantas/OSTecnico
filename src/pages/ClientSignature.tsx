@@ -254,6 +254,7 @@ export default function ClientSignature() {
                 technical_tests: os.technical_tests || [],
                 accessories_received: os.accessories_received || { fonte: false, cabo: false, mochila: false, outro: '' },
                 technician_observation: os.technician_observation,
+                notes,
                 status: os.status,
                 client_signed_at: os.client_signed_at,
                 client_signature_url: os.client_signature_url,
