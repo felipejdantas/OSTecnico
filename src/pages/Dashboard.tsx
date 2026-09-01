@@ -490,7 +490,10 @@ export default function Dashboard() {
             if (fetchError) throw fetchError;
 
             // 2. Prepare new OS object
-            // Explicitly destructure to remove system fields
+            // Explicitly destructure to remove system fields and anything
+            // specific to how the ORIGINAL repair instance played out — a
+            // duplicate is a fresh OS, so it shouldn't be born already paid,
+            // billed, approved, resolved, or dated to the old intake.
             const {
                 id,
                 created_at,
@@ -502,6 +505,13 @@ export default function Dashboard() {
                 pinned_at,
                 updated_at, // If exists
                 user_id, // Let the database assign the current user
+                payment_status,
+                paid_at,
+                budget_approved_at,
+                completed_date,
+                billing_date,
+                entry_date,
+                problem_resolution,
                 ...osData
             } = originalOS;
 
@@ -511,7 +521,9 @@ export default function Dashboard() {
                 .insert([{
                     ...osData,
                     user_id: tenantId,
-                    status: 'pendente',
+                    status: 'recebido',
+                    payment_status: 'nao_pago',
+                    entry_date: new Date().toISOString().slice(0, 10),
                     // Ensure arrays are copied correctly
                     physical_condition: osData.physical_condition || [],
                     operating_condition: osData.operating_condition || [],
