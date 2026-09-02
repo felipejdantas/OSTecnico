@@ -18,6 +18,15 @@ import { generateSalesPDF } from '../lib/pdfGenerator';
 import { openWhatsApp } from '../lib/shareLinks';
 import { matchesSearchFields } from '../lib/search';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for UTC-3.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 const saleSchema = z.object({
     customerId: z.string().min(1, 'Selecione um cliente'),
     sellerTechnicianId: z.string().optional(),
@@ -49,7 +58,7 @@ export default function SalesOrders() {
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<SaleFormInput, any, SaleForm>({
         resolver: zodResolver(saleSchema),
         defaultValues: {
-            saleDate: new Date().toISOString().slice(0, 10),
+            saleDate: toDateStr(new Date()),
             discountType: 'fixed',
         },
     });
@@ -156,7 +165,7 @@ export default function SalesOrders() {
         setEditingId(null);
         setItems([]);
         setPaymentStatus('nao_pago');
-        reset({ saleDate: new Date().toISOString().slice(0, 10), discountType: 'fixed' });
+        reset({ saleDate: toDateStr(new Date()), discountType: 'fixed' });
     };
 
     const onSubmit = async (data: SaleForm) => {

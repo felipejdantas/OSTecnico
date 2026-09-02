@@ -22,6 +22,15 @@ import { generateQuotePDF } from '../lib/pdfGenerator';
 import { openWhatsApp, buildQuoteLink, buildQuoteMessage } from '../lib/shareLinks';
 import { matchesSearchFields } from '../lib/search';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for UTC-3.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 const quoteSchema = z.object({
     customerId: z.string().optional(),
     guestName: z.string().optional(),
@@ -70,7 +79,7 @@ export default function Quotes() {
     const { register, handleSubmit, control, reset, setValue, formState: { errors } } = useForm<QuoteFormInput, any, QuoteForm>({
         resolver: zodResolver(quoteSchema),
         defaultValues: {
-            quoteDate: new Date().toISOString().slice(0, 10),
+            quoteDate: toDateStr(new Date()),
             discountType: 'fixed',
         },
     });
@@ -184,7 +193,7 @@ export default function Quotes() {
         setItems([]);
         setServices([]);
         setIsGuestMode(false);
-        reset({ quoteDate: new Date().toISOString().slice(0, 10), discountType: 'fixed' });
+        reset({ quoteDate: toDateStr(new Date()), discountType: 'fixed' });
     };
 
     const onSubmit = async (data: QuoteForm) => {
@@ -371,7 +380,7 @@ export default function Quotes() {
                 .insert([{
                     user_id: tenantId,
                     customer_id: customerId,
-                    sale_date: new Date().toISOString().slice(0, 10),
+                    sale_date: toDateStr(new Date()),
                     discount_type: quote.discount_type || 'fixed',
                     discount_value: quote.discount_value || 0,
                     other_costs: quote.other_costs || 0,

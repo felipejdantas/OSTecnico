@@ -20,6 +20,15 @@ import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for UTC-3.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow manual OS number
     customerId: z.string().min(1, 'Selecione um cliente'),
@@ -116,7 +125,7 @@ export default function NewOS() {
         resolver: zodResolver(osSchema),
         defaultValues: {
             status: 'recebido',
-            entryDate: new Date().toISOString().slice(0, 10),
+            entryDate: toDateStr(new Date()),
         }
     });
 

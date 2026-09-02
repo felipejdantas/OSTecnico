@@ -9,6 +9,15 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/orderFinance';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for UTC-3.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 type Product = { id: string; name: string; unit: string; stock_quantity: number };
 type Supplier = { id: string; name: string; document: string | null };
 
@@ -148,7 +157,7 @@ export default function ImportNFe() {
 
             const enderEmit = emit.getElementsByTagName('enderEmit')[0];
             const dhEmi = getText(ide, 'dhEmi') || getText(ide, 'dEmi');
-            const issueDate = dhEmi ? dhEmi.slice(0, 10) : new Date().toISOString().slice(0, 10);
+            const issueDate = dhEmi ? dhEmi.slice(0, 10) : toDateStr(new Date());
 
             const addressParts = enderEmit
                 ? [

@@ -206,7 +206,7 @@ export default function CashFlow() {
     };
 
     const openEntryModal = (type: 'entrada' | 'saida') => {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = toDateStr(new Date());
         setEditingEntryId(null);
         setEntryForm({ ...manualEntrySchema, entry_date: today, competence_date: today });
         setEntryModal(type);

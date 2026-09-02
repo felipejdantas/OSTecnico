@@ -1,5 +1,14 @@
 import { supabase } from './supabase';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for UTC-3.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 export type OrderStatus =
     | 'recebido'
     | 'em_diagnostico'
@@ -116,7 +125,7 @@ export async function changeOrderStatus(orderId: string, newStatus: OrderStatus,
             .eq('id', orderId)
             .single();
         if (!existing?.completed_date) {
-            updates.completed_date = new Date().toISOString().slice(0, 10);
+            updates.completed_date = toDateStr(new Date());
         }
     }
 

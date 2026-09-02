@@ -523,7 +523,7 @@ export default function Dashboard() {
                     user_id: tenantId,
                     status: 'recebido',
                     payment_status: 'nao_pago',
-                    entry_date: new Date().toISOString().slice(0, 10),
+                    entry_date: toDateStr(new Date()),
                     // Ensure arrays are copied correctly
                     physical_condition: osData.physical_condition || [],
                     operating_condition: osData.operating_condition || [],
