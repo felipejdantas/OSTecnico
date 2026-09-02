@@ -16,6 +16,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatCurrency } from '../lib/orderFinance';
 import { matchesSearchFields } from '../lib/search';
 
+// Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
+// date forward in the evening for any timezone behind UTC (like Brazil's
+// UTC-3), making a purchase entered at night default to tomorrow.
+function toDateStr(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
 const purchaseSchema = z.object({
     supplierId: z.string().min(1, 'Selecione um fornecedor'),
     purchaseDate: z.string().min(1, 'Informe a data da compra'),
@@ -46,7 +56,7 @@ export default function PurchaseOrders() {
 
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<PurchaseFormInput, any, PurchaseForm>({
         resolver: zodResolver(purchaseSchema),
-        defaultValues: { purchaseDate: new Date().toISOString().slice(0, 10) },
+        defaultValues: { purchaseDate: toDateStr(new Date()) },
     });
 
     useEffect(() => {
@@ -142,7 +152,7 @@ export default function PurchaseOrders() {
         setEditingStatus(null);
         setItems([]);
         setIsNewSupplierOpen(false);
-        reset({ purchaseDate: new Date().toISOString().slice(0, 10) });
+        reset({ purchaseDate: toDateStr(new Date()) });
     };
 
     const onSubmit = async (data: PurchaseForm) => {
@@ -420,6 +430,11 @@ export default function PurchaseOrders() {
     );
 
     const isFinalized = editingStatus?.status === 'finalizado';
+    // Once "Adicionar Conta" has run, the cash_entries row is a frozen snapshot
+    // of fornecedor/itens/desconto/frete/data — none of those actually update it
+    // afterward (no sync-back), so editing them here silently desyncs the Fluxo
+    // de Caixa from what this screen shows. Lock them until "Desfazer Conta".
+    const financeLocked = isFinalized || !!editingStatus?.account_added;
 
     // Once finalized, stock/conta can only be undone after reabrindo the order first —
     // mirrors the existing rule that finalized orders can't have stock/conta touched.
@@ -482,13 +497,13 @@ export default function PurchaseOrders() {
                                             onChange={field.onChange}
                                             placeholder="Buscar fornecedor..."
                                             error={errors.supplierId?.message}
-                                            disabled={isFinalized}
+                                            disabled={financeLocked}
                                             options={suppliers.map(s => ({ value: s.id, label: s.name, sublabel: s.phone || undefined }))}
                                         />
                                     )}
                                 />
                             </div>
-                            {!isFinalized && (
+                            {!financeLocked && (
                                 <Button type="button" variant="outline" onClick={() => setIsNewSupplierOpen(!isNewSupplierOpen)}>
                                     <UserPlus className="w-4 h-4" />
                                 </Button>
@@ -506,13 +521,13 @@ export default function PurchaseOrders() {
                         )}
                     </Card>
 
-                    <PurchaseItemsSection purchaseOrderId={editingId || undefined} items={items} onChange={setItems} disabled={isFinalized} />
+                    <PurchaseItemsSection purchaseOrderId={editingId || undefined} items={items} onChange={setItems} disabled={financeLocked} />
 
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Totais da Compra</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Input label="Desconto (R$)" type="number" step="0.01" {...register('discountValue')} error={errors.discountValue?.message} disabled={isFinalized} />
-                            <Input label="Frete (R$)" type="number" step="0.01" {...register('freight')} error={errors.freight?.message} disabled={isFinalized} />
+                            <Input label="Desconto (R$)" type="number" step="0.01" {...register('discountValue')} error={errors.discountValue?.message} disabled={financeLocked} />
+                            <Input label="Frete (R$)" type="number" step="0.01" {...register('freight')} error={errors.freight?.message} disabled={financeLocked} />
                         </div>
                         <div className="flex justify-between pt-4 mt-4 border-t border-gray-100 text-sm text-gray-600">
                             <span>Total dos produtos</span>
@@ -527,7 +542,7 @@ export default function PurchaseOrders() {
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Detalhes da Compra</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Input label="Data da Compra" type="date" {...register('purchaseDate')} error={errors.purchaseDate?.message} disabled={isFinalized} />
+                            <Input label="Data da Compra" type="date" {...register('purchaseDate')} error={errors.purchaseDate?.message} disabled={financeLocked} />
                             <Input label="Data Prevista" type="date" {...register('expectedDate')} disabled={isFinalized} />
                         </div>
                     </Card>
@@ -568,6 +583,9 @@ export default function PurchaseOrders() {
                             </div>
                             {isFinalized && (
                                 <p className="text-xs text-gray-400 mt-2">Reabra o pedido para poder desfazer o estoque ou a conta lançada.</p>
+                            )}
+                            {!isFinalized && editingStatus?.account_added && (
+                                <p className="text-xs text-gray-400 mt-2">Fornecedor, itens, desconto, frete e data da compra ficam travados enquanto a conta estiver lançada — o lançamento no Fluxo de Caixa não atualiza sozinho se você mudar algo aqui. Desfaça a conta pra poder editar.</p>
                             )}
                         </Card>
                     )}
