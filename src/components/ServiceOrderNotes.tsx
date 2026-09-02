@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Send } from 'lucide-react';
+import { Send, Trash2 } from 'lucide-react';
 import { Button } from './ui/Button';
 import { supabase } from '../lib/supabase';
 
@@ -33,6 +33,17 @@ export function ServiceOrderNotes({ serviceOrderId, tenantId }: ServiceOrderNote
             .eq('service_order_id', serviceOrderId)
             .order('created_at', { ascending: false });
         if (!error) setNotes(data || []);
+    };
+
+    const deleteNote = async (n: Note) => {
+        if (!confirm(`Remover esta atualização de ${new Date(n.created_at).toLocaleString('pt-BR')}? Some do link público também.`)) return;
+        const { error } = await supabase.from('service_order_notes').delete().eq('id', n.id);
+        if (error) {
+            toast.error('Erro ao remover atualização: ' + error.message);
+            return;
+        }
+        toast.success('Atualização removida.');
+        fetchNotes();
     };
 
     const addNote = async () => {
@@ -72,9 +83,19 @@ export function ServiceOrderNotes({ serviceOrderId, tenantId }: ServiceOrderNote
             {notes.length > 0 && (
                 <div className="space-y-3 border-t border-gray-100 pt-4">
                     {notes.map(n => (
-                        <div key={n.id} className="text-sm">
-                            <p className="text-xs text-gray-400 mb-0.5">{new Date(n.created_at).toLocaleString('pt-BR')}</p>
-                            <p className="text-gray-700 whitespace-pre-line">{n.note}</p>
+                        <div key={n.id} className="text-sm flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-xs text-gray-400 mb-0.5">{new Date(n.created_at).toLocaleString('pt-BR')}</p>
+                                <p className="text-gray-700 whitespace-pre-line">{n.note}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => deleteNote(n)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0"
+                                title="Remover atualização"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                         </div>
                     ))}
                 </div>

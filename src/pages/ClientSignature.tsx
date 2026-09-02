@@ -137,7 +137,7 @@ export default function ClientSignature() {
             )
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'service_order_notes', filter: `service_order_id=eq.${os.id}` },
+                { event: '*', schema: 'public', table: 'service_order_notes', filter: `service_order_id=eq.${os.id}` },
                 fetchNotes
             )
             .subscribe();
