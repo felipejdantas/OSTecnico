@@ -166,7 +166,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                                     <button
                                         type="button"
                                         onClick={() => toggleGroup(group.title!)}
-                                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-dark touch-manipulation"
+                                        className="w-full flex items-center justify-between px-4 py-2 text-xs font-bold text-primary-cyan uppercase tracking-wide hover:text-primary-cyan-dark touch-manipulation"
                                     >
                                         {group.title}
                                         <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isCollapsed && "-rotate-90")} />
