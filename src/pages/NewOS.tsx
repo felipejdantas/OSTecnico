@@ -194,7 +194,7 @@ export default function NewOS() {
             // approval — if the shop already knows the price and the client already
             // approved (checkbox), skip straight to Em Reparo instead of leaving the
             // OS parked in a "waiting" status it isn't actually waiting on anymore.
-            const waitingStatuses = ['recebido', 'em_diagnostico', 'aguardando_aprovacao'];
+            const waitingStatuses = ['agendamento', 'recebido', 'em_diagnostico', 'aguardando_aprovacao'];
             const effectiveStatus = alreadyApproved && waitingStatuses.includes(data.status) ? 'em_reparo' : data.status;
 
             // Save OS

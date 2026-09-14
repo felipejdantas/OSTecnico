@@ -10,6 +10,7 @@ function toDateStr(d: Date) {
 }
 
 export type OrderStatus =
+    | 'agendamento'
     | 'recebido'
     | 'em_diagnostico'
     | 'aguardando_aprovacao'
@@ -28,6 +29,13 @@ type StatusConfig = {
 };
 
 export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
+    agendamento: {
+        label: 'Agendamento',
+        shortLabel: 'Agendado',
+        color: 'bg-violet-100 text-violet-700',
+        dot: 'bg-violet-500',
+        clientMessage: 'Sua visita técnica está agendada.',
+    },
     recebido: {
         label: 'Recebido',
         shortLabel: 'Recebido',
@@ -88,6 +96,7 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
 
 // Linear order used for the client-facing progress stepper (cancelado is shown separately).
 export const STATUS_STEPS: OrderStatus[] = [
+    'agendamento',
     'recebido',
     'em_diagnostico',
     'aguardando_aprovacao',
