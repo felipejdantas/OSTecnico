@@ -10,6 +10,7 @@ import { Card } from '../components/ui/Card';
 import { SearchableSelect } from '../components/ui/SearchableSelect';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { WarrantyBadge } from '../components/WarrantyBadge';
+import { PaymentModal } from '../components/PaymentModal';
 import SaleItemsSection, { type SaleItem } from '../components/SaleItemsSection';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,6 +53,7 @@ export default function SalesOrders() {
     const [sales, setSales] = useState<any[]>([]);
     const [items, setItems] = useState<SaleItem[]>([]);
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('nao_pago');
+    const [paymentModalSale, setPaymentModalSale] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -249,22 +251,12 @@ export default function SalesOrders() {
         }
     };
 
-    const togglePaymentStatus = async (sale: any) => {
-        const newStatus: PaymentStatus = sale.payment_status === 'pago' ? 'nao_pago' : 'pago';
-        if (newStatus === 'pago' && sale.total <= 0) {
+    const openPaymentModal = (sale: any) => {
+        if (sale.total <= 0) {
             toast.error('Não é possível faturar uma venda sem valor — adicione um produto primeiro.');
             return;
         }
-        try {
-            const { error } = await supabase
-                .from('sales_orders')
-                .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
-                .eq('id', sale.id);
-            if (error) throw error;
-            fetchSales();
-        } catch (error: any) {
-            toast.error('Erro ao atualizar pagamento: ' + error.message);
-        }
+        setPaymentModalSale(sale);
     };
 
     const exportPDF = async (saleId: string) => {
@@ -404,22 +396,36 @@ export default function SalesOrders() {
 
                             <div className="space-y-1">
                                 <label className="text-sm font-medium text-gray-600">Pagamento</label>
-                                <div className="flex gap-2">
+                                {editingId ? (
                                     <button
                                         type="button"
-                                        onClick={() => setPaymentStatus('nao_pago')}
-                                        className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'nao_pago' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                        onClick={() => setPaymentModalSale({
+                                            id: editingId,
+                                            total: grandTotal,
+                                            customers: { name: customers.find(c => c.id === watch('customerId'))?.name },
+                                        })}
+                                        className={`w-full px-4 py-2 rounded-xl text-sm font-medium transition-colors text-left ${PAYMENT_STATUS_CONFIG[paymentStatus].color}`}
                                     >
-                                        A Receber
+                                        {PAYMENT_STATUS_CONFIG[paymentStatus].label} — clique para gerenciar
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setPaymentStatus('pago')}
-                                        className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'pago' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                    >
-                                        Faturado
-                                    </button>
-                                </div>
+                                ) : (
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentStatus('nao_pago')}
+                                            className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'nao_pago' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                        >
+                                            A Receber
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentStatus('pago')}
+                                            className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'pago' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                                        >
+                                            Faturado
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </Card>
@@ -536,9 +542,9 @@ export default function SalesOrders() {
                                             <span className="font-bold text-primary-cyan text-lg">Venda #{sale.sale_number}</span>
                                             <button
                                                 type="button"
-                                                onClick={() => togglePaymentStatus(sale)}
+                                                onClick={() => openPaymentModal(sale)}
                                                 className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].color}`}
-                                                title="Clique para alternar entre Faturado / A Receber"
+                                                title="Clique para registrar pagamento"
                                             >
                                                 {PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].label}
                                             </button>
@@ -608,6 +614,22 @@ export default function SalesOrders() {
                     )}
                 </div>
             </Card>
+
+            {paymentModalSale && (
+                <PaymentModal
+                    orderType="venda"
+                    orderId={paymentModalSale.id}
+                    orderLabel={`Venda #${paymentModalSale.sale_number ?? sales.find(s => s.id === paymentModalSale.id)?.sale_number ?? ''}`}
+                    orderTotal={paymentModalSale.total}
+                    customerName={paymentModalSale.customers?.name}
+                    tenantId={tenantId!}
+                    onClose={() => setPaymentModalSale(null)}
+                    onUpdated={(newStatus) => {
+                        if (editingId === paymentModalSale.id) setPaymentStatus(newStatus);
+                        fetchSales();
+                    }}
+                />
+            )}
         </div>
     );
 }

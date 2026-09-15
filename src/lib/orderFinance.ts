@@ -20,9 +20,10 @@ export function formatCurrency(value: number) {
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-export type PaymentStatus = 'pago' | 'nao_pago';
+export type PaymentStatus = 'pago' | 'nao_pago' | 'parcial';
 
 export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, { label: string; color: string }> = {
     pago: { label: 'Faturado', color: 'bg-green-100 text-green-700' },
+    parcial: { label: 'Parcial', color: 'bg-blue-100 text-blue-700' },
     nao_pago: { label: 'A Receber', color: 'bg-amber-100 text-amber-700' },
 };

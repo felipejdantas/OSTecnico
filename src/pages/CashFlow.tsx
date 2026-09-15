@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, ArrowUpCircle, ArrowDownCircle,
-    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat,
+    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat, Banknote,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { PaymentModal } from '../components/PaymentModal';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
@@ -20,7 +21,12 @@ type LedgerRow = {
     category: string | null;
     amount: number; // signed: positive entrada, negative saida
     payment_status?: PaymentStatus;
-    source?: 'manual' | 'compra' | 'nfe' | 'fixo';
+    source?: 'manual' | 'compra' | 'nfe' | 'fixo' | 'pagamento';
+    // True once this OS/Venda has at least one order_payments leg registered —
+    // its realized money is represented by those linked cash_entries rows
+    // (source: 'pagamento') instead, so this row itself is excluded from
+    // totals to avoid double-counting. Still shown in the table for reference.
+    hasLegs?: boolean;
     // When this row was actually posted (OS/Venda: paid_at once faturado,
     // falling back to created_at while still a receivable; cash_entries:
     // created_at) — the tie-break for same-`date` rows, so whatever was just
@@ -36,7 +42,7 @@ type PeriodStats = { entradas: number; saidas: number; saldo: number };
 // so a manually chosen billing date is honored everywhere without juggling DB-side
 // coalesce logic across three different range queries.
 async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
-    const [osRes, salesRes, cashRes] = await Promise.all([
+    const [osRes, salesRes, cashRes, paymentsRes] = await Promise.all([
         supabase
             .from('service_orders')
             .select('id, os_number, completed_date, billing_date, discount_type, discount_value, freight, urgency_fee, payment_status, paid_at, created_at, customers (name)')
@@ -51,7 +57,16 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             .from('cash_entries')
             .select('id, entry_date, type, category, amount, description, related_party, source, created_at')
             .eq('user_id', userId),
+        supabase
+            .from('order_payments')
+            .select('order_type, order_id')
+            .eq('user_id', userId),
     ]);
+
+    // Which OS/Venda already have at least one payment leg registered (see
+    // PaymentModal.tsx) — their totals get excluded below to avoid double-
+    // counting alongside the linked cash_entries rows those legs created.
+    const legOrderIds = new Set((paymentsRes.data || []).map((p: any) => `${p.order_type}:${p.order_id}`));
 
     const osList = osRes.data || [];
     const salesList = salesRes.data || [];
@@ -87,6 +102,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             amount: total,
             payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
             postedAt: o.paid_at || o.created_at,
+            hasLegs: legOrderIds.has(`os:${o.id}`),
         };
     });
 
@@ -109,6 +125,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             amount: total,
             payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
             postedAt: s.paid_at || s.created_at,
+            hasLegs: legOrderIds.has(`venda:${s.id}`),
         };
     });
 
@@ -129,10 +146,16 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
 
 // OS/Venda only actually become cash once marked Faturado — until then they're a
 // receivable, not money in hand, so they're excluded from every total below (they
-// still show up in the ledger table with the "A Receber" badge for tracking).
-// Manual/compra cash_entries have no pending state, so they always count.
+// still show up in the ledger table with the "A Receber"/"Parcial" badge for
+// tracking). Once an OS/Venda has payment legs registered (see PaymentModal),
+// its own row is never realized on its own — the legs (cash_entries rows,
+// source: 'pagamento') already carry its realized money on their own dates,
+// so counting this row too would double it. Manual/compra/fixo cash_entries
+// have no pending state, so they always count.
 function isRealized(r: LedgerRow) {
-    return r.origin === 'cash' || r.payment_status === 'pago';
+    if (r.origin === 'cash') return true;
+    if (r.hasLegs) return false;
+    return r.payment_status === 'pago';
 }
 
 function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodStats {
@@ -164,6 +187,7 @@ export default function CashFlow() {
     const [loading, setLoading] = useState(true);
     const [typeFilter, setTypeFilter] = useState<'todos' | 'entrada' | 'saida'>('todos');
     const [originFilter, setOriginFilter] = useState<'todos' | 'os' | 'venda' | 'cash'>('todos');
+    const [paymentModalRow, setPaymentModalRow] = useState<LedgerRow | null>(null);
 
     const [entryModal, setEntryModal] = useState<'entrada' | 'saida' | null>(null);
     const [entryForm, setEntryForm] = useState<ManualEntryForm>(manualEntrySchema);
@@ -188,21 +212,13 @@ export default function CashFlow() {
         }
     };
 
-    const togglePaymentStatus = async (row: LedgerRow) => {
+    const openPaymentModal = (row: LedgerRow) => {
         if (row.origin === 'cash' || !row.payment_status) return;
-        const newStatus: PaymentStatus = row.payment_status === 'pago' ? 'nao_pago' : 'pago';
-        if (newStatus === 'pago' && row.amount <= 0) {
+        if (row.amount <= 0) {
             toast.error('Não é possível faturar um registro sem valor.');
             return;
         }
-        const table = row.origin === 'os' ? 'service_orders' : 'sales_orders';
-        const { error } = await supabase
-            .from(table)
-            .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
-            .eq('id', row.id);
-        if (!error) {
-            setAllRows(prev => prev.map(r => (r.origin === row.origin && r.id === row.id) ? { ...r, payment_status: newStatus } : r));
-        }
+        setPaymentModalRow(row);
     };
 
     const openEntryModal = (type: 'entrada' | 'saida') => {
@@ -353,6 +369,7 @@ export default function CashFlow() {
         if (row.source === 'compra') return <span className="inline-flex items-center gap-1.5 text-orange-600"><Truck className="w-4 h-4" />{row.label}</span>;
         if (row.source === 'nfe') return <span className="inline-flex items-center gap-1.5 text-indigo-600"><FileSpreadsheet className="w-4 h-4" />{row.label}</span>;
         if (row.source === 'fixo') return <span className="inline-flex items-center gap-1.5 text-amber-700"><Repeat className="w-4 h-4" />{row.label}</span>;
+        if (row.source === 'pagamento') return <span className="inline-flex items-center gap-1.5 text-green-700"><Banknote className="w-4 h-4" />{row.label}</span>;
         return <span className={`inline-flex items-center gap-1.5 ${row.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{row.amount >= 0 ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}{row.label}</span>;
     };
 
@@ -549,7 +566,7 @@ export default function CashFlow() {
                                                 {r.payment_status ? (
                                                     <button
                                                         type="button"
-                                                        onClick={() => togglePaymentStatus(r)}
+                                                        onClick={() => openPaymentModal(r)}
                                                         className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[r.payment_status].color}`}
                                                     >
                                                         {PAYMENT_STATUS_CONFIG[r.payment_status].label}
@@ -615,7 +632,7 @@ export default function CashFlow() {
                                             {r.payment_status && (
                                                 <button
                                                     type="button"
-                                                    onClick={() => togglePaymentStatus(r)}
+                                                    onClick={() => openPaymentModal(r)}
                                                     className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[r.payment_status].color}`}
                                                 >
                                                     {PAYMENT_STATUS_CONFIG[r.payment_status].label}
@@ -706,6 +723,19 @@ export default function CashFlow() {
                         </div>
                     </Card>
                 </div>
+            )}
+
+            {paymentModalRow && (
+                <PaymentModal
+                    orderType={paymentModalRow.origin as 'os' | 'venda'}
+                    orderId={paymentModalRow.id}
+                    orderLabel={paymentModalRow.label}
+                    orderTotal={paymentModalRow.amount}
+                    customerName={paymentModalRow.party}
+                    tenantId={tenantId!}
+                    onClose={() => setPaymentModalRow(null)}
+                    onUpdated={() => fetchAll()}
+                />
             )}
         </div>
     );

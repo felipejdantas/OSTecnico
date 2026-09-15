@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getStatusConfig } from './orderStatus';
-import { calculateOrderTotal, formatCurrency, type DiscountType } from './orderFinance';
+import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type DiscountType, type PaymentStatus } from './orderFinance';
 import { formatWarrantyForClient } from './warranty';
 
 type ChecklistItem = {
@@ -747,7 +747,7 @@ export async function generateSalesPDF(salesData: SalesData) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(0);
-    doc.text(`Situação do Pagamento: ${salesData.payment_status === 'pago' ? 'Faturado' : 'A Receber'}`, 15, yPos);
+    doc.text(`Situação do Pagamento: ${PAYMENT_STATUS_CONFIG[(salesData.payment_status || 'nao_pago') as PaymentStatus].label}`, 15, yPos);
     yPos += 10;
 
     // ---- Payment & warranty info ----

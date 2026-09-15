@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { WarrantyBadge } from '../components/WarrantyBadge';
 import { DaysInShopBadge } from '../components/DaysInShopBadge';
+import { PaymentModal } from '../components/PaymentModal';
 
 import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
@@ -232,6 +233,7 @@ export default function Dashboard() {
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
     const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlertRow[]>([]);
     const [showFixedCostAlert, setShowFixedCostAlert] = useState(false);
+    const [paymentModalOrder, setPaymentModalOrder] = useState<ServiceOrder | null>(null);
     const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
     const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
     const [rankingMonth, setRankingMonth] = useState(() => new Date());
@@ -615,24 +617,12 @@ export default function Dashboard() {
         }
     };
 
-    const togglePaymentStatus = async (order: ServiceOrder) => {
-        const newStatus: PaymentStatus = order.payment_status === 'pago' ? 'nao_pago' : 'pago';
-        if (newStatus === 'pago' && order.total <= 0) {
+    const openPaymentModal = (order: ServiceOrder) => {
+        if (order.total <= 0) {
             toast.error('Não é possível faturar uma OS sem valor — adicione uma peça ou serviço primeiro.');
             return;
         }
-        try {
-            const { error } = await supabase
-                .from('service_orders')
-                .update({ payment_status: newStatus, paid_at: newStatus === 'pago' ? new Date().toISOString() : null })
-                .eq('id', order.id);
-
-            if (error) throw error;
-            toast.success(newStatus === 'pago' ? 'Marcado como Faturado!' : 'Marcado como A Receber!');
-            fetchOrders();
-        } catch (error: any) {
-            toast.error('Erro ao atualizar pagamento: ' + error.message);
-        }
+        setPaymentModalOrder(order);
     };
 
     // The message invites the client to the specific action the OS still needs
@@ -949,9 +939,9 @@ export default function Dashboard() {
                                                 </select>
                                                 <button
                                                     type="button"
-                                                    onClick={() => togglePaymentStatus(order)}
+                                                    onClick={() => openPaymentModal(order)}
                                                     className={`px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].color}`}
-                                                    title="Clique para alternar entre Faturado / A Receber"
+                                                    title="Clique para registrar pagamento"
                                                 >
                                                     {PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].label}
                                                 </button>
@@ -1195,6 +1185,22 @@ export default function Dashboard() {
                     Nova Ordem de Serviço
                 </Button>
             </div>
+
+            {paymentModalOrder && (
+                <PaymentModal
+                    orderType="os"
+                    orderId={paymentModalOrder.id}
+                    orderLabel={`OS #${paymentModalOrder.os_number}`}
+                    orderTotal={paymentModalOrder.total}
+                    customerName={paymentModalOrder.customers?.name}
+                    tenantId={tenantId!}
+                    onClose={() => setPaymentModalOrder(null)}
+                    onUpdated={(newStatus) => {
+                        setOrders(prev => prev.map(o => o.id === paymentModalOrder.id ? { ...o, payment_status: newStatus } : o));
+                        setPaymentModalOrder(prev => prev ? { ...prev, payment_status: newStatus } : prev);
+                    }}
+                />
+            )}
         </div>
     );
 }
