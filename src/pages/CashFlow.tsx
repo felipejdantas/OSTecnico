@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, ArrowUpCircle, ArrowDownCircle,
-    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat, Banknote,
+    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat, Banknote, FileDown,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { PaymentModal } from '../components/PaymentModal';
+import { generateCashFlowPDF } from '../lib/pdfGenerator';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { calculateOrderTotal, formatCurrency, PAYMENT_STATUS_CONFIG, type PaymentStatus } from '../lib/orderFinance';
@@ -188,6 +189,7 @@ export default function CashFlow() {
     const [typeFilter, setTypeFilter] = useState<'todos' | 'entrada' | 'saida'>('todos');
     const [originFilter, setOriginFilter] = useState<'todos' | 'os' | 'venda' | 'cash'>('todos');
     const [paymentModalRow, setPaymentModalRow] = useState<LedgerRow | null>(null);
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
 
     const [entryModal, setEntryModal] = useState<'entrada' | 'saida' | null>(null);
     const [entryForm, setEntryForm] = useState<ManualEntryForm>(manualEntrySchema);
@@ -363,6 +365,35 @@ export default function CashFlow() {
         return true;
     });
 
+    const exportPDF = async () => {
+        if (!tenantId) return;
+        setIsExportingPDF(true);
+        try {
+            const { data: companyData } = await supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle();
+            const realized = filteredRows.filter(isRealized);
+            const entradas = realized.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
+            const saidas = realized.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
+
+            const filterParts: string[] = [];
+            if (typeFilter !== 'todos') filterParts.push(typeFilter === 'entrada' ? 'Entradas' : 'Saídas');
+            if (originFilter !== 'todos') filterParts.push(originFilter === 'os' ? 'OS' : originFilter === 'venda' ? 'Vendas' : 'Manuais/Compras');
+
+            await generateCashFlowPDF({
+                periodLabel: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1),
+                filterNote: filterParts.length > 0 ? `Filtro: ${filterParts.join(' · ')}` : null,
+                entradas,
+                saidas,
+                saldo: entradas - saidas,
+                rows: filteredRows,
+                company: companyData || undefined,
+            });
+        } catch (error: any) {
+            toast.error('Erro ao gerar PDF: ' + error.message);
+        } finally {
+            setIsExportingPDF(false);
+        }
+    };
+
     const originBadge = (row: LedgerRow) => {
         if (row.origin === 'os') return <span className="inline-flex items-center gap-1.5 text-primary-cyan"><FileText className="w-4 h-4" />{row.label}</span>;
         if (row.origin === 'venda') return <span className="inline-flex items-center gap-1.5 text-purple-600"><ShoppingCart className="w-4 h-4" />{row.label}</span>;
@@ -385,7 +416,10 @@ export default function CashFlow() {
                         <p className="text-gray-500">OS, Pedidos de Venda e lançamentos manuais</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" onClick={exportPDF} disabled={isExportingPDF || loading}>
+                        <FileDown className="w-4 h-4 mr-1" /> {isExportingPDF ? 'Gerando...' : 'Exportar PDF'}
+                    </Button>
                     <Button variant="outline" className="text-green-700 border-green-300 hover:bg-green-50" onClick={() => openEntryModal('entrada')}>
                         <Plus className="w-4 h-4 mr-1" /> Entrada
                     </Button>

@@ -1005,6 +1005,151 @@ export async function generateQuotePDF(quoteData: QuoteData) {
     doc.save(`Orcamento_${quoteData.quote_number || '000'}_${(customer?.name || 'cliente').replace(/\s/g, '_')}.pdf`);
 }
 
+type CashFlowPDFRow = {
+    origin: 'os' | 'venda' | 'cash';
+    label: string;
+    category: string | null;
+    party: string;
+    date: string;
+    payment_status?: PaymentStatus;
+    amount: number; // signed: positive entrada, negative saída
+};
+
+type CashFlowPDFData = {
+    periodLabel: string;
+    filterNote?: string | null;
+    entradas: number;
+    saidas: number;
+    saldo: number;
+    rows: CashFlowPDFRow[];
+    company?: CompanyInfo;
+};
+
+export async function generateCashFlowPDF(data: CashFlowPDFData) {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    let yPos = 20;
+    const company = data.company;
+
+    // ---- Header: logo + company block ----
+    try {
+        const logoImg = await loadImage('/logo-full.jpg');
+        doc.addImage(logoImg.data, 'JPEG', 15, 10, 50, 20);
+    } catch (error) {
+        console.log('Logo not found, skipping');
+    }
+
+    doc.setFontSize(18);
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.setFont('helvetica', 'bold');
+    doc.text((company?.company_name || 'OSTECNICO').toUpperCase(), pageWidth - 15, 18, { align: 'right' });
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Fluxo de Caixa', pageWidth - 15, 24, { align: 'right' });
+
+    let headerY = 30;
+    doc.setFontSize(8);
+    const companyLines = [
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join('  ·  '),
+    ].filter(Boolean) as string[];
+    for (const line of companyLines) {
+        const wrapped = doc.splitTextToSize(line, 100);
+        doc.text(wrapped, pageWidth - 15, headerY, { align: 'right' });
+        headerY += wrapped.length * 4;
+    }
+
+    yPos = Math.max(38, headerY + 4);
+    doc.setDrawColor(220);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 8;
+
+    // ---- Title bar: period ----
+    doc.setFillColor(240, 240, 240);
+    doc.rect(15, yPos, pageWidth - 30, 11, 'F');
+    doc.setTextColor(brandColor[0], brandColor[1], brandColor[2]);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text(data.periodLabel, 18, yPos + 7);
+    if (data.filterNote) {
+        doc.setTextColor(100);
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.text(data.filterNote, pageWidth - 18, yPos + 7, { align: 'right' });
+    }
+    yPos += 11 + 8;
+
+    // ---- Summary ----
+    autoTable(doc, {
+        startY: yPos,
+        head: [['Entradas', 'Saídas', 'Saldo']],
+        body: [[formatCurrency(data.entradas), `- ${formatCurrency(data.saidas)}`, formatCurrency(data.saldo)]],
+        theme: 'grid',
+        headStyles: { fillColor: darkGray, textColor: 255, halign: 'center' },
+        styles: { fontSize: 10, halign: 'center', fontStyle: 'bold' },
+        didParseCell: (cellData) => {
+            if (cellData.section === 'body') {
+                if (cellData.column.index === 0) cellData.cell.styles.textColor = [16, 150, 80];
+                if (cellData.column.index === 1) cellData.cell.styles.textColor = [220, 60, 60];
+                if (cellData.column.index === 2) cellData.cell.styles.textColor = brandColor;
+            }
+        },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 8;
+
+    // ---- Lançamentos ----
+    yPos = drawSectionBar(doc, 15, pageWidth - 30, yPos, 'Lançamentos');
+    autoTable(doc, {
+        startY: yPos,
+        head: [['Origem', 'Categoria', 'Cliente/Fornecedor', 'Data', 'Pagamento', 'Valor']],
+        body: data.rows.map(r => [
+            r.label,
+            r.category || '-',
+            r.party,
+            new Date(r.date + 'T00:00:00').toLocaleDateString('pt-BR'),
+            r.payment_status ? PAYMENT_STATUS_CONFIG[r.payment_status].label : '-',
+            `${r.amount >= 0 ? '' : '- '}${formatCurrency(Math.abs(r.amount))}`,
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: darkGray, textColor: 255 },
+        styles: { fontSize: 8 },
+        columnStyles: { 5: { halign: 'right' } },
+        didParseCell: (cellData) => {
+            if (cellData.section === 'body' && cellData.column.index === 5) {
+                cellData.cell.styles.textColor = data.rows[cellData.row.index].amount >= 0 ? [16, 150, 80] : [220, 60, 60];
+            }
+        },
+    });
+    yPos = (doc as any).lastAutoTable.finalY + 10;
+
+    // ---- Footer on every page ----
+    const pageCount = doc.getNumberOfPages();
+    const footerParts = [
+        company?.company_name,
+        company?.cnpj && `CNPJ: ${company.cnpj}`,
+        company?.address,
+        [company?.phone, company?.email].filter(Boolean).join(' · '),
+    ].filter(Boolean) as string[];
+
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(220);
+        doc.line(15, pageHeight - 18, pageWidth - 15, pageHeight - 18);
+        doc.setFontSize(7);
+        doc.setTextColor(120);
+        doc.setFont('helvetica', 'normal');
+        doc.text(footerParts.join('  |  '), 15, pageHeight - 13);
+        doc.text(`Página ${i} de ${pageCount}`, pageWidth - 15, pageHeight - 13, { align: 'right' });
+    }
+
+    // Save PDF
+    doc.save(`Fluxo_de_Caixa_${data.periodLabel.replace(/\s/g, '_')}.pdf`);
+}
+
 function drawSectionBar(doc: jsPDF, x: number, width: number, y: number, title: string): number {
     doc.setFillColor(240, 240, 240);
     doc.rect(x, y, width, 7, 'F');
