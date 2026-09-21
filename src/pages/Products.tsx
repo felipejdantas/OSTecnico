@@ -13,7 +13,7 @@ import { ImageUpload } from '../components/ImageUpload';
 import { ImageViewer } from '../components/ImageViewer';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { matchesSearchFields } from '../lib/search';
+import { matchesSearchFields, normalizeText } from '../lib/search';
 
 const productSchema = z.object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
@@ -105,6 +105,17 @@ export default function Products() {
         if (!tenantId) return;
         if (editingId && !confirm('Tem certeza que deseja atualizar este produto?')) return;
 
+        // Catch a duplicate name before hitting the DB, so the error names the
+        // conflicting product instead of a generic constraint-violation message
+        // — same pattern as the CPF/CNPJ duplicate check in Customers.tsx.
+        // Accent/case/whitespace-insensitive (normalizeText), so "Fonte Dell"
+        // and "fonte  dell" count as the same name.
+        const duplicate = products.find(p => p.id !== editingId && normalizeText(p.name) === normalizeText(data.name));
+        if (duplicate) {
+            toast.error(`Já existe um produto cadastrado com esse nome: "${duplicate.name}"`);
+            return;
+        }
+
         try {
             const newPhotoUrls = await Promise.all(newImages.map(uploadFile));
             const photos = [...existingPhotos, ...newPhotoUrls];
@@ -132,7 +143,11 @@ export default function Products() {
             handleCancel();
             fetchProducts();
         } catch (error: any) {
-            toast.error('Erro ao salvar produto: ' + error.message);
+            if (error.code === '23505') {
+                toast.error('Já existe um produto cadastrado com esse nome.');
+            } else {
+                toast.error('Erro ao salvar produto: ' + error.message);
+            }
         }
     };
 

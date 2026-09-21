@@ -10,7 +10,7 @@ import { Card } from '../components/ui/Card';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { matchesSearchFields } from '../lib/search';
+import { matchesSearchFields, normalizeText } from '../lib/search';
 
 const serviceSchema = z.object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
@@ -69,6 +69,17 @@ export default function Services() {
     const onSubmit = async (data: ServiceForm) => {
         if (!tenantId) return;
 
+        // Catch a duplicate name before hitting the DB, so the error names the
+        // conflicting service instead of a generic constraint-violation message
+        // — same pattern as the CPF/CNPJ duplicate check in Customers.tsx.
+        // Accent/case/whitespace-insensitive (normalizeText), so "Formatação"
+        // and "formatacao " count as the same name.
+        const duplicate = services.find(s => s.id !== editingId && normalizeText(s.name) === normalizeText(data.name));
+        if (duplicate) {
+            toast.error(`Já existe um serviço cadastrado com esse nome: "${duplicate.name}"`);
+            return;
+        }
+
         try {
             if (editingId) {
                 const { error } = await supabase
@@ -91,7 +102,11 @@ export default function Services() {
             handleCancel();
             fetchServices();
         } catch (error: any) {
-            toast.error('Erro ao salvar serviço: ' + error.message);
+            if (error.code === '23505') {
+                toast.error('Já existe um serviço cadastrado com esse nome.');
+            } else {
+                toast.error('Erro ao salvar serviço: ' + error.message);
+            }
         }
     };
 
