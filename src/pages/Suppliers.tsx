@@ -4,7 +4,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, MapPin, Phone, Mail, Truck, Edit2, Search, Trash2 } from 'lucide-react';
+import { Plus, MapPin, Phone, Mail, Truck, Edit2, Search, Trash2, Loader2 } from 'lucide-react';
+import axios from 'axios';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -30,9 +31,51 @@ export default function Suppliers() {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [suppliers, setSuppliers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState(() => (location.state as any)?.prefillSearch || '');
+    const [isSearchingCnpj, setIsSearchingCnpj] = useState(false);
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<SupplierForm>({
         resolver: zodResolver(supplierSchema),
     });
+
+    // Same lookup as Customers.tsx's "Buscar CNPJ" — pulls razão social/nome
+    // fantasia, telefone, e-mail e endereço direto da Receita Federal, pra
+    // não digitar tudo de novo quando o fornecedor já tem CNPJ.
+    const handleCnpjSearch = async (documentValue: string) => {
+        const cnpj = documentValue.replace(/\D/g, '');
+        if (cnpj.length !== 14) {
+            toast.error('CNPJ inválido. Deve ter 14 dígitos.');
+            return;
+        }
+
+        setIsSearchingCnpj(true);
+        try {
+            const response = await axios.get(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+            const data = response.data;
+
+            setValue('name', data.nome_fantasia || data.razao_social || '');
+
+            const phones = [data.ddd_telefone_1, data.ddd_telefone_2].filter(Boolean).join(' / ');
+            if (phones) setValue('phone', phones);
+            if (data.email) setValue('email', data.email);
+            if (data.logradouro) {
+                const addressParts = [
+                    [data.logradouro, data.numero].filter(Boolean).join(', '),
+                    data.bairro,
+                    [data.municipio, data.uf].filter(Boolean).join('/'),
+                ].filter(Boolean);
+                setValue('address', addressParts.join(' - '));
+            }
+
+            toast.success('Dados da empresa encontrados na Receita Federal!');
+            if (data.descricao_situacao_cadastral && data.descricao_situacao_cadastral !== 'ATIVA') {
+                toast.error(`Atenção: situação cadastral deste CNPJ é "${data.descricao_situacao_cadastral}".`, { duration: 6000 });
+            }
+        } catch (error) {
+            console.error('Erro ao buscar CNPJ', error);
+            toast.error('Não foi possível encontrar esse CNPJ. Preencha os dados manualmente.');
+        } finally {
+            setIsSearchingCnpj(false);
+        }
+    };
 
     useEffect(() => {
         if (tenantId) fetchSuppliers();
@@ -145,7 +188,23 @@ export default function Suppliers() {
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input label="Nome / Razão Social" {...register('name')} error={errors.name?.message} />
-                            <Input label="CNPJ / CPF" {...register('document')} placeholder="00.000.000/0000-00" />
+                            <div className="flex gap-2 items-end">
+                                <div className="flex-1">
+                                    <Input label="CNPJ / CPF" {...register('document')} placeholder="00.000.000/0000-00" />
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={isSearchingCnpj}
+                                    onClick={(e) => {
+                                        const form = (e.target as HTMLElement).closest('form');
+                                        const documentInput = form?.querySelector<HTMLInputElement>('input[name="document"]');
+                                        if (documentInput?.value) handleCnpjSearch(documentInput.value);
+                                    }}
+                                >
+                                    {isSearchingCnpj ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Buscar CNPJ'}
+                                </Button>
+                            </div>
                             <Input label="Telefone" {...register('phone')} />
                             <Input label="E-mail" type="email" {...register('email')} error={errors.email?.message} />
                             <div className="md:col-span-2">
