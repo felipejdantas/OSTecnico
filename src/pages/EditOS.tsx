@@ -38,6 +38,7 @@ const osSchema = z.object({
     status: z.string(),
     technicianObservation: z.string().optional(),
     problemResolution: z.string().optional(),
+    internalNotes: z.string().optional(),
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
     completedDate: z.string().optional(),
@@ -147,6 +148,7 @@ export default function EditOS() {
             setValue('status', os.status);
             setValue('technicianObservation', os.technician_observation || '');
             setValue('problemResolution', os.problem_resolution || '');
+            setValue('internalNotes', os.internal_notes || '');
             setValue('entryDate', os.entry_date || '');
             setValue('estimatedCompletionDate', os.estimated_completion_date || '');
             setValue('completedDate', os.completed_date || '');
@@ -271,6 +273,7 @@ export default function EditOS() {
                     accessories_received: accessories,
                     technician_observation: data.technicianObservation,
                     problem_resolution: data.problemResolution,
+                    internal_notes: data.internalNotes,
                     photos: allPhotos,
                     status: data.status,
                     entry_date: data.entryDate,
@@ -535,6 +538,19 @@ export default function EditOS() {
                                 disabled={isLocked}
                                 placeholder="Ex: Substituída fonte de alimentação, reaplicada pasta térmica e testado por 24h sem apresentar falhas."
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-gray-50"
+                            />
+                        </Card>
+
+                        <Card className="bg-gray-50/70 border-gray-300">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Lock className="w-4 h-4 text-gray-500" />
+                                <h3 className="font-semibold text-base sm:text-lg text-gray-700">Observações Internas</h3>
+                            </div>
+                            <p className="text-xs text-gray-500 mb-2">Nunca aparece pro cliente — nem no link de acompanhamento, nem no PDF impresso/baixado. Fica restrito a quem está logado no sistema.</p>
+                            <textarea
+                                {...register('internalNotes')}
+                                placeholder="Ex: cliente já reclamou desse mesmo defeito antes, atenção redobrada no diagnóstico."
+                                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400/50 bg-white min-h-[100px] text-sm sm:text-base"
                             />
                         </Card>
 

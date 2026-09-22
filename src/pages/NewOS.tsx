@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Save } from 'lucide-react';
+import { Save, Lock } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -40,6 +40,7 @@ const osSchema = z.object({
     problemDescription: z.string().min(10, 'Descreva o problema detalhadamente'),
     status: z.string(),
     technicianObservation: z.string().optional(),
+    internalNotes: z.string().optional(),
     entryDate: z.string().min(1, 'Informe a data de entrada'),
     estimatedCompletionDate: z.string().optional(),
     billingDate: z.string().optional(),
@@ -212,6 +213,7 @@ export default function NewOS() {
                 technical_tests: technicalTests,
                 accessories_received: accessories,
                 technician_observation: data.technicianObservation,
+                internal_notes: data.internalNotes,
                 signature_url: signatureUrl,
                 photos,
                 status: effectiveStatus,
@@ -455,6 +457,19 @@ export default function NewOS() {
                                 {...register('technicianObservation')}
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 bg-white min-h-[120px] text-sm sm:text-base"
                                 placeholder="Observações adicionais do técnico sobre o equipamento ou serviço..."
+                            />
+                        </Card>
+
+                        <Card className="bg-gray-50/70 border-gray-300">
+                            <div className="flex items-center gap-2 mb-1">
+                                <Lock className="w-4 h-4 text-gray-500" />
+                                <h3 className="font-semibold text-base sm:text-lg text-gray-700">Observações Internas</h3>
+                            </div>
+                            <p className="text-xs text-gray-500 mb-2">Nunca aparece pro cliente — nem no link de acompanhamento, nem no PDF impresso/baixado. Fica restrito a quem está logado no sistema.</p>
+                            <textarea
+                                {...register('internalNotes')}
+                                placeholder="Ex: cliente já reclamou desse mesmo defeito antes, atenção redobrada no diagnóstico."
+                                className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400/50 bg-white min-h-[100px] text-sm sm:text-base"
                             />
                         </Card>
 
