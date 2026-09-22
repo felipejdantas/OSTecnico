@@ -47,6 +47,7 @@ type ServiceOrder = {
     signature_token: string;
     client_signed_at: string | null;
     budget_approved_at: string | null;
+    hasPaymentRecord: boolean;
 };
 
 type OverdueBudget = { order: ServiceOrder; diagnosisStartedAt: Date; hoursOverdue: number };
@@ -229,6 +230,7 @@ export default function Dashboard() {
     const [isListOpen, setIsListOpen] = useState(false);
     const [statusFilter, setStatusFilter] = useState<'todos' | 'em_andamento' | OrderStatus>('todos');
     const [searchTerm, setSearchTerm] = useState('');
+    const [showOnlyMissingRecord, setShowOnlyMissingRecord] = useState(false);
     const [overdueBudgets, setOverdueBudgets] = useState<OverdueBudget[]>([]);
     const [showOverdueAlert, setShowOverdueAlert] = useState(false);
     const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlertRow[]>([]);
@@ -386,10 +388,12 @@ export default function Dashboard() {
             const orderIds = fetchedOrders.map((o: any) => o.id);
             const itemsByOrder: Record<string, { quantity: number; unit_price: number }[]> = {};
             const servicesByOrder: Record<string, { quantity: number; price: number }[]> = {};
+            let legOrderIds = new Set<string>();
             if (orderIds.length > 0) {
-                const [{ data: itemsData }, { data: servicesData }] = await Promise.all([
+                const [{ data: itemsData }, { data: servicesData }, { data: paymentsData }] = await Promise.all([
                     supabase.from('service_order_items').select('service_order_id, product_name, quantity, unit_price, created_at').in('service_order_id', orderIds),
                     supabase.from('service_order_services').select('service_order_id, service_name, quantity, price, created_at').in('service_order_id', orderIds),
+                    supabase.from('order_payments').select('order_id').eq('order_type', 'os').in('order_id', orderIds),
                 ]);
                 for (const item of itemsData || []) {
                     (itemsByOrder[item.service_order_id] ||= []).push(item);
@@ -397,6 +401,10 @@ export default function Dashboard() {
                 for (const line of servicesData || []) {
                     (servicesByOrder[line.service_order_id] ||= []).push(line);
                 }
+                // Which OS already have a registered payment leg (PaymentModal) —
+                // drives the "Faturado sem registro" warning on old/legacy rows
+                // still carrying a payment_status set the old way.
+                legOrderIds = new Set((paymentsData || []).map((p: any) => p.order_id));
 
                 // Kept raw (not pre-filtered to a month) so the "mais vendidos/realizados"
                 // panels can browse past months client-side without refetching.
@@ -415,7 +423,7 @@ export default function Dashboard() {
                     freight: o.freight || 0,
                     urgencyFee: o.urgency_fee || 0,
                 });
-                return { ...o, total };
+                return { ...o, total, hasPaymentRecord: legOrderIds.has(o.id) };
             });
 
             setOrders(enrichedOrders);
@@ -663,6 +671,8 @@ export default function Dashboard() {
             return false;
         }
 
+        if (showOnlyMissingRecord && (o.payment_status === 'nao_pago' || o.hasPaymentRecord)) return false;
+
         if (!normalizedSearch) return true;
 
         const customer = o.customers;
@@ -890,6 +900,14 @@ export default function Dashboard() {
                     )}
                 </div>
 
+                <button
+                    type="button"
+                    onClick={() => { setShowOnlyMissingRecord(v => !v); setIsListOpen(true); }}
+                    className={`mt-3 flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${showOnlyMissingRecord ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                    <AlertTriangle className="w-3 h-3" /> Faturado sem registro
+                </button>
+
                 {!isListOpen ? (
                     <p className="text-sm text-gray-400 mt-2">Clique para ver as ordens de serviço, ou clique em um card acima para filtrar por status.</p>
                 ) : (
@@ -945,6 +963,11 @@ export default function Dashboard() {
                                                 >
                                                     {PAYMENT_STATUS_CONFIG[order.payment_status || 'nao_pago'].label}
                                                 </button>
+                                                {order.payment_status !== 'nao_pago' && !order.hasPaymentRecord && (
+                                                    <span title="Marcado como pago sem nenhum pagamento registrado — provavelmente de antes do registro de pagamento existir. Ajuste manualmente." className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+                                                        <AlertTriangle className="w-3 h-3" /> Sem registro
+                                                    </span>
+                                                )}
                                                 {order.is_pinned && (
                                                     <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                                                 )}

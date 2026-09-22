@@ -23,11 +23,6 @@ type LedgerRow = {
     amount: number; // signed: positive entrada, negative saida
     payment_status?: PaymentStatus;
     source?: 'manual' | 'compra' | 'nfe' | 'fixo' | 'pagamento';
-    // True once this OS/Venda has at least one order_payments leg registered —
-    // its realized money is represented by those linked cash_entries rows
-    // (source: 'pagamento') instead, so this row itself is excluded from
-    // totals to avoid double-counting. Still shown in the table for reference.
-    hasLegs?: boolean;
     // When this row was actually posted (OS/Venda: paid_at once faturado,
     // falling back to created_at while still a receivable; cash_entries:
     // created_at) — the tie-break for same-`date` rows, so whatever was just
@@ -65,12 +60,15 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
     ]);
 
     // Which OS/Venda already have at least one payment leg registered (see
-    // PaymentModal.tsx) — their totals get excluded below to avoid double-
-    // counting alongside the linked cash_entries rows those legs created.
+    // PaymentModal.tsx) — those are excluded below entirely (not just from
+    // totals): once split into legs, the "OS #65" summary row would just be a
+    // 3rd redundant line alongside the 2 payment legs it already produced —
+    // pure visual clutter for one transaction. Each leg's own cash_entries
+    // row (source: 'pagamento') already carries the OS/Venda label and date.
     const legOrderIds = new Set((paymentsRes.data || []).map((p: any) => `${p.order_type}:${p.order_id}`));
 
-    const osList = osRes.data || [];
-    const salesList = salesRes.data || [];
+    const osList = (osRes.data || []).filter((o: any) => !legOrderIds.has(`os:${o.id}`));
+    const salesList = (salesRes.data || []).filter((s: any) => !legOrderIds.has(`venda:${s.id}`));
     const osIds = osList.map((o: any) => o.id);
     const saleIds = salesList.map((s: any) => s.id);
 
@@ -103,7 +101,6 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             amount: total,
             payment_status: (o.payment_status || 'nao_pago') as PaymentStatus,
             postedAt: o.paid_at || o.created_at,
-            hasLegs: legOrderIds.has(`os:${o.id}`),
         };
     });
 
@@ -126,7 +123,6 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             amount: total,
             payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
             postedAt: s.paid_at || s.created_at,
-            hasLegs: legOrderIds.has(`venda:${s.id}`),
         };
     });
 
@@ -147,16 +143,13 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
 
 // OS/Venda only actually become cash once marked Faturado — until then they're a
 // receivable, not money in hand, so they're excluded from every total below (they
-// still show up in the ledger table with the "A Receber"/"Parcial" badge for
-// tracking). Once an OS/Venda has payment legs registered (see PaymentModal),
-// its own row is never realized on its own — the legs (cash_entries rows,
-// source: 'pagamento') already carry its realized money on their own dates,
-// so counting this row too would double it. Manual/compra/fixo cash_entries
-// have no pending state, so they always count.
+// still show up in the ledger table with the "A Receber" badge for tracking).
+// An OS/Venda with registered payment legs never reaches this function at all —
+// fetchAllLedgerRows already excludes it, replaced by its legs (cash_entries
+// rows, source: 'pagamento'). Manual/compra/fixo cash_entries have no pending
+// state, so they always count.
 function isRealized(r: LedgerRow) {
-    if (r.origin === 'cash') return true;
-    if (r.hasLegs) return false;
-    return r.payment_status === 'pago';
+    return r.origin === 'cash' || r.payment_status === 'pago';
 }
 
 function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodStats {

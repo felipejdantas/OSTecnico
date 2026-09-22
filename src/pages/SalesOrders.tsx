@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle, User, Calendar } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle, User, Calendar, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -55,6 +55,7 @@ export default function SalesOrders() {
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('nao_pago');
     const [paymentModalSale, setPaymentModalSale] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [showOnlyMissingRecord, setShowOnlyMissingRecord] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { register, handleSubmit, control, reset, setValue, watch, formState: { errors } } = useForm<SaleFormInput, any, SaleForm>({
@@ -111,15 +112,20 @@ export default function SalesOrders() {
         const list = salesData || [];
         const saleIds = list.map((s: any) => s.id);
         let itemsBySale: Record<string, { quantity: number; unit_price: number }[]> = {};
+        // Which sales already have a registered payment leg (PaymentModal) —
+        // drives the "Faturado sem registro" warning on old/legacy rows still
+        // carrying a payment_status set the old way, before that flow existed.
+        let legSaleIds = new Set<string>();
         if (saleIds.length > 0) {
-            const { data: itemsData } = await supabase
-                .from('sale_items')
-                .select('sale_id, quantity, unit_price')
-                .in('sale_id', saleIds);
+            const [{ data: itemsData }, { data: paymentsData }] = await Promise.all([
+                supabase.from('sale_items').select('sale_id, quantity, unit_price').in('sale_id', saleIds),
+                supabase.from('order_payments').select('order_id').eq('order_type', 'venda').in('order_id', saleIds),
+            ]);
             itemsBySale = {};
             for (const item of itemsData || []) {
                 (itemsBySale[item.sale_id] ||= []).push(item);
             }
+            legSaleIds = new Set((paymentsData || []).map((p: any) => p.order_id));
         }
 
         const computed = list.map((s: any) => {
@@ -132,7 +138,7 @@ export default function SalesOrders() {
                 freight: s.freight || 0,
                 urgencyFee: s.other_costs || 0,
             });
-            return { ...s, total, itemCount: (itemsBySale[s.id] || []).length };
+            return { ...s, total, itemCount: (itemsBySale[s.id] || []).length, hasPaymentRecord: legSaleIds.has(s.id) };
         });
 
         setSales(computed);
@@ -320,10 +326,12 @@ export default function SalesOrders() {
         urgencyFee: watchedOtherCosts || 0,
     });
 
-    const filteredSales = sales.filter(s =>
-        String(s.sale_number).includes(searchTerm) ||
-        matchesSearchFields([s.customers?.name], searchTerm)
-    );
+    const filteredSales = sales
+        .filter(s =>
+            String(s.sale_number).includes(searchTerm) ||
+            matchesSearchFields([s.customers?.name], searchTerm)
+        )
+        .filter(s => !showOnlyMissingRecord || (s.payment_status !== 'nao_pago' && !s.hasPaymentRecord));
 
     return (
         <div className="space-y-6">
@@ -409,21 +417,8 @@ export default function SalesOrders() {
                                         {PAYMENT_STATUS_CONFIG[paymentStatus].label} — clique para gerenciar
                                     </button>
                                 ) : (
-                                    <div className="flex gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setPaymentStatus('nao_pago')}
-                                            className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'nao_pago' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                        >
-                                            A Receber
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPaymentStatus('pago')}
-                                            className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${paymentStatus === 'pago' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                                        >
-                                            Faturado
-                                        </button>
+                                    <div className="w-full px-4 py-2 rounded-xl text-sm bg-amber-50 text-amber-700 border border-amber-200">
+                                        A Receber — depois de salvar, use "Registrar Pagamento" pra dar baixa. Isso garante que todo Faturado tenha um pagamento registrado por trás.
                                     </div>
                                 )}
                             </div>
@@ -512,15 +507,22 @@ export default function SalesOrders() {
             )}
 
             <Card className="p-0 overflow-hidden">
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                    <Search className="w-5 h-5 text-gray-400" />
+                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3 flex-wrap">
+                    <Search className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     <input
                         type="text"
                         placeholder="Buscar por cliente ou número da venda..."
-                        className="bg-transparent border-none focus:outline-none w-full text-sm"
+                        className="bg-transparent border-none focus:outline-none flex-1 min-w-[160px] text-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
+                    <button
+                        type="button"
+                        onClick={() => setShowOnlyMissingRecord(v => !v)}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors flex-shrink-0 ${showOnlyMissingRecord ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                        <AlertTriangle className="w-3 h-3" /> Faturado sem registro
+                    </button>
                 </div>
 
                 <div className="p-4 space-y-3">
@@ -548,6 +550,11 @@ export default function SalesOrders() {
                                             >
                                                 {PAYMENT_STATUS_CONFIG[sale.payment_status as PaymentStatus].label}
                                             </button>
+                                            {sale.payment_status !== 'nao_pago' && !sale.hasPaymentRecord && (
+                                                <span title="Marcado como pago sem nenhum pagamento registrado — provavelmente de antes do registro de pagamento existir. Ajuste manualmente." className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+                                                    <AlertTriangle className="w-3 h-3" /> Sem registro
+                                                </span>
+                                            )}
                                             <WarrantyBadge completedDate={sale.sale_date} warrantyDays={sale.warranty_days} />
                                         </div>
 
