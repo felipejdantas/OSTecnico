@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, Ban } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Repeat, CheckCircle2, Undo2, Ban, CalendarClock } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -42,6 +42,9 @@ export default function FixedCosts() {
     const [payDate, setPayDate] = useState('');
     const [payAmount, setPayAmount] = useState('');
     const [isPaying, setIsPaying] = useState(false);
+    const [editingDueDateRow, setEditingDueDateRow] = useState<InstallmentRow | null>(null);
+    const [newDueDate, setNewDueDate] = useState('');
+    const [isSavingDueDate, setIsSavingDueDate] = useState(false);
 
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FixedCostFormInput, any, FixedCostForm>({
         resolver: zodResolver(fixedCostSchema),
@@ -208,6 +211,34 @@ export default function FixedCosts() {
             toast.error('Erro ao registrar pagamento: ' + error.message);
         } finally {
             setIsPaying(false);
+        }
+    };
+
+    const openEditDueDate = (row: InstallmentRow) => {
+        setEditingDueDateRow(row);
+        setNewDueDate(row.due_date);
+    };
+
+    // Lets a just-created (or forgotten) fixed cost be paid "referente ao mês
+    // que ficou pra trás" — the auto-generated installment always points at
+    // the next due date on/after today, which skips straight past a month
+    // that was simply never registered. Moving the pending installment's own
+    // due_date back before "Dar Baixa" makes the payment's competence_date
+    // reflect the month it actually belongs to, while entry_date (set at
+    // baixa time) still shows it was paid late, today.
+    const saveDueDate = async () => {
+        if (!editingDueDateRow || !newDueDate) return;
+        setIsSavingDueDate(true);
+        try {
+            const { error } = await supabase.from('os_fixed_cost_installments').update({ due_date: newDueDate }).eq('id', editingDueDateRow.id);
+            if (error) throw error;
+            toast.success('Vencimento atualizado.');
+            setEditingDueDateRow(null);
+            fetchAll();
+        } catch (error: any) {
+            toast.error('Erro ao atualizar vencimento: ' + error.message);
+        } finally {
+            setIsSavingDueDate(false);
         }
     };
 
@@ -379,6 +410,7 @@ export default function FixedCosts() {
                                                 {row.status === 'pendente' && (
                                                     <DropdownMenu items={[
                                                         { label: 'Dar Baixa', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => openPayModal(row) },
+                                                        { label: 'Editar Vencimento', icon: <CalendarClock className="w-4 h-4" />, onClick: () => openEditDueDate(row) },
                                                         { label: 'Cancelar Parcela', icon: <Ban className="w-4 h-4" />, onClick: () => cancelInstallment(row) },
                                                         { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
                                                     ]} />
@@ -428,6 +460,7 @@ export default function FixedCosts() {
                                         {row.status === 'pendente' && (
                                             <DropdownMenu items={[
                                                 { label: 'Dar Baixa', icon: <CheckCircle2 className="w-4 h-4" />, onClick: () => openPayModal(row) },
+                                                { label: 'Editar Vencimento', icon: <CalendarClock className="w-4 h-4" />, onClick: () => openEditDueDate(row) },
                                                 { label: 'Cancelar Parcela', icon: <Ban className="w-4 h-4" />, onClick: () => cancelInstallment(row) },
                                                 { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => deleteInstallment(row), variant: 'danger' as const },
                                             ]} />
@@ -494,6 +527,20 @@ export default function FixedCosts() {
                         <div className="flex justify-end gap-3 pt-6">
                             <Button type="button" variant="outline" onClick={() => setPayingInstallment(null)}>Cancelar</Button>
                             <Button type="button" onClick={confirmPayment} disabled={isPaying}>{isPaying ? 'Salvando...' : 'Confirmar Pagamento'}</Button>
+                        </div>
+                    </Card>
+                </div>
+            )}
+
+            {editingDueDateRow && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditingDueDateRow(null)}>
+                    <Card className="max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="font-bold text-lg text-dark mb-1">Editar Vencimento</h3>
+                        <p className="text-sm text-gray-500 mb-4">{editingDueDateRow.fixedCost.title} · use isso para lançar um mês que ficou pra trás sem registro</p>
+                        <Input label="Novo Vencimento" type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} />
+                        <div className="flex justify-end gap-3 pt-6">
+                            <Button type="button" variant="outline" onClick={() => setEditingDueDateRow(null)}>Cancelar</Button>
+                            <Button type="button" onClick={saveDueDate} disabled={isSavingDueDate}>{isSavingDueDate ? 'Salvando...' : 'Salvar'}</Button>
                         </div>
                     </Card>
                 </div>
