@@ -406,6 +406,7 @@ export default function EditOS() {
                                             <option key={status} value={status}>{STATUS_CONFIG[status].label}</option>
                                         ))}
                                         <option value="cancelado">{STATUS_CONFIG.cancelado.label}</option>
+                                        <option value="devolucao">{STATUS_CONFIG.devolucao.label}</option>
                                     </select>
                                 </div>
 

@@ -564,7 +564,7 @@ export default function ClientSignature() {
                     freight={os.freight || 0}
                     urgencyFee={os.urgency_fee || 0}
                     budgetApprovedAt={os.budget_approved_at}
-                    canApprove={!os.budget_approved_at && os.status !== 'cancelado' && os.status !== 'entregue'}
+                    canApprove={!os.budget_approved_at && os.status !== 'cancelado' && os.status !== 'entregue' && os.status !== 'devolucao'}
                     isApproving={isApproving}
                     onApprove={approveBudget}
                     pixKey={os.company_pix_key}

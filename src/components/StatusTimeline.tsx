@@ -18,6 +18,15 @@ export function StatusTimeline({ currentStatus, history }: Props) {
         );
     }
 
+    if (currentStatus === 'devolucao') {
+        return (
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-3">
+                <XCircle className="w-6 h-6 text-rose-600 flex-shrink-0" />
+                <p className="font-semibold text-rose-700">O equipamento foi devolvido.</p>
+            </div>
+        );
+    }
+
     const currentIndex = STATUS_STEPS.indexOf(currentStatus as OrderStatus);
     const findDate = (status: string) => history.find(h => h.status === status)?.created_at;
 

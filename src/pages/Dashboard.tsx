@@ -649,7 +649,7 @@ export default function Dashboard() {
     // The message invites the client to the specific action the OS still needs
     // from them (approve the budget, then sign), falling back to plain tracking.
     const trackingContextFor = (order: ServiceOrder): TrackingMessageContext => {
-        if (!order.budget_approved_at && order.status !== 'cancelado' && order.status !== 'entregue') return 'approval';
+        if (!order.budget_approved_at && order.status !== 'cancelado' && order.status !== 'entregue' && order.status !== 'devolucao') return 'approval';
         if (!order.client_signed_at) return 'signature';
         return 'tracking';
     };
@@ -679,7 +679,7 @@ export default function Dashboard() {
 
     const filteredOrders = orders.filter(o => {
         if (statusFilter === 'em_andamento') {
-            if (['pronto', 'entregue', 'cancelado'].includes(o.status)) return false;
+            if (['pronto', 'entregue', 'cancelado', 'devolucao'].includes(o.status)) return false;
         } else if (statusFilter !== 'todos' && o.status !== statusFilter) {
             return false;
         }
@@ -706,7 +706,7 @@ export default function Dashboard() {
         return false;
     });
 
-    const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado'];
+    const allStatuses: OrderStatus[] = [...STATUS_STEPS, 'cancelado', 'devolucao'];
 
     // OS volume trend, derived from what's already loaded (`orders` already
     // holds full history) — granularity is view-only, no extra round trip.
@@ -967,6 +967,7 @@ export default function Dashboard() {
                                                         <option key={s} value={s}>{STATUS_CONFIG[s].shortLabel}</option>
                                                     ))}
                                                     <option value="cancelado">{STATUS_CONFIG.cancelado.shortLabel}</option>
+                                                    <option value="devolucao">{STATUS_CONFIG.devolucao.shortLabel}</option>
                                                 </select>
                                                 <button
                                                     type="button"
@@ -993,7 +994,7 @@ export default function Dashboard() {
                                                     <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
                                                         Orçamento aprovado
                                                     </span>
-                                                ) : order.status !== 'entregue' && order.status !== 'cancelado' && (
+                                                ) : order.status !== 'entregue' && order.status !== 'cancelado' && order.status !== 'devolucao' && (
                                                     <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                                                         Orçamento pendente
                                                     </span>

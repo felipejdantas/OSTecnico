@@ -18,7 +18,8 @@ export type OrderStatus =
     | 'em_reparo'
     | 'pronto'
     | 'entregue'
-    | 'cancelado';
+    | 'cancelado'
+    | 'devolucao';
 
 type StatusConfig = {
     label: string;
@@ -92,6 +93,13 @@ export const STATUS_CONFIG: Record<OrderStatus, StatusConfig> = {
         dot: 'bg-red-500',
         clientMessage: 'O atendimento foi cancelado.',
     },
+    devolucao: {
+        label: 'Devolução',
+        shortLabel: 'Devolução',
+        color: 'bg-rose-100 text-rose-700',
+        dot: 'bg-rose-500',
+        clientMessage: 'O equipamento foi devolvido.',
+    },
 };
 
 // Linear order used for the client-facing progress stepper (cancelado is shown separately).
@@ -114,7 +122,7 @@ export function getStatusConfig(status: string): StatusConfig {
 // another — used to stop counters like days-in-shop that only make sense
 // while the order is still active.
 export function isOrderClosed(status: string | null | undefined): boolean {
-    return status === 'entregue' || status === 'cancelado';
+    return status === 'entregue' || status === 'cancelado' || status === 'devolucao';
 }
 
 /**
