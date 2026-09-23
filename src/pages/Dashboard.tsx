@@ -30,6 +30,7 @@ type ServiceOrder = {
     brand: string | null;
     equipment_type: string | null;
     status: OrderStatus;
+    status_changed_at: string;
     payment_status: PaymentStatus;
     completed_date: string | null;
     warranty_days: number | null;
@@ -364,6 +365,7 @@ export default function Dashboard() {
           brand,
           equipment_type,
           status,
+          status_changed_at,
           payment_status,
           completed_date,
           warranty_days,
@@ -380,7 +382,12 @@ export default function Dashboard() {
         `)
                 .eq('user_id', tenantId)
                 .order('is_pinned', { ascending: false })
-                .order('created_at', { ascending: false });
+                // Whatever OS had its status touched most recently sits on top —
+                // a DB trigger (stamp_status_changed_at) keeps this timestamp in
+                // sync with the status column itself, regardless of which code
+                // path changed it (quick status select, Editar OS, or a DB-side
+                // auto-advance trigger).
+                .order('status_changed_at', { ascending: false });
 
             if (error) throw error;
             const fetchedOrders = (data as any) || [];
