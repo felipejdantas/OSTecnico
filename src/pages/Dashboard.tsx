@@ -387,7 +387,13 @@ export default function Dashboard() {
                 // sync with the status column itself, regardless of which code
                 // path changed it (quick status select, Editar OS, or a DB-side
                 // auto-advance trigger).
-                .order('status_changed_at', { ascending: false });
+                .order('status_changed_at', { ascending: false })
+                // Tiebreak for status_changed_at ties — in practice this only
+                // matters for the mass-backfill moment the column was added
+                // (every pre-existing OS got the same timestamp then); going
+                // forward two different OS essentially never change status at
+                // the exact same instant, so this rarely if ever fires again.
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
             const fetchedOrders = (data as any) || [];
