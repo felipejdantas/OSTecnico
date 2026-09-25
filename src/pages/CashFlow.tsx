@@ -148,13 +148,18 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
 // fetchAllLedgerRows already excludes it, replaced by its legs (cash_entries
 // rows, source: 'pagamento'). Manual/compra/fixo cash_entries have no pending
 // state, so they always count.
-function isRealized(r: LedgerRow) {
-    return r.origin === 'cash' || r.payment_status === 'pago';
+// A row dated in the future (e.g. a card payment leg landing D+1) is also not
+// "realized" yet even though it's origin 'cash' or already 'pago' — the money
+// simply hasn't reached the account as of today, so it can't count toward the
+// balance until its own date arrives. `todayStr` lets every stat comparison
+// share the exact same notion of "today" per render.
+function isRealized(r: LedgerRow, todayStr: string) {
+    return (r.origin === 'cash' || r.payment_status === 'pago') && r.date <= todayStr;
 }
 
-function computeStats(allRows: LedgerRow[], start: string, end: string): PeriodStats {
+function computeStats(allRows: LedgerRow[], start: string, end: string, todayStr: string): PeriodStats {
     const inRange = allRows.filter(r => r.date >= start && r.date <= end);
-    const realized = inRange.filter(isRealized);
+    const realized = inRange.filter(r => isRealized(r, todayStr));
     const entradas = realized.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
     const saidas = realized.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
     return { entradas, saidas, saldo: entradas - saidas };
@@ -324,21 +329,23 @@ export default function CashFlow() {
     const dayLabel = isViewingToday ? 'Hoje' : dayDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 
     const today = new Date();
+    const todayStr = toDateStr(today);
     const dayOfWeek = today.getDay();
     const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const monday = new Date(today);
     monday.setDate(today.getDate() - diffToMonday);
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    const dayStat = computeStats(allRows, dayDateStr, dayDateStr);
-    const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday));
+    const dayStat = computeStats(allRows, dayDateStr, dayDateStr, todayStr);
+    const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday), todayStr);
 
     // Running balance since the beginning — unlike the Hoje/Semana/Mês cards
     // below (each scoped to its own period, resetting to zero), this is the
     // "bank account" style total: every realized entrada minus every realized
     // saída ever, so a leftover from August carries forward instead of
-    // vanishing once September starts.
-    const totalStat = computeStats(allRows, '0000-01-01', '9999-12-31');
+    // vanishing once September starts. Future-dated rows (e.g. a card leg
+    // landing D+1) are excluded by isRealized until their own date arrives.
+    const totalStat = computeStats(allRows, '0000-01-01', '9999-12-31', todayStr);
 
     const browsedMonthStart = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
     const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
@@ -346,7 +353,7 @@ export default function CashFlow() {
         .filter(r => r.date >= browsedMonthStart && r.date <= browsedMonthEnd)
         .sort((a, b) => b.date.localeCompare(a.date) || b.postedAt.localeCompare(a.postedAt));
 
-    const realizedRows = rows.filter(isRealized);
+    const realizedRows = rows.filter(r => isRealized(r, todayStr));
     const monthEntradas = realizedRows.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
     const monthSaidas = realizedRows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
     const monthSaldo = monthEntradas - monthSaidas;
@@ -363,7 +370,7 @@ export default function CashFlow() {
         setIsExportingPDF(true);
         try {
             const { data: companyData } = await supabase.from('company_settings').select('*').eq('user_id', tenantId).maybeSingle();
-            const realized = filteredRows.filter(isRealized);
+            const realized = filteredRows.filter(r => isRealized(r, todayStr));
             const entradas = realized.filter(r => r.amount >= 0).reduce((s, r) => s + r.amount, 0);
             const saidas = realized.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
 
@@ -633,8 +640,8 @@ export default function CashFlow() {
                                 <tfoot>
                                     <tr className="bg-gray-50 font-bold">
                                         <td className="px-6 py-3" colSpan={5}>Saldo do filtro (faturado)</td>
-                                        <td className={`px-6 py-3 text-right ${filteredRows.filter(isRealized).reduce((s, r) => s + r.amount, 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                                            {formatCurrency(filteredRows.filter(isRealized).reduce((s, r) => s + r.amount, 0))}
+                                        <td className={`px-6 py-3 text-right ${filteredRows.filter(r => isRealized(r, todayStr)).reduce((s, r) => s + r.amount, 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                            {formatCurrency(filteredRows.filter(r => isRealized(r, todayStr)).reduce((s, r) => s + r.amount, 0))}
                                         </td>
                                         <td />
                                     </tr>
