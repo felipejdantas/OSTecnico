@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Save, Lock } from 'lucide-react';
+import { Save, Lock, UserPlus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -31,7 +31,9 @@ function toDateStr(d: Date) {
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow manual OS number
-    customerId: z.string().min(1, 'Selecione um cliente'),
+    customerId: z.string().optional(),
+    guestName: z.string().optional(),
+    guestPhone: z.string().optional(),
     technicianId: z.string().min(1, 'Selecione um técnico'),
     equipmentType: z.string().optional(),
     brand: z.string().optional(),
@@ -46,6 +48,14 @@ const osSchema = z.object({
     billingDate: z.string().optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
+}).superRefine((data, ctx) => {
+    // Either an existing customer is picked, or a guest name is typed for a
+    // quick OS (no customers row is ever created) — same pattern as
+    // Orçamento's and Pedido de Venda's guest mode.
+    if (!data.customerId && !data.guestName?.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecione um cliente cadastrado', path: ['customerId'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nome do cliente', path: ['guestName'] });
+    }
 });
 
 type OSFormInput = z.input<typeof osSchema>;
@@ -120,6 +130,7 @@ export default function NewOS() {
     const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [alreadyApproved, setAlreadyApproved] = useState(false);
+    const [isGuestMode, setIsGuestMode] = useState(false);
 
     const sigPadRef = useRef<SignaturePadRef>(null);
     const { register, handleSubmit, control, formState: { errors }, reset, setValue } = useForm<OSFormInput, any, OSForm>({
@@ -148,6 +159,23 @@ export default function NewOS() {
             setDefaultWarrantyDays(companyData.warranty_days);
             setValue('warrantyDays', companyData.warranty_days);
         }
+    };
+
+    // Toggles between picking a registered customer and typing a name/phone
+    // for a quick OS — clears the other mode's fields so a stale value can't
+    // be submitted alongside the one currently shown. Same pattern as
+    // Orçamento's and Pedido de Venda's guest mode.
+    const toggleGuestMode = () => {
+        setIsGuestMode(prev => {
+            const next = !prev;
+            if (next) {
+                setValue('customerId', '');
+            } else {
+                setValue('guestName', '');
+                setValue('guestPhone', '');
+            }
+            return next;
+        });
     };
 
     const uploadFile = async (file: File) => {
@@ -201,7 +229,9 @@ export default function NewOS() {
             // Save OS
             const osData: any = {
                 user_id: tenantId,
-                customer_id: data.customerId,
+                customer_id: data.customerId || null,
+                guest_name: data.customerId ? null : (data.guestName?.trim() || null),
+                guest_phone: data.customerId ? null : (data.guestPhone?.trim() || null),
                 technician_id: data.technicianId,
                 equipment_type: data.equipmentType,
                 brand: data.brand,
@@ -291,6 +321,7 @@ export default function NewOS() {
             setDiscountValue(0);
             setFreight(0);
             setUrgencyFee(0);
+            setIsGuestMode(false);
             sigPadRef.current?.clear();
             navigate('/', { replace: true });
 
@@ -333,24 +364,51 @@ export default function NewOS() {
                             <h3 className="font-semibold text-base sm:text-lg mb-4">Dados Principais</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                    <Controller
-                                        name="customerId"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <SearchableSelect
-                                                value={field.value || ''}
-                                                onChange={field.onChange}
-                                                placeholder="Buscar por nome, CPF/CNPJ..."
-                                                error={errors.customerId?.message}
-                                                options={customers.map(c => ({
-                                                    value: c.id,
-                                                    label: c.name,
-                                                    sublabel: c.cpf || c.cnpj || c.phone || undefined,
-                                                }))}
-                                            />
-                                        )}
-                                    />
+                                    <div className="flex items-center justify-between gap-2">
+                                        <label className="text-sm font-medium text-gray-600">Cliente</label>
+                                        <button
+                                            type="button"
+                                            onClick={toggleGuestMode}
+                                            className="text-xs text-primary-cyan hover:underline flex items-center gap-1"
+                                        >
+                                            <UserPlus className="w-3.5 h-3.5" />
+                                            {isGuestMode ? 'Selecionar cliente cadastrado' : 'OS rápida (sem cadastro)'}
+                                        </button>
+                                    </div>
+
+                                    {isGuestMode ? (
+                                        <div className="space-y-1">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <Input
+                                                    placeholder="Nome do cliente"
+                                                    {...register('guestName')}
+                                                    error={errors.guestName?.message}
+                                                />
+                                                <Input placeholder="Telefone (opcional)" {...register('guestPhone')} />
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                Nada é gravado em Clientes. O link de acompanhamento desta OS não terá a trava de CPF/CNPJ, já que não há cliente cadastrado pra conferir.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <Controller
+                                            name="customerId"
+                                            control={control}
+                                            render={({ field }) => (
+                                                <SearchableSelect
+                                                    value={field.value || ''}
+                                                    onChange={field.onChange}
+                                                    placeholder="Buscar por nome, CPF/CNPJ..."
+                                                    error={errors.customerId?.message}
+                                                    options={customers.map(c => ({
+                                                        value: c.id,
+                                                        label: c.name,
+                                                        sublabel: c.cpf || c.cnpj || c.phone || undefined,
+                                                    }))}
+                                                />
+                                            )}
+                                        />
+                                    )}
                                 </div>
 
                                 <div className="space-y-1">

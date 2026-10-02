@@ -53,6 +53,7 @@ export default function ClientSignature() {
     // DB whether that logged-in user is staff for this specific order — keeps
     // the CPF form from flashing on screen for a técnico who's about to skip it.
     const [checkingStaffAccess, setCheckingStaffAccess] = useState(true);
+    const [checkingGuestAccess, setCheckingGuestAccess] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [notFound, setNotFound] = useState(false);
@@ -97,6 +98,24 @@ export default function ClientSignature() {
             if (!data) setNotFound(true);
         })();
     }, [token]);
+
+    // A "venda rápida" OS has no customer_id, so there's no CPF/CNPJ on file
+    // to check the visitor against — the CPF gate below would lock the actual
+    // client out forever. Those orders skip the gate entirely (same as the
+    // Orçamento public link, which has no gate at all); orders with a
+    // registered customer keep requiring CPF/CNPJ as usual.
+    useEffect(() => {
+        if (!token) return;
+        (async () => {
+            const { data: requiresVerification } = await supabase.rpc('public_order_requires_verification', { p_token: token });
+            if (requiresVerification === false) {
+                setIsVerified(true);
+                const order = await fetchOrder();
+                if (order) { await fetchHistory(); await fetchNotes(); }
+            }
+            setCheckingGuestAccess(false);
+        })();
+    }, [token, fetchOrder, fetchHistory, fetchNotes]);
 
     // Staff (the shop's owner or a técnico) shouldn't have to type the customer's
     // own CPF/CNPJ to open a link they already have access to via their own login —
@@ -336,7 +355,7 @@ export default function ClientSignature() {
         );
     }
 
-    if (!isVerified && (authLoading || checkingStaffAccess)) {
+    if (!isVerified && (authLoading || checkingStaffAccess || checkingGuestAccess)) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-cyan mx-auto"></div>

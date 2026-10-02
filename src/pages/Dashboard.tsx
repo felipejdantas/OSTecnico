@@ -43,6 +43,8 @@ type ServiceOrder = {
         name: string; phone: string | null; email: string | null;
         cpf: string | null; cnpj: string | null; company_name: string | null; trade_name: string | null;
     } | null;
+    guest_name: string | null;
+    guest_phone: string | null;
     technicians: { name: string } | null;
     is_pinned: boolean;
     signature_token: string;
@@ -377,6 +379,8 @@ export default function Dashboard() {
           signature_token,
           client_signed_at,
           budget_approved_at,
+          guest_name,
+          guest_phone,
           customers (name, phone, email, cpf, cnpj, company_name, trade_name),
           technicians (name)
         `)
@@ -594,7 +598,7 @@ export default function Dashboard() {
                 entry_date: data.entry_date,
                 estimated_completion_date: data.estimated_completion_date,
                 completed_date: data.completed_date,
-                customer: data.customers, // This should be an object {name, cpf, phone}
+                customer: data.customers || { name: data.guest_name || 'Cliente não identificado', phone: data.guest_phone },
                 technician: data.technicians, // This should be an object {name}
                 equipment: data.equipment,
                 brand: data.brand,
@@ -655,13 +659,15 @@ export default function Dashboard() {
     };
 
     const shareViaWhatsApp = (order: ServiceOrder) => {
-        if (!order.customers?.phone) {
+        const phone = order.customers?.phone || order.guest_phone;
+        const name = order.customers?.name || order.guest_name || 'Cliente';
+        if (!phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
         const link = buildTrackingLink(order.signature_token);
-        const message = buildTrackingMessage(order.customers.name, order.os_number, link, trackingContextFor(order));
-        openWhatsApp(order.customers.phone, message);
+        const message = buildTrackingMessage(name, order.os_number, link, trackingContextFor(order));
+        openWhatsApp(phone, message);
     };
 
     const shareViaEmail = (order: ServiceOrder) => {
@@ -691,7 +697,7 @@ export default function Dashboard() {
         const customer = o.customers;
         if (matchesSearchFields([
             o.equipment, o.brand, o.equipment_type,
-            customer?.name, customer?.company_name, customer?.trade_name,
+            customer?.name, customer?.company_name, customer?.trade_name, o.guest_name,
             o.technicians?.name,
         ], searchTerm)) return true;
         if (String(o.os_number).includes(normalizedSearch)) return true;
@@ -793,7 +799,7 @@ export default function Dashboard() {
                                     onClick={() => { setShowOverdueAlert(false); navigate(`/editar-os/${order.id}`); }}
                                     className="w-full text-left p-3 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
                                 >
-                                    <p className="font-semibold text-dark">OS #{order.os_number} · {order.customers?.name || 'Cliente'}</p>
+                                    <p className="font-semibold text-dark">OS #{order.os_number} · {order.customers?.name || order.guest_name || 'Cliente'}</p>
                                     <p className="text-xs text-amber-700">{hoursOverdue}h úteis além do prazo</p>
                                 </button>
                             ))}
@@ -999,6 +1005,11 @@ export default function Dashboard() {
                                                         Orçamento pendente
                                                     </span>
                                                 )}
+                                                {!order.customers && order.guest_name && (
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                                        Sem cadastro
+                                                    </span>
+                                                )}
                                                 <WarrantyBadge completedDate={order.completed_date} warrantyDays={order.warranty_days} />
                                                 <DaysInShopBadge entryDate={order.entry_date} status={order.status} />
                                             </div>
@@ -1011,7 +1022,7 @@ export default function Dashboard() {
                                                 className="flex items-center gap-2 mb-1 hover:underline text-left"
                                             >
                                                 <User className="w-4 h-4 text-primary-cyan" />
-                                                <span className="font-semibold text-dark text-base">{order.customers?.name || 'N/A'}</span>
+                                                <span className="font-semibold text-dark text-base">{order.customers?.name || order.guest_name || 'N/A'}</span>
                                             </button>
 
                                             <p className="text-sm text-gray-600 mb-1">
@@ -1229,7 +1240,7 @@ export default function Dashboard() {
                     orderId={paymentModalOrder.id}
                     orderLabel={`OS #${paymentModalOrder.os_number}`}
                     orderTotal={paymentModalOrder.total}
-                    customerName={paymentModalOrder.customers?.name}
+                    customerName={paymentModalOrder.customers?.name || paymentModalOrder.guest_name}
                     tenantId={tenantId!}
                     onClose={() => setPaymentModalOrder(null)}
                     onUpdated={(newStatus) => {

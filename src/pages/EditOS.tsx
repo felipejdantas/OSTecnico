@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, ArrowLeft, Lock } from 'lucide-react';
+import { Save, ArrowLeft, Lock, UserPlus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -28,7 +28,9 @@ import { EQUIPMENT_TYPES } from './NewOS';
 
 const osSchema = z.object({
     osNumber: z.string().optional(), // Allow editing OS number
-    customerId: z.string().min(1, 'Selecione um cliente'),
+    customerId: z.string().optional(),
+    guestName: z.string().optional(),
+    guestPhone: z.string().optional(),
     technicianId: z.string().min(1, 'Selecione um técnico'),
     equipmentType: z.string().optional(),
     brand: z.string().optional(),
@@ -45,6 +47,11 @@ const osSchema = z.object({
     billingDate: z.string().optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
+}).superRefine((data, ctx) => {
+    if (!data.customerId && !data.guestName?.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecione um cliente cadastrado', path: ['customerId'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nome do cliente', path: ['guestName'] });
+    }
 });
 
 type OSFormInput = z.input<typeof osSchema>;
@@ -90,6 +97,7 @@ export default function EditOS() {
     const [freight, setFreight] = useState(0);
     const [urgencyFee, setUrgencyFee] = useState(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isGuestMode, setIsGuestMode] = useState(false);
     const [originalStatus, setOriginalStatus] = useState<string>('');
     const [budgetApprovedAt, setBudgetApprovedAt] = useState<string | null>(null);
     const [isMarkingApproved, setIsMarkingApproved] = useState(false);
@@ -138,7 +146,10 @@ export default function EditOS() {
 
             // Populate Form
             setValue('osNumber', os.os_number.toString());
-            setValue('customerId', os.customer_id);
+            setIsGuestMode(!os.customer_id);
+            setValue('customerId', os.customer_id || '');
+            setValue('guestName', os.guest_name || '');
+            setValue('guestPhone', os.guest_phone || '');
             setValue('technicianId', os.technician_id);
             setValue('equipmentType', os.equipment_type || '');
             setValue('brand', os.brand || '');
@@ -214,6 +225,19 @@ export default function EditOS() {
         }
     };
 
+    const toggleGuestMode = () => {
+        setIsGuestMode(prev => {
+            const next = !prev;
+            if (next) {
+                setValue('customerId', '');
+            } else {
+                setValue('guestName', '');
+                setValue('guestPhone', '');
+            }
+            return next;
+        });
+    };
+
     const uploadFile = async (file: File) => {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random()}.${fileExt}`;
@@ -260,7 +284,9 @@ export default function EditOS() {
                 .from('service_orders')
                 .update({
                     os_number: parseInt(data.osNumber || '0'),
-                    customer_id: data.customerId,
+                    customer_id: data.customerId || null,
+                    guest_name: data.customerId ? null : (data.guestName?.trim() || null),
+                    guest_phone: data.customerId ? null : (data.guestPhone?.trim() || null),
                     technician_id: data.technicianId,
                     equipment_type: data.equipmentType,
                     brand: data.brand,
@@ -411,25 +437,55 @@ export default function EditOS() {
                                 </div>
 
                                 <div className="space-y-1">
-                                    <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                    <Controller
-                                        name="customerId"
-                                        control={control}
-                                        render={({ field }) => (
-                                            <SearchableSelect
-                                                value={field.value || ''}
-                                                onChange={field.onChange}
-                                                placeholder="Buscar por nome, CPF/CNPJ..."
-                                                error={errors.customerId?.message}
-                                                disabled={isLocked}
-                                                options={customers.map(c => ({
-                                                    value: c.id,
-                                                    label: c.name,
-                                                    sublabel: c.cpf || c.cnpj || c.phone || undefined,
-                                                }))}
-                                            />
+                                    <div className="flex items-center justify-between gap-2">
+                                        <label className="text-sm font-medium text-gray-600">Cliente</label>
+                                        {!isLocked && (
+                                            <button
+                                                type="button"
+                                                onClick={toggleGuestMode}
+                                                className="text-xs text-primary-cyan hover:underline flex items-center gap-1"
+                                            >
+                                                <UserPlus className="w-3.5 h-3.5" />
+                                                {isGuestMode ? 'Selecionar cliente cadastrado' : 'OS rápida (sem cadastro)'}
+                                            </button>
                                         )}
-                                    />
+                                    </div>
+
+                                    {isGuestMode ? (
+                                        <div className="space-y-1">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <Input
+                                                    placeholder="Nome do cliente"
+                                                    disabled={isLocked}
+                                                    {...register('guestName')}
+                                                    error={errors.guestName?.message}
+                                                />
+                                                <Input placeholder="Telefone (opcional)" disabled={isLocked} {...register('guestPhone')} />
+                                            </div>
+                                            <p className="text-xs text-gray-500">
+                                                Nada é gravado em Clientes. O link de acompanhamento desta OS não terá a trava de CPF/CNPJ, já que não há cliente cadastrado pra conferir.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <Controller
+                                            name="customerId"
+                                            control={control}
+                                            render={({ field }) => (
+                                                <SearchableSelect
+                                                    value={field.value || ''}
+                                                    onChange={field.onChange}
+                                                    placeholder="Buscar por nome, CPF/CNPJ..."
+                                                    error={errors.customerId?.message}
+                                                    disabled={isLocked}
+                                                    options={customers.map(c => ({
+                                                        value: c.id,
+                                                        label: c.name,
+                                                        sublabel: c.cpf || c.cnpj || c.phone || undefined,
+                                                    }))}
+                                                />
+                                            )}
+                                        />
+                                    )}
                                 </div>
 
                                 <div className="space-y-1">
