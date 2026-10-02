@@ -3,7 +3,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle, User, Calendar, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, ShoppingCart, Save, FileDown, MessageCircle, User, Calendar, AlertTriangle, UserPlus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -29,10 +29,9 @@ function toDateStr(d: Date) {
 }
 
 const saleSchema = z.object({
-    // Optional because "Venda Rápida" (balcão, sem cliente cadastrado) skips
-    // customer selection entirely — enforced manually in onSubmit instead,
-    // since that decision lives in isQuickSale (component state), not here.
     customerId: z.string().optional(),
+    guestName: z.string().optional(),
+    guestPhone: z.string().optional(),
     sellerTechnicianId: z.string().optional(),
     saleDate: z.string().min(1, 'Informe a data da venda'),
     billingDate: z.string().optional(),
@@ -42,6 +41,14 @@ const saleSchema = z.object({
     otherCosts: z.coerce.number().min(0, 'Valor inválido').optional(),
     warrantyDays: z.coerce.number().int('Deve ser um número inteiro').min(0, 'Valor inválido').optional(),
     warrantyNotes: z.string().optional(),
+}).superRefine((data, ctx) => {
+    // Either an existing customer is picked, or a guest name is typed for a
+    // quick sale (no customers row is ever created — same as Orçamento's
+    // guest mode, but a Venda has no later "conversion" step to do it in).
+    if (!data.customerId && !data.guestName?.trim()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Selecione um cliente cadastrado', path: ['customerId'] });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Informe o nome do cliente', path: ['guestName'] });
+    }
 });
 
 type SaleFormInput = z.input<typeof saleSchema>;
@@ -56,7 +63,7 @@ export default function SalesOrders() {
     const [sales, setSales] = useState<any[]>([]);
     const [items, setItems] = useState<SaleItem[]>([]);
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('nao_pago');
-    const [isQuickSale, setIsQuickSale] = useState(false);
+    const [isGuestMode, setIsGuestMode] = useState(false);
     const [paymentModalSale, setPaymentModalSale] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showOnlyMissingRecord, setShowOnlyMissingRecord] = useState(false);
@@ -103,7 +110,7 @@ export default function SalesOrders() {
 
         const { data: salesData, error } = await supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, billing_date, customer_id, seller_technician_id, discount_type, discount_value, freight, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
+            .select('id, sale_number, sale_date, billing_date, customer_id, guest_name, guest_phone, seller_technician_id, discount_type, discount_value, freight, other_costs, warranty_days, warranty_notes, payment_status, customers (name, phone), technicians (name)')
             .eq('user_id', tenantId)
             .order('sale_date', { ascending: false })
             .order('sale_number', { ascending: false });
@@ -150,8 +157,10 @@ export default function SalesOrders() {
 
     const handleEdit = async (sale: any) => {
         setEditingId(sale.id);
-        setIsQuickSale(!sale.customer_id);
+        setIsGuestMode(!sale.customer_id);
         setValue('customerId', sale.customer_id || '');
+        setValue('guestName', sale.guest_name || '');
+        setValue('guestPhone', sale.guest_phone || '');
         setValue('sellerTechnicianId', sale.seller_technician_id || '');
         setValue('saleDate', sale.sale_date);
         setValue('billingDate', sale.billing_date || '');
@@ -178,23 +187,31 @@ export default function SalesOrders() {
         setEditingId(null);
         setItems([]);
         setPaymentStatus('nao_pago');
-        setIsQuickSale(false);
+        setIsGuestMode(false);
         reset({ saleDate: toDateStr(new Date()), discountType: 'fixed' });
     };
 
-    const toggleQuickSale = (checked: boolean) => {
-        setIsQuickSale(checked);
-        if (checked) setValue('customerId', '');
+    // Toggles between picking a registered customer and typing a name/phone
+    // for a quick sale — clears the other mode's fields so a stale value
+    // can't be submitted alongside the one currently shown. Same pattern as
+    // Orçamento's guest mode (Quotes.tsx).
+    const toggleGuestMode = () => {
+        setIsGuestMode(prev => {
+            const next = !prev;
+            if (next) {
+                setValue('customerId', '');
+            } else {
+                setValue('guestName', '');
+                setValue('guestPhone', '');
+            }
+            return next;
+        });
     };
 
     const onSubmit = async (data: SaleForm) => {
         if (!tenantId) return;
         if (!editingId && items.length === 0) {
             toast.error('Adicione pelo menos um produto à venda.');
-            return;
-        }
-        if (!isQuickSale && !data.customerId) {
-            toast.error('Selecione um cliente ou marque "Venda Rápida".');
             return;
         }
         if (paymentStatus === 'pago' && grandTotal <= 0) {
@@ -206,7 +223,9 @@ export default function SalesOrders() {
         setIsSubmitting(true);
         try {
             const row = {
-                customer_id: isQuickSale ? null : data.customerId || null,
+                customer_id: data.customerId || null,
+                guest_name: data.customerId ? null : (data.guestName?.trim() || null),
+                guest_phone: data.customerId ? null : (data.guestPhone?.trim() || null),
                 seller_technician_id: data.sellerTechnicianId || null,
                 sale_date: data.saleDate,
                 billing_date: data.billingDate || null,
@@ -304,7 +323,7 @@ export default function SalesOrders() {
             await generateSalesPDF({
                 sale_number: data.sale_number,
                 sale_date: data.sale_date,
-                customer: data.customers,
+                customer: data.customers || { name: data.guest_name || 'Cliente não identificado', phone: data.guest_phone },
                 seller: data.technicians,
                 items: itemsData || [],
                 discount_type: data.discount_type || 'fixed',
@@ -323,16 +342,14 @@ export default function SalesOrders() {
     };
 
     const shareViaWhatsApp = (sale: any) => {
-        if (!sale.customer_id) {
-            toast.error('Venda Rápida sem cliente cadastrado — não há para quem enviar.');
-            return;
-        }
-        if (!sale.customers?.phone) {
+        const phone = sale.customers?.phone || sale.guest_phone;
+        const name = sale.customers?.name || sale.guest_name || 'Cliente';
+        if (!phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
         }
-        const message = `Olá ${sale.customers.name}! Segue o resumo do seu Pedido de Venda #${sale.sale_number}, no valor de ${formatCurrency(sale.total)}. Qualquer dúvida, estou à disposição!`;
-        openWhatsApp(sale.customers.phone, message);
+        const message = `Olá ${name}! Segue o resumo do seu Pedido de Venda #${sale.sale_number}, no valor de ${formatCurrency(sale.total)}. Qualquer dúvida, estou à disposição!`;
+        openWhatsApp(phone, message);
     };
 
     const itemsSubtotal = items.reduce((sum, i) => sum + i.quantity * i.unit_price, 0);
@@ -348,7 +365,7 @@ export default function SalesOrders() {
     const filteredSales = sales
         .filter(s =>
             String(s.sale_number).includes(searchTerm) ||
-            matchesSearchFields([s.customers?.name], searchTerm)
+            matchesSearchFields([s.customers?.name, s.guest_name], searchTerm)
         )
         .filter(s => !showOnlyMissingRecord || (s.payment_status !== 'nao_pago' && !s.hasPaymentRecord));
 
@@ -383,21 +400,31 @@ export default function SalesOrders() {
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Dados da Venda</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1 sm:col-span-2">
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-2">
                                     <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-                                        <input
-                                            type="checkbox"
-                                            checked={isQuickSale}
-                                            onChange={(e) => toggleQuickSale(e.target.checked)}
-                                            className="rounded border-gray-300 text-primary-cyan focus:ring-primary-cyan/50"
-                                        />
-                                        Venda Rápida (sem cliente cadastrado)
-                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={toggleGuestMode}
+                                        className="text-xs text-primary-cyan hover:underline flex items-center gap-1"
+                                    >
+                                        <UserPlus className="w-3.5 h-3.5" />
+                                        {isGuestMode ? 'Selecionar cliente cadastrado' : 'Venda rápida (sem cadastro)'}
+                                    </button>
                                 </div>
-                                {isQuickSale ? (
-                                    <div className="w-full px-4 py-2 rounded-xl text-sm bg-gray-50 text-gray-500 border border-gray-200">
-                                        Venda de balcão — sem vínculo com cliente cadastrado.
+
+                                {isGuestMode ? (
+                                    <div className="space-y-1">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            <Input
+                                                placeholder="Nome do cliente"
+                                                {...register('guestName')}
+                                                error={errors.guestName?.message}
+                                            />
+                                            <Input placeholder="Telefone (opcional)" {...register('guestPhone')} />
+                                        </div>
+                                        <p className="text-xs text-gray-500">
+                                            Nada é gravado em Clientes — é só uma venda de balcão, sem cadastro.
+                                        </p>
                                     </div>
                                 ) : (
                                     <Controller
@@ -446,7 +473,7 @@ export default function SalesOrders() {
                                         onClick={() => setPaymentModalSale({
                                             id: editingId,
                                             total: grandTotal,
-                                            customers: { name: customers.find(c => c.id === watch('customerId'))?.name },
+                                            customers: { name: customers.find(c => c.id === watch('customerId'))?.name || watch('guestName') },
                                         })}
                                         className={`w-full px-4 py-2 rounded-xl text-sm font-medium transition-colors text-left ${PAYMENT_STATUS_CONFIG[paymentStatus].color}`}
                                     >
@@ -591,6 +618,11 @@ export default function SalesOrders() {
                                                     <AlertTriangle className="w-3 h-3" /> Sem registro
                                                 </span>
                                             )}
+                                            {!sale.customer_id && sale.guest_name && (
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                                    Sem cadastro
+                                                </span>
+                                            )}
                                             <WarrantyBadge completedDate={sale.sale_date} warrantyDays={sale.warranty_days} />
                                         </div>
 
@@ -601,9 +633,7 @@ export default function SalesOrders() {
                                             className="flex items-center gap-2 mb-1 hover:underline text-left"
                                         >
                                             <User className="w-4 h-4 text-primary-cyan" />
-                                            <span className={`font-semibold text-base ${sale.customers?.name ? 'text-dark' : 'text-gray-400 italic'}`}>
-                                                {sale.customers?.name || 'Venda Rápida (sem cliente)'}
-                                            </span>
+                                            <span className="font-semibold text-dark text-base">{sale.customers?.name || sale.guest_name || 'N/A'}</span>
                                         </button>
 
                                         <p className="text-sm text-gray-600 mb-1">
@@ -666,7 +696,7 @@ export default function SalesOrders() {
                     orderId={paymentModalSale.id}
                     orderLabel={`Venda #${paymentModalSale.sale_number ?? sales.find(s => s.id === paymentModalSale.id)?.sale_number ?? ''}`}
                     orderTotal={paymentModalSale.total}
-                    customerName={paymentModalSale.customers?.name}
+                    customerName={paymentModalSale.customers?.name || paymentModalSale.guest_name}
                     tenantId={tenantId!}
                     onClose={() => setPaymentModalSale(null)}
                     onUpdated={(newStatus) => {

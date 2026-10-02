@@ -47,7 +47,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             .or('completed_date.not.is.null,billing_date.not.is.null'),
         supabase
             .from('sales_orders')
-            .select('id, sale_number, sale_date, billing_date, discount_type, discount_value, freight, other_costs, payment_status, paid_at, created_at, customers (name)')
+            .select('id, sale_number, sale_date, billing_date, discount_type, discount_value, freight, other_costs, payment_status, paid_at, created_at, guest_name, customers (name)')
             .eq('user_id', userId),
         supabase
             .from('cash_entries')
@@ -118,7 +118,7 @@ async function fetchAllLedgerRows(userId: string): Promise<LedgerRow[]> {
             origin: 'venda',
             label: `Venda #${s.sale_number}`,
             date: s.billing_date || s.sale_date,
-            party: s.customers?.name || 'N/A',
+            party: s.customers?.name || s.guest_name || 'N/A',
             category: null,
             amount: total,
             payment_status: (s.payment_status || 'nao_pago') as PaymentStatus,
