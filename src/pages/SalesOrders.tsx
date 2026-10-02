@@ -29,7 +29,10 @@ function toDateStr(d: Date) {
 }
 
 const saleSchema = z.object({
-    customerId: z.string().min(1, 'Selecione um cliente'),
+    // Optional because "Venda Rápida" (balcão, sem cliente cadastrado) skips
+    // customer selection entirely — enforced manually in onSubmit instead,
+    // since that decision lives in isQuickSale (component state), not here.
+    customerId: z.string().optional(),
     sellerTechnicianId: z.string().optional(),
     saleDate: z.string().min(1, 'Informe a data da venda'),
     billingDate: z.string().optional(),
@@ -53,6 +56,7 @@ export default function SalesOrders() {
     const [sales, setSales] = useState<any[]>([]);
     const [items, setItems] = useState<SaleItem[]>([]);
     const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('nao_pago');
+    const [isQuickSale, setIsQuickSale] = useState(false);
     const [paymentModalSale, setPaymentModalSale] = useState<any>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showOnlyMissingRecord, setShowOnlyMissingRecord] = useState(false);
@@ -146,7 +150,8 @@ export default function SalesOrders() {
 
     const handleEdit = async (sale: any) => {
         setEditingId(sale.id);
-        setValue('customerId', sale.customer_id);
+        setIsQuickSale(!sale.customer_id);
+        setValue('customerId', sale.customer_id || '');
         setValue('sellerTechnicianId', sale.seller_technician_id || '');
         setValue('saleDate', sale.sale_date);
         setValue('billingDate', sale.billing_date || '');
@@ -173,13 +178,23 @@ export default function SalesOrders() {
         setEditingId(null);
         setItems([]);
         setPaymentStatus('nao_pago');
+        setIsQuickSale(false);
         reset({ saleDate: toDateStr(new Date()), discountType: 'fixed' });
+    };
+
+    const toggleQuickSale = (checked: boolean) => {
+        setIsQuickSale(checked);
+        if (checked) setValue('customerId', '');
     };
 
     const onSubmit = async (data: SaleForm) => {
         if (!tenantId) return;
         if (!editingId && items.length === 0) {
             toast.error('Adicione pelo menos um produto à venda.');
+            return;
+        }
+        if (!isQuickSale && !data.customerId) {
+            toast.error('Selecione um cliente ou marque "Venda Rápida".');
             return;
         }
         if (paymentStatus === 'pago' && grandTotal <= 0) {
@@ -191,7 +206,7 @@ export default function SalesOrders() {
         setIsSubmitting(true);
         try {
             const row = {
-                customer_id: data.customerId,
+                customer_id: isQuickSale ? null : data.customerId || null,
                 seller_technician_id: data.sellerTechnicianId || null,
                 sale_date: data.saleDate,
                 billing_date: data.billingDate || null,
@@ -308,6 +323,10 @@ export default function SalesOrders() {
     };
 
     const shareViaWhatsApp = (sale: any) => {
+        if (!sale.customer_id) {
+            toast.error('Venda Rápida sem cliente cadastrado — não há para quem enviar.');
+            return;
+        }
         if (!sale.customers?.phone) {
             toast.error('Cliente sem telefone cadastrado');
             return;
@@ -363,21 +382,38 @@ export default function SalesOrders() {
                     <Card>
                         <h3 className="font-semibold text-base sm:text-lg mb-4">Dados da Venda</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium text-gray-600">Cliente</label>
-                                <Controller
-                                    name="customerId"
-                                    control={control}
-                                    render={({ field }) => (
-                                        <SearchableSelect
-                                            value={field.value || ''}
-                                            onChange={field.onChange}
-                                            placeholder="Buscar cliente..."
-                                            error={errors.customerId?.message}
-                                            options={customers.map(c => ({ value: c.id, label: c.name }))}
+                            <div className="space-y-1 sm:col-span-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-sm font-medium text-gray-600">Cliente</label>
+                                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={isQuickSale}
+                                            onChange={(e) => toggleQuickSale(e.target.checked)}
+                                            className="rounded border-gray-300 text-primary-cyan focus:ring-primary-cyan/50"
                                         />
-                                    )}
-                                />
+                                        Venda Rápida (sem cliente cadastrado)
+                                    </label>
+                                </div>
+                                {isQuickSale ? (
+                                    <div className="w-full px-4 py-2 rounded-xl text-sm bg-gray-50 text-gray-500 border border-gray-200">
+                                        Venda de balcão — sem vínculo com cliente cadastrado.
+                                    </div>
+                                ) : (
+                                    <Controller
+                                        name="customerId"
+                                        control={control}
+                                        render={({ field }) => (
+                                            <SearchableSelect
+                                                value={field.value || ''}
+                                                onChange={field.onChange}
+                                                placeholder="Buscar cliente..."
+                                                error={errors.customerId?.message}
+                                                options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                            />
+                                        )}
+                                    />
+                                )}
                             </div>
 
                             <div className="space-y-1">
@@ -565,7 +601,9 @@ export default function SalesOrders() {
                                             className="flex items-center gap-2 mb-1 hover:underline text-left"
                                         >
                                             <User className="w-4 h-4 text-primary-cyan" />
-                                            <span className="font-semibold text-dark text-base">{sale.customers?.name || 'N/A'}</span>
+                                            <span className={`font-semibold text-base ${sale.customers?.name ? 'text-dark' : 'text-gray-400 italic'}`}>
+                                                {sale.customers?.name || 'Venda Rápida (sem cliente)'}
+                                            </span>
                                         </button>
 
                                         <p className="text-sm text-gray-600 mb-1">
