@@ -230,6 +230,24 @@ export default function PurchaseOrders() {
 
         setIsActionLoading(true);
         try {
+            // Atomically claim this purchase order before touching stock — if two
+            // clicks land before the list refreshes and hides this action (e.g. a
+            // double-tap on mobile), only the first update actually matches
+            // stock_added = false and returns a row; the second is a no-op instead
+            // of adding the same quantities to stock twice.
+            const { data: claimed, error: claimError } = await supabase
+                .from('purchase_orders')
+                .update({ stock_added: true })
+                .eq('id', purchase.id)
+                .eq('stock_added', false)
+                .select('id')
+                .maybeSingle();
+            if (claimError) throw claimError;
+            if (!claimed) {
+                toast.error('Esse pedido já teve o estoque adicionado.');
+                return;
+            }
+
             let orderItems: { product_id: string | null; quantity: number }[] = itemsOverride ?? [];
             if (!itemsOverride) {
                 const { data, error: itemsError } = await supabase
@@ -256,9 +274,6 @@ export default function PurchaseOrders() {
                 if (movError) throw movError;
             }
 
-            const { error } = await supabase.from('purchase_orders').update({ stock_added: true }).eq('id', purchase.id);
-            if (error) throw error;
-
             if (editingId === purchase.id) setEditingStatus(prev => prev ? { ...prev, stock_added: true } : prev);
             toast.success('Estoque atualizado com sucesso!');
             fetchPurchases();
@@ -275,6 +290,23 @@ export default function PurchaseOrders() {
 
         setIsActionLoading(true);
         try {
+            // Same atomic-claim guard as addStockFor — a double-click here would
+            // otherwise create two cash_entries rows for the same purchase order
+            // (this is the exact bug that produced two "Pedido de Compra #X"
+            // lançamentos in the Fluxo de Caixa).
+            const { data: claimed, error: claimError } = await supabase
+                .from('purchase_orders')
+                .update({ account_added: true })
+                .eq('id', purchase.id)
+                .eq('account_added', false)
+                .select('id')
+                .maybeSingle();
+            if (claimError) throw claimError;
+            if (!claimed) {
+                toast.error('Esse pedido já teve a conta lançada.');
+                return;
+            }
+
             const { data: entry, error: entryError } = await supabase
                 .from('cash_entries')
                 .insert([{
@@ -295,7 +327,7 @@ export default function PurchaseOrders() {
 
             const { error } = await supabase
                 .from('purchase_orders')
-                .update({ account_added: true, cash_entry_id: entry.id })
+                .update({ cash_entry_id: entry.id })
                 .eq('id', purchase.id);
             if (error) throw error;
 
