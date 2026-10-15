@@ -309,14 +309,15 @@ export default function Customers() {
         }
     };
 
-    const filteredCustomers = customers
-        .filter(customer =>
-            matchesSearchFields([customer.name, customer.trade_name, customer.company_name], searchTerm) ||
-            matchesDigits(customer.cpf, searchTerm) ||
-            matchesDigits(customer.cnpj, searchTerm) ||
-            matchesDigits(customer.phone, searchTerm)
-        )
-        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    // Sem .sort() aqui de propósito — fetchCustomers() já traz em ordem de
+    // created_at desc (mais novo primeiro), e .filter() preserva a ordem do
+    // array original. Um .sort() alfabético nessa altura sobrescreveria isso.
+    const filteredCustomers = customers.filter(customer =>
+        matchesSearchFields([customer.name, customer.trade_name, customer.company_name], searchTerm) ||
+        matchesDigits(customer.cpf, searchTerm) ||
+        matchesDigits(customer.cnpj, searchTerm) ||
+        matchesDigits(customer.phone, searchTerm)
+    );
 
     return (
         <div className="space-y-6">
