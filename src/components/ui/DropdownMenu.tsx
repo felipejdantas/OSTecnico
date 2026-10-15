@@ -12,9 +12,10 @@ interface DropdownMenuItem {
 interface DropdownMenuProps {
     items: DropdownMenuItem[];
     triggerClassName?: string;
+    disabled?: boolean;
 }
 
-export function DropdownMenu({ items, triggerClassName = '' }: DropdownMenuProps) {
+export function DropdownMenu({ items, triggerClassName = '', disabled = false }: DropdownMenuProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
     const triggerRef = useRef<HTMLButtonElement>(null);
@@ -57,6 +58,7 @@ export function DropdownMenu({ items, triggerClassName = '' }: DropdownMenuProps
     }, [isOpen]);
 
     const handleToggle = () => {
+        if (disabled) return;
         if (!isOpen) updatePosition();
         setIsOpen(!isOpen);
     };
@@ -71,8 +73,9 @@ export function DropdownMenu({ items, triggerClassName = '' }: DropdownMenuProps
             <button
                 ref={triggerRef}
                 onClick={handleToggle}
-                className={`p-2 hover:bg-gray-100 rounded-lg transition-colors ${triggerClassName}`}
-                title="Ações"
+                disabled={disabled}
+                className={`p-2 rounded-lg transition-colors ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-100'} ${triggerClassName}`}
+                title={disabled ? 'Aguarde a ação em andamento terminar' : 'Ações'}
             >
                 <MoreVertical className="w-4 h-4" />
             </button>

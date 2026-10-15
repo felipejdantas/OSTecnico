@@ -690,7 +690,7 @@ export default function PurchaseOrders() {
                                         </td>
                                         <td className="px-6 py-4 text-right font-medium text-dark">{formatCurrency(p.total)}</td>
                                         <td className="px-6 py-4 text-right" onClick={(e) => e.stopPropagation()}>
-                                            <DropdownMenu items={purchaseMenuItems(p)} />
+                                            <DropdownMenu items={purchaseMenuItems(p)} disabled={isActionLoading} />
                                         </td>
                                     </tr>
                                 ))
@@ -715,7 +715,7 @@ export default function PurchaseOrders() {
                                         #{p.purchase_number}
                                     </span>
                                     <div onClick={(e) => e.stopPropagation()}>
-                                        <DropdownMenu items={purchaseMenuItems(p)} />
+                                        <DropdownMenu items={purchaseMenuItems(p)} disabled={isActionLoading} />
                                     </div>
                                 </div>
                                 <p className="text-sm text-gray-700">{p.suppliers?.name || 'N/A'}</p>
