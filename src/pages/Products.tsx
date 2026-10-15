@@ -60,7 +60,7 @@ export default function Products() {
             .from('products')
             .select('*')
             .eq('user_id', tenantId)
-            .order('name');
+            .order('created_at', { ascending: false });
 
         if (error) console.error('Error fetching products:', error);
         else setProducts(data || []);
