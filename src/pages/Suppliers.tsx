@@ -69,9 +69,17 @@ export default function Suppliers() {
             if (data.descricao_situacao_cadastral && data.descricao_situacao_cadastral !== 'ATIVA') {
                 toast.error(`Atenção: situação cadastral deste CNPJ é "${data.descricao_situacao_cadastral}".`, { duration: 6000 });
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Erro ao buscar CNPJ', error);
-            toast.error('Não foi possível encontrar esse CNPJ. Preencha os dados manualmente.');
+            // Mesma distinção de Customers.tsx: 404 é a BrasilAPI dizendo que o CNPJ
+            // não existe; qualquer outro erro é ela mesma instável (5xx vindo do
+            // provedor que ela consulta por trás) — merece uma mensagem diferente,
+            // já que nesse caso o CNPJ pode estar certo e valer tentar de novo.
+            if (error.response?.status === 404) {
+                toast.error('CNPJ não encontrado na Receita Federal. Confira o número ou preencha os dados manualmente.');
+            } else {
+                toast.error('O serviço de consulta de CNPJ está instável no momento. Tente novamente em alguns minutos ou preencha os dados manualmente.');
+            }
         } finally {
             setIsSearchingCnpj(false);
         }
