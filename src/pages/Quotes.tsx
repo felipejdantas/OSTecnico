@@ -6,7 +6,7 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 import {
     Plus, Search, Edit2, Trash2, Calculator, Save, FileDown, MessageCircle,
-    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2, CheckCircle2, AlertTriangle, UserPlus,
+    User, Calendar, Wrench, ShoppingCart, XCircle, Undo2, CheckCircle2, AlertTriangle, UserPlus, Copy,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -492,6 +492,76 @@ export default function Quotes() {
         }
     };
 
+    // Diferente da duplicação de OS (que propositalmente não copia itens/
+    // serviços, já que são consumo real de peças numa OS), aqui faz sentido
+    // copiar quote_items/quote_services — um orçamento É a lista de preços,
+    // duplicar sem isso devolveria um orçamento vazio. Reseta data pra hoje,
+    // zera "válido até" (uma validade antiga não faz sentido na cópia), e
+    // nasce sempre "aberto" — nunca conversão nem recusa do original.
+    const duplicateQuoteFor = async (quote: any) => {
+        if (!tenantId) return;
+        if (!confirm(`Tem certeza que deseja duplicar o orçamento #${quote.quote_number}?`)) return;
+
+        try {
+            const { data: originalQuote, error: fetchError } = await supabase
+                .from('quotes')
+                .select('*')
+                .eq('id', quote.id)
+                .eq('user_id', tenantId)
+                .single();
+            if (fetchError) throw fetchError;
+
+            const {
+                id,
+                quote_number,
+                created_at,
+                status,
+                converted_to,
+                converted_order_id,
+                signature_token,
+                approved_at,
+                user_id,
+                ...quoteData
+            } = originalQuote;
+
+            const { data: newQuote, error: insertError } = await supabase
+                .from('quotes')
+                .insert([{
+                    ...quoteData,
+                    user_id: tenantId,
+                    quote_date: toDateStr(new Date()),
+                    valid_until: null,
+                }])
+                .select('id, quote_number')
+                .single();
+            if (insertError) throw insertError;
+
+            const [{ data: quoteItemsData }, { data: quoteServicesData }] = await Promise.all([
+                supabase.from('quote_items').select('product_id, product_name, quantity, unit_price').eq('quote_id', quote.id),
+                supabase.from('quote_services').select('service_id, service_name, description, quantity, price').eq('quote_id', quote.id),
+            ]);
+
+            if (quoteItemsData && quoteItemsData.length > 0) {
+                const { error: itemsError } = await supabase.from('quote_items').insert(
+                    quoteItemsData.map(i => ({ quote_id: newQuote.id, ...i }))
+                );
+                if (itemsError) throw itemsError;
+            }
+            if (quoteServicesData && quoteServicesData.length > 0) {
+                const { error: servicesError } = await supabase.from('quote_services').insert(
+                    quoteServicesData.map(s => ({ quote_id: newQuote.id, ...s }))
+                );
+                if (servicesError) throw servicesError;
+            }
+
+            toast.success(`Orçamento duplicado! Criado o #${newQuote.quote_number}.`);
+            fetchQuotes();
+        } catch (error: any) {
+            console.error('Error duplicating quote:', error);
+            toast.error('Erro ao duplicar orçamento: ' + (error.message || 'Erro desconhecido'));
+        }
+    };
+
     const shareViaWhatsApp = (quote: any) => {
         const phone = quote.customers?.phone || quote.guest_phone;
         const name = quote.customers?.name || quote.guest_name || 'Cliente';
@@ -526,6 +596,7 @@ export default function Quotes() {
         { label: 'Exportar PDF', icon: <FileDown className="w-4 h-4" />, onClick: () => exportPDF(q.id) },
         { label: 'Enviar por WhatsApp', icon: <MessageCircle className="w-4 h-4" />, onClick: () => shareViaWhatsApp(q) },
         { label: 'Atualizar', icon: <Edit2 className="w-4 h-4" />, onClick: () => handleEdit(q) },
+        { label: 'Duplicar', icon: <Copy className="w-4 h-4" />, onClick: () => duplicateQuoteFor(q) },
         { label: 'Excluir', icon: <Trash2 className="w-4 h-4" />, onClick: () => handleDelete(q.id, q.quote_number), variant: 'danger' as const },
     ];
 
