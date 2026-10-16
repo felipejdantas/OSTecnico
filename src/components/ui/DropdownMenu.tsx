@@ -28,8 +28,18 @@ export function DropdownMenu({ items, triggerClassName = '', disabled = false }:
         if (!triggerRef.current) return;
         const rect = triggerRef.current.getBoundingClientRect();
         const menuWidth = 192; // w-48
+        // ~36px per item row (px-4 py-2 + text-sm) + container's py-1 padding —
+        // estimated up front (not measured post-render) so the menu opens
+        // already positioned correctly instead of flashing/jumping. A trigger
+        // near the bottom of the screen (last row of a list) would otherwise
+        // always open downward and get clipped by the viewport, hiding
+        // whichever items don't fit — this flips it upward when there isn't
+        // enough room below.
+        const estimatedHeight = items.length * 36 + 10;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const openUpward = spaceBelow < estimatedHeight && rect.top > estimatedHeight;
         setMenuPos({
-            top: rect.bottom + 4,
+            top: openUpward ? Math.max(8, rect.top - 4 - estimatedHeight) : rect.bottom + 4,
             left: Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8),
         });
     };
@@ -83,8 +93,8 @@ export function DropdownMenu({ items, triggerClassName = '', disabled = false }:
             {isOpen && createPortal(
                 <div
                     ref={menuRef}
-                    style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
-                    className="w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50"
+                    style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, maxHeight: 'calc(100vh - 16px)' }}
+                    className="w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 overflow-y-auto"
                 >
                     {items.map((item, index) => (
                         <button
