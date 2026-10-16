@@ -16,6 +16,7 @@ import ImportNFe from './pages/ImportNFe';
 import Services from './pages/Services';
 import CashFlow from './pages/CashFlow';
 import FixedCosts from './pages/FixedCosts';
+import FixedRevenues from './pages/FixedRevenues';
 import CompanySettings from './pages/CompanySettings';
 import Assistencias from './pages/Assistencias';
 import ClientSignature from './pages/ClientSignature';
@@ -103,6 +104,7 @@ function App() {
           <Route path="/servicos" element={<ProtectedRoute><Layout><Services /></Layout></ProtectedRoute>} />
           <Route path="/caixa" element={<ProtectedRoute><Layout><CashFlow /></Layout></ProtectedRoute>} />
           <Route path="/custos-fixos" element={<ProtectedRoute><Layout><FixedCosts /></Layout></ProtectedRoute>} />
+          <Route path="/receita-fixa" element={<ProtectedRoute><Layout><FixedRevenues /></Layout></ProtectedRoute>} />
           <Route path="/faturamento" element={<Navigate to="/caixa" replace />} />
           <Route path="/configuracoes" element={<ProtectedRoute><Layout><CompanySettings /></Layout></ProtectedRoute>} />
           <Route path="/admin/assistencias" element={<ProtectedRoute><RequireMaster><Layout><Assistencias /></Layout></RequireMaster></ProtectedRoute>} />

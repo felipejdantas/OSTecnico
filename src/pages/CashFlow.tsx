@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
     ChevronLeft, ChevronRight, Wallet, FileText, ShoppingCart, ArrowUpCircle, ArrowDownCircle,
-    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat, Banknote, FileDown,
+    CalendarDays, CalendarRange, Calendar, Plus, Trash2, Edit2, X, Truck, FileSpreadsheet, Repeat, Banknote, FileDown, TrendingUp,
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -22,7 +22,7 @@ type LedgerRow = {
     category: string | null;
     amount: number; // signed: positive entrada, negative saida
     payment_status?: PaymentStatus;
-    source?: 'manual' | 'compra' | 'nfe' | 'fixo' | 'pagamento';
+    source?: 'manual' | 'compra' | 'nfe' | 'fixo' | 'pagamento' | 'receita_fixa';
     // When this row was actually posted (OS/Venda: paid_at once faturado,
     // falling back to created_at while still a receivable; cash_entries:
     // created_at) — the tie-break for same-`date` rows, so whatever was just
@@ -401,6 +401,7 @@ export default function CashFlow() {
         if (row.source === 'nfe') return <span className="inline-flex items-center gap-1.5 text-indigo-600"><FileSpreadsheet className="w-4 h-4" />{row.label}</span>;
         if (row.source === 'fixo') return <span className="inline-flex items-center gap-1.5 text-amber-700"><Repeat className="w-4 h-4" />{row.label}</span>;
         if (row.source === 'pagamento') return <span className="inline-flex items-center gap-1.5 text-green-700"><Banknote className="w-4 h-4" />{row.label}</span>;
+        if (row.source === 'receita_fixa') return <span className="inline-flex items-center gap-1.5 text-primary-green"><TrendingUp className="w-4 h-4" />{row.label}</span>;
         return <span className={`inline-flex items-center gap-1.5 ${row.amount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{row.amount >= 0 ? <ArrowUpCircle className="w-4 h-4" /> : <ArrowDownCircle className="w-4 h-4" />}{row.label}</span>;
     };
 
