@@ -339,14 +339,6 @@ export default function CashFlow() {
     const dayStat = computeStats(allRows, dayDateStr, dayDateStr, todayStr);
     const weekStat = computeStats(allRows, toDateStr(monday), toDateStr(sunday), todayStr);
 
-    // Running balance since the beginning — unlike the Hoje/Semana/Mês cards
-    // below (each scoped to its own period, resetting to zero), this is the
-    // "bank account" style total: every realized entrada minus every realized
-    // saída ever, so a leftover from August carries forward instead of
-    // vanishing once September starts. Future-dated rows (e.g. a card leg
-    // landing D+1) are excluded by isRealized until their own date arrives.
-    const totalStat = computeStats(allRows, '0000-01-01', '9999-12-31', todayStr);
-
     const browsedMonthStart = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
     const browsedMonthEnd = toDateStr(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0));
     const rows = allRows
@@ -433,15 +425,15 @@ export default function CashFlow() {
             <Card className="bg-gradient-to-br from-dark to-dark/90">
                 <div className="flex items-center gap-2 text-white/70 mb-1">
                     <Wallet className="w-4 h-4" />
-                    <p className="text-sm">Saldo em Caixa (total acumulado)</p>
+                    <p className="text-sm">Saldo em Caixa</p>
                 </div>
-                <p className="text-3xl sm:text-4xl font-bold text-white">{loading ? '...' : formatCurrency(totalStat.saldo)}</p>
+                <p className="text-3xl sm:text-4xl font-bold text-white">{loading ? '...' : formatCurrency(monthSaldo)}</p>
                 {!loading && (
                     <p className="text-sm mt-1">
-                        <span className="text-green-400">+{formatCurrency(totalStat.entradas)}</span>
+                        <span className="text-green-400">+{formatCurrency(monthEntradas)}</span>
                         <span className="text-white/50">{' / '}</span>
-                        <span className="text-red-400">-{formatCurrency(totalStat.saidas)}</span>
-                        <span className="text-white/50"> · desde o início</span>
+                        <span className="text-red-400">-{formatCurrency(monthSaidas)}</span>
+                        <span className="text-white/50 capitalize"> · {monthLabel}</span>
                     </p>
                 )}
             </Card>
