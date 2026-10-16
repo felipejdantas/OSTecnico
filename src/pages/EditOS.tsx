@@ -4,7 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, ArrowLeft, Lock, UserPlus } from 'lucide-react';
+import { Save, ArrowLeft, Lock, UserPlus, Copy } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -24,6 +24,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
+import { toDateStr } from '../lib/fixedCosts';
 import { EQUIPMENT_TYPES } from './NewOS';
 
 const osSchema = z.object({
@@ -101,6 +102,7 @@ export default function EditOS() {
     const [originalStatus, setOriginalStatus] = useState<string>('');
     const [budgetApprovedAt, setBudgetApprovedAt] = useState<string | null>(null);
     const [isMarkingApproved, setIsMarkingApproved] = useState(false);
+    const [isDuplicating, setIsDuplicating] = useState(false);
     // Snapshot of the financials as loaded, so onSubmit can tell whether the
     // approved budget actually changed (vs. just re-saving the same numbers).
     const [originalFinancials, setOriginalFinancials] = useState({ discountType: 'fixed' as DiscountType, discountValue: 0, freight: 0, urgencyFee: 0 });
@@ -356,6 +358,74 @@ export default function EditOS() {
     // (trg_advance_status_on_budget_approval) is what actually jumps the status
     // straight to Em Reparo when it's still parked in a "waiting" status — this
     // just sets the approval timestamp and re-reads the result.
+    // Mesma lógica de "Duplicar" que já existe no menu "⋮" do Dashboard —
+    // copiada aqui pra ter um botão visível direto na tela de edição, já que
+    // é comum o técnico querer duplicar exatamente a OS que está olhando.
+    // Não copia os itens/serviços (peças usadas) nem a data de entrada/
+    // faturamento/aprovação/pagamento do original — a duplicata nasce como
+    // uma OS nova de verdade, não uma continuação da antiga.
+    const duplicateOS = async () => {
+        if (!tenantId || !id) return;
+        if (!confirm('Tem certeza que deseja duplicar esta OS?')) return;
+
+        setIsDuplicating(true);
+        try {
+            const { data: originalOS, error: fetchError } = await supabase
+                .from('service_orders')
+                .select('*')
+                .eq('id', id)
+                .eq('user_id', tenantId)
+                .single();
+            if (fetchError) throw fetchError;
+
+            const {
+                id: _id,
+                created_at,
+                os_number,
+                signature_token,
+                client_signed_at,
+                client_signature_url,
+                is_pinned,
+                pinned_at,
+                updated_at,
+                user_id,
+                payment_status,
+                paid_at,
+                budget_approved_at,
+                completed_date,
+                billing_date,
+                entry_date,
+                problem_resolution,
+                ...osData
+            } = originalOS;
+
+            const { data: newOS, error: insertError } = await supabase
+                .from('service_orders')
+                .insert([{
+                    ...osData,
+                    user_id: tenantId,
+                    status: 'recebido',
+                    payment_status: 'nao_pago',
+                    entry_date: toDateStr(new Date()),
+                    physical_condition: osData.physical_condition || [],
+                    operating_condition: osData.operating_condition || [],
+                    technical_tests: osData.technical_tests || [],
+                    photos: osData.photos || [],
+                }])
+                .select('id, os_number')
+                .single();
+            if (insertError) throw insertError;
+
+            toast.success(`OS duplicada! Abrindo a nova OS #${newOS.os_number}...`);
+            navigate(`/editar-os/${newOS.id}`, { replace: true });
+        } catch (error: any) {
+            console.error('Error duplicating OS:', error);
+            toast.error('Erro ao duplicar OS: ' + (error.message || 'Erro desconhecido'));
+        } finally {
+            setIsDuplicating(false);
+        }
+    };
+
     const markApproved = async () => {
         if (!id) return;
         if (!confirm('Confirma que o cliente aprovou o orçamento? Se a OS ainda estiver aguardando aprovação, ela vai avançar para "Em Reparo".')) return;
@@ -384,7 +454,7 @@ export default function EditOS() {
     return (
         <div className="space-y-4 sm:space-y-6 pb-20">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 sm:space-y-6">
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <Button variant="outline" type="button" onClick={() => navigate('/')}>
                             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -399,10 +469,16 @@ export default function EditOS() {
                             <p className="text-sm text-gray-500">Edite todas as informações da OS</p>
                         </div>
                     </div>
-                    <Button type="submit" size="lg" className="touch-manipulation" disabled={isSubmitting}>
-                        <Save className="w-5 h-5 mr-2" />
-                        {isSubmitting ? 'Salvando...' : 'Salvar'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" type="button" onClick={duplicateOS} disabled={isDuplicating}>
+                            <Copy className="w-4 h-4 mr-2" />
+                            {isDuplicating ? 'Duplicando...' : 'Duplicar'}
+                        </Button>
+                        <Button type="submit" size="lg" className="touch-manipulation" disabled={isSubmitting}>
+                            <Save className="w-5 h-5 mr-2" />
+                            {isSubmitting ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                    </div>
                 </div>
 
                 {isLocked && (
