@@ -16,9 +16,18 @@ export type OrderPaymentLeg = {
     id: string;
     method: PaymentMethod;
     amount: number;
+    // Taxa da maquininha descontada neste pagamento (0 pra pix/dinheiro/
+    // transferência, que não têm taxa). `amount` continua sendo o valor
+    // cheio que o cliente pagou — é o que entra no cálculo de quanto da OS/
+    // Venda já foi quitado. O que de fato cai na conta é `amount - fee_amount`.
+    fee_amount: number;
     received_date: string;
     cash_entry_id: string | null;
 };
+
+export function isCardMethod(method: PaymentMethod): boolean {
+    return method === 'cartao_debito' || method === 'cartao_credito';
+}
 
 // Local calendar date (YYYY-MM-DD), not UTC — toISOString() would roll the
 // date forward in the evening for UTC-3.

@@ -7,7 +7,7 @@ import { Input } from './ui/Input';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import {
-    PAYMENT_METHODS, PAYMENT_METHOD_LABELS, defaultReceivedDate, computePaymentStatus,
+    PAYMENT_METHODS, PAYMENT_METHOD_LABELS, defaultReceivedDate, computePaymentStatus, isCardMethod,
     type PaymentMethod, type OrderPaymentLeg,
 } from '../lib/orderPayments';
 
@@ -34,10 +34,18 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
     const [method, setMethod] = useState<PaymentMethod>('pix');
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState(defaultReceivedDate('pix'));
+    const [feePercent, setFeePercent] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
     const totalPaid = legs.reduce((s, l) => s + l.amount, 0);
     const remaining = Math.max(0, orderTotal - totalPaid);
+
+    // O cliente continua devendo o valor cheio — a taxa só afeta quanto cai
+    // de fato na conta, nunca o quanto a OS/Venda está quitada.
+    const amountValue = parseFloat(amount.replace(',', '.')) || 0;
+    const feePercentValue = isCardMethod(method) ? (parseFloat(feePercent.replace(',', '.')) || 0) : 0;
+    const feeAmount = Math.round(amountValue * (feePercentValue / 100) * 100) / 100;
+    const netAmount = Math.round((amountValue - feeAmount) * 100) / 100;
 
     useEffect(() => {
         fetchLegs();
@@ -55,7 +63,7 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
         setLoading(true);
         const { data, error } = await supabase
             .from('order_payments')
-            .select('id, method, amount, received_date, cash_entry_id')
+            .select('id, method, amount, fee_amount, received_date, cash_entry_id')
             .eq('order_type', orderType)
             .eq('order_id', orderId)
             .order('received_date');
@@ -76,10 +84,11 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
     const handleMethodChange = (m: PaymentMethod) => {
         setMethod(m);
         setDate(defaultReceivedDate(m));
+        if (!isCardMethod(m)) setFeePercent('');
     };
 
     const addLeg = async () => {
-        const value = parseFloat(amount.replace(',', '.'));
+        const value = amountValue;
         if (!value || value <= 0) {
             toast.error('Informe um valor válido.');
             return;
@@ -88,17 +97,28 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
             toast.error('Informe a data em que o valor cai na conta.');
             return;
         }
+        if (netAmount <= 0) {
+            toast.error('A taxa informada é maior ou igual ao valor do pagamento.');
+            return;
+        }
         setIsSaving(true);
         try {
             const methodLabel = PAYMENT_METHOD_LABELS[method];
+            // cash_entries recebe o valor LÍQUIDO (o que realmente cai na
+            // conta) — order_payments.amount guarda o valor cheio que o
+            // cliente pagou, usado pra calcular o quanto da OS/Venda já foi
+            // quitado. A taxa nunca deveria fazer o pedido parecer "não
+            // totalmente pago" por causa de um desconto que é só da loja.
             const { data: entry, error: entryError } = await supabase.from('cash_entries').insert([{
                 user_id: tenantId,
                 entry_date: date,
                 competence_date: date,
                 type: 'entrada',
                 category: methodLabel,
-                amount: value,
-                description: `${orderLabel} · ${methodLabel}`,
+                amount: netAmount,
+                description: feeAmount > 0
+                    ? `${orderLabel} · ${methodLabel} (taxa ${formatCurrency(feeAmount)})`
+                    : `${orderLabel} · ${methodLabel}`,
                 related_party: customerName || null,
                 source: 'pagamento',
             }]).select('id').single();
@@ -110,12 +130,14 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
                 order_id: orderId,
                 method,
                 amount: value,
+                fee_amount: feeAmount,
                 received_date: date,
                 cash_entry_id: entry.id,
             }]);
             if (legError) throw legError;
 
             toast.success('Pagamento registrado!');
+            setFeePercent('');
             await fetchLegs();
             await syncOrderStatus(totalPaid + value);
         } catch (error: any) {
@@ -126,7 +148,8 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
     };
 
     const removeLeg = async (leg: OrderPaymentLeg) => {
-        if (!confirm(`Remover o pagamento de ${formatCurrency(leg.amount)} (${PAYMENT_METHOD_LABELS[leg.method]})? Ele sai do Fluxo de Caixa também.`)) return;
+        const netLabel = leg.fee_amount > 0 ? ` (${formatCurrency(leg.amount - leg.fee_amount)} líquido sai do Fluxo de Caixa)` : '';
+        if (!confirm(`Remover o pagamento de ${formatCurrency(leg.amount)} (${PAYMENT_METHOD_LABELS[leg.method]})?${netLabel} Ele sai do Fluxo de Caixa também.`)) return;
         try {
             if (leg.cash_entry_id) {
                 const { error } = await supabase.from('cash_entries').delete().eq('id', leg.cash_entry_id);
@@ -180,7 +203,10 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
                                     <div key={leg.id} className="flex items-center justify-between gap-3 p-2.5 bg-gray-50 rounded-xl">
                                         <div className="min-w-0">
                                             <p className="text-sm font-medium text-dark">{PAYMENT_METHOD_LABELS[leg.method]} · {formatCurrency(leg.amount)}</p>
-                                            <p className="text-xs text-gray-500">Cai em {new Date(leg.received_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                            <p className="text-xs text-gray-500">
+                                                Cai em {new Date(leg.received_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                {leg.fee_amount > 0 && <> · taxa {formatCurrency(leg.fee_amount)} · líquido {formatCurrency(leg.amount - leg.fee_amount)}</>}
+                                            </p>
                                         </div>
                                         <button type="button" onClick={() => removeLeg(leg)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0">
                                             <Trash2 className="w-4 h-4" />
@@ -211,6 +237,24 @@ export function PaymentModal({ orderType, orderId, orderLabel, orderTotal, custo
                                     <Input label="Valor (R$)" type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
                                     <Input label="Cai na conta em" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
                                 </div>
+                                {isCardMethod(method) && (
+                                    <div>
+                                        <Input
+                                            label="Taxa da Máquina (%) — opcional"
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Ex: 3,5"
+                                            value={feePercent}
+                                            onChange={(e) => setFeePercent(e.target.value)}
+                                        />
+                                        {feeAmount > 0 && (
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                O cliente deve {formatCurrency(amountValue)} normalmente. Taxa de {formatCurrency(feeAmount)} —
+                                                você recebe <span className="font-medium text-dark">{formatCurrency(netAmount)}</span> no Fluxo de Caixa.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                                 <Button type="button" className="w-full" onClick={addLeg} disabled={isSaving}>
                                     <Plus className="w-4 h-4 mr-2" /> {isSaving ? 'Registrando...' : 'Registrar Pagamento'}
                                 </Button>
