@@ -33,3 +33,4 @@ backups/
 
 .vercel
 .env*
+.omc

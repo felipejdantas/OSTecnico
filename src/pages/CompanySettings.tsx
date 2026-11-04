@@ -9,7 +9,7 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-
+import { BusinessClosuresSection } from '../components/settings/BusinessClosuresSection';
 type TeamMember = {
     id: string;
     name: string | null;
@@ -374,6 +374,12 @@ export default function CompanySettings() {
                 a check inside the create-team-user edge function already refuse it),
                 this just keeps them from seeing a section they can't use. */}
             {isOwner && <TeamSection />}
+
+            {/* Also outside the <form>: has its own inputs and save button (drawer). Everyone
+                in the tenant sees the list; only the owner gets the create/edit/delete buttons. */}
+            <div className="pb-24 lg:pb-0">
+                <BusinessClosuresSection />
+            </div>
         </div>
     );
 }
