@@ -350,6 +350,13 @@ export default function CashFlow() {
     const monthSaidas = realizedRows.filter(r => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
     const monthSaldo = monthEntradas - monthSaidas;
 
+    // Saldo em Caixa is cumulative: every realized row from the beginning up to the end
+    // of the browsed month (capped at today by isRealized), not just that month's movement.
+    const cumulativeEnd = browsedMonthEnd < todayStr ? browsedMonthEnd : todayStr;
+    const saldoAcumulado = allRows
+        .filter(r => r.date <= cumulativeEnd && isRealized(r, todayStr))
+        .reduce((s, r) => s + r.amount, 0);
+
     const filteredRows = rows.filter(r => {
         if (typeFilter === 'entrada' && r.amount < 0) return false;
         if (typeFilter === 'saida' && r.amount >= 0) return false;
@@ -427,9 +434,10 @@ export default function CashFlow() {
                     <Wallet className="w-4 h-4" />
                     <p className="text-sm">Saldo em Caixa</p>
                 </div>
-                <p className="text-3xl sm:text-4xl font-bold text-white">{loading ? '...' : formatCurrency(monthSaldo)}</p>
+                <p className="text-3xl sm:text-4xl font-bold text-white">{loading ? '...' : formatCurrency(saldoAcumulado)}</p>
                 {!loading && (
                     <p className="text-sm mt-1">
+                        <span className="text-white/50">{isViewingCurrentMonth ? 'Acumulado até hoje · Movimento: ' : 'Acumulado até o fim do mês · Movimento: '}</span>
                         <span className="text-green-400">+{formatCurrency(monthEntradas)}</span>
                         <span className="text-white/50">{' / '}</span>
                         <span className="text-red-400">-{formatCurrency(monthSaidas)}</span>
