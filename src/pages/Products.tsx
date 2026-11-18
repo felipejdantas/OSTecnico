@@ -20,6 +20,8 @@ const productSchema = z.object({
     sku: z.string().optional(),
     category: z.string().optional(),
     unit: z.string().min(1, 'Informe a unidade'),
+    // NCM (8 dígitos, exigido na NF-e). Aceita "8504.40.10" e guarda só os dígitos.
+    ncm: z.string().optional().refine((v) => !v || v.replace(/\D/g, '').length === 8, 'NCM deve ter 8 dígitos'),
     cost_price: z.coerce.number().min(0, 'Valor inválido'),
     sale_price: z.coerce.number().min(0, 'Valor inválido'),
     stock_quantity: z.coerce.number().int('Deve ser um número inteiro'),
@@ -72,6 +74,7 @@ export default function Products() {
         setValue('sku', product.sku);
         setValue('category', product.category);
         setValue('unit', product.unit);
+        setValue('ncm', product.ncm ?? '');
         setValue('cost_price', product.cost_price);
         setValue('sale_price', product.sale_price);
         setValue('stock_quantity', product.stock_quantity);
@@ -120,7 +123,11 @@ export default function Products() {
             const newPhotoUrls = await Promise.all(newImages.map(uploadFile));
             const photos = [...existingPhotos, ...newPhotoUrls];
             const { warranty_months, ...rest } = data;
-            const row = { ...rest, warranty_days: warranty_months ? warranty_months * 30 : null };
+            const row = {
+                ...rest,
+                ncm: rest.ncm ? rest.ncm.replace(/\D/g, '') : null,
+                warranty_days: warranty_months ? warranty_months * 30 : null,
+            };
 
             if (editingId) {
                 const { error } = await supabase
@@ -203,6 +210,7 @@ export default function Products() {
                             <Input label="SKU / Código" {...register('sku')} />
                             <Input label="Categoria" {...register('category')} placeholder="Ex: Peças, Cabos, Baterias..." />
                             <Input label="Unidade" {...register('unit')} placeholder="un, pç, m..." error={errors.unit?.message} />
+                            <Input label="NCM (para NF-e)" {...register('ncm')} placeholder="Ex: 8504.40.10" error={errors.ncm?.message} />
                             <Input label="Preço de Custo (R$)" type="number" step="0.01" {...register('cost_price')} error={errors.cost_price?.message} />
                             <Input label="Preço de Venda (R$)" type="number" step="0.01" {...register('sale_price')} error={errors.sale_price?.message} />
                             <Input label="Quantidade em Estoque" type="number" {...register('stock_quantity')} error={errors.stock_quantity?.message} />

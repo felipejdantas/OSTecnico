@@ -4,8 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, ArrowLeft, Lock, UserPlus, Copy, FileText } from 'lucide-react';
+import { Save, ArrowLeft, Lock, UserPlus, Copy, FileText, Package } from 'lucide-react';
 import { EmitNfseDrawer } from '../components/EmitNfseDrawer';
+import { EmitNfeDrawer } from '../components/EmitNfeDrawer';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -105,6 +106,7 @@ export default function EditOS() {
     const [isMarkingApproved, setIsMarkingApproved] = useState(false);
     const [isDuplicating, setIsDuplicating] = useState(false);
     const [showNfse, setShowNfse] = useState(false);
+    const [showNfe, setShowNfe] = useState(false);
     // Snapshot of the financials as loaded, so onSubmit can tell whether the
     // approved budget actually changed (vs. just re-saving the same numbers).
     const [originalFinancials, setOriginalFinancials] = useState({ discountType: 'fixed' as DiscountType, discountValue: 0, freight: 0, urgencyFee: 0 });
@@ -482,6 +484,16 @@ export default function EditOS() {
                             <FileText className="w-4 h-4 mr-2" />
                             NFS-e
                         </Button>
+                        <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => setShowNfe(true)}
+                            disabled={!canEmitNfse(originalStatus)}
+                            title={canEmitNfse(originalStatus) ? 'Emitir NF-e dos produtos' : 'Só é possível emitir NF-e com a OS em "Pronto para Retirada" ou "Entregue" (salve o status antes)'}
+                        >
+                            <Package className="w-4 h-4 mr-2" />
+                            NF-e
+                        </Button>
                         <Button variant="outline" type="button" onClick={duplicateOS} disabled={isDuplicating}>
                             <Copy className="w-4 h-4 mr-2" />
                             {isDuplicating ? 'Duplicando...' : 'Duplicar'}
@@ -796,6 +808,14 @@ export default function EditOS() {
                 <EmitNfseDrawer
                     open={showNfse}
                     onClose={() => setShowNfse(false)}
+                    serviceOrderId={id}
+                    osNumber={watch('osNumber')}
+                />
+            )}
+            {id && (
+                <EmitNfeDrawer
+                    open={showNfe}
+                    onClose={() => setShowNfe(false)}
                     serviceOrderId={id}
                     osNumber={watch('osNumber')}
                 />

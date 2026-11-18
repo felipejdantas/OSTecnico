@@ -23,10 +23,17 @@ interface Emission {
     cancel_reason: string | null;
 }
 
+type Kind = 'nfse' | 'nfe';
+
 interface Row extends Emission {
+    kind: Kind;
     os_number: number | null;
     customer_name: string;
 }
+
+const KIND_LABEL: Record<Kind, string> = { nfse: 'NFS-e', nfe: 'NF-e' };
+const KIND_FN: Record<Kind, string> = { nfse: 'bling-nfse', nfe: 'bling-nfe' };
+const KIND_TABLE: Record<Kind, string> = { nfse: 'nfse_emissions', nfe: 'nfe_emissions' };
 
 const STATUS_BADGE: Record<EmissionStatus, { label: string; cls: string }> = {
     processando: { label: 'Processando', cls: 'bg-blue-100 text-blue-700' },
@@ -51,6 +58,7 @@ export default function Invoices() {
     const [rows, setRows] = useState<Row[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<Filter>('todas');
+    const [kind, setKind] = useState<Kind>('nfse');
     const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
     const [cancelRow, setCancelRow] = useState<Row | null>(null);
@@ -64,12 +72,22 @@ export default function Invoices() {
     const load = async () => {
         setLoading(true);
         try {
-            const { data: ems, error } = await supabase.from('nfse_emissions')
-                .select('id, service_order_id, status, numero, valor, link, error, created_at, canceled_at, cancel_reason')
-                .order('created_at', { ascending: false });
-            if (error) throw error;
+            const [nfse, nfe] = await Promise.all([
+                supabase.from(KIND_TABLE.nfse)
+                    .select('id, service_order_id, status, numero, valor, link, error, created_at, canceled_at, cancel_reason')
+                    .order('created_at', { ascending: false }),
+                supabase.from(KIND_TABLE.nfe)
+                    .select('id, service_order_id, status, numero, valor, link, error, created_at')
+                    .order('created_at', { ascending: false }),
+            ]);
+            if (nfse.error) throw nfse.error;
+            if (nfe.error) throw nfe.error;
+            const ems = [
+                ...(nfse.data ?? []).map((e: any) => ({ ...e, kind: 'nfse' as Kind })),
+                ...(nfe.data ?? []).map((e: any) => ({ ...e, kind: 'nfe' as Kind, canceled_at: null, cancel_reason: null })),
+            ].sort((a, b) => b.created_at.localeCompare(a.created_at));
 
-            const osIds = [...new Set((ems ?? []).map((e) => e.service_order_id))];
+            const osIds = [...new Set(ems.map((e) => e.service_order_id))];
             const osMap = new Map<string, { os_number: number; customer_id: string | null; guest_name: string | null }>();
             const custMap = new Map<string, string>();
             if (osIds.length) {
@@ -82,7 +100,7 @@ export default function Invoices() {
                     (custs ?? []).forEach((c: any) => custMap.set(c.id, c.company_name || c.name));
                 }
             }
-            setRows((ems ?? []).map((e: any) => {
+            setRows(ems.map((e: any) => {
                 const o = osMap.get(e.service_order_id);
                 return {
                     ...e,
@@ -98,9 +116,9 @@ export default function Invoices() {
         }
     };
 
-    const call = async (body: Record<string, unknown>) => {
+    const call = async (k: Kind, body: Record<string, unknown>) => {
         const { data: sessionData } = await supabase.auth.getSession();
-        const { data, error } = await supabase.functions.invoke('bling-nfse', {
+        const { data, error } = await supabase.functions.invoke(KIND_FN[k], {
             body,
             headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
         });
@@ -116,7 +134,7 @@ export default function Invoices() {
     const refresh = async (row: Row) => {
         setRefreshingId(row.id);
         try {
-            const em = await call({ action: 'status', serviceOrderId: row.service_order_id });
+            const em = await call(row.kind, { action: 'status', serviceOrderId: row.service_order_id });
             setRows((all) => all.map((r) => r.id === row.id ? { ...r, ...em, valor: Number(em.valor) } : r));
             toast.success('Situação atualizada');
         } catch (e: any) {
@@ -137,7 +155,7 @@ export default function Invoices() {
         if (!cancelRow) return;
         setCanceling(true);
         try {
-            const em = await call({
+            const em = await call('nfse', {
                 action: 'cancel', serviceOrderId: cancelRow.service_order_id, codigoMotivo: motivo, justificativa,
             });
             setRows((all) => all.map((r) => r.id === cancelRow.id ? { ...r, ...em, valor: Number(em.valor) } : r));
@@ -151,14 +169,15 @@ export default function Invoices() {
     };
 
     const visible = useMemo(() => rows.filter((r) => {
+        if (r.kind !== kind) return false;
         if (filter === 'ativas') return ['processando', 'enviada', 'emitida'].includes(r.status);
         if (filter === 'canceladas') return r.status === 'cancelada';
         if (filter === 'erro') return r.status === 'erro';
         return true;
-    }), [rows, filter]);
+    }), [rows, filter, kind]);
 
     const totalAtivas = rows
-        .filter((r) => r.status === 'emitida' || r.status === 'enviada')
+        .filter((r) => r.kind === kind && (r.status === 'emitida' || r.status === 'enviada'))
         .reduce((a, r) => a + r.valor, 0);
 
     const FILTERS: { key: Filter; label: string }[] = [
@@ -172,7 +191,22 @@ export default function Invoices() {
         <div className="space-y-4 sm:space-y-6">
             <div>
                 <h2 className="text-2xl font-bold text-dark">Notas Fiscais</h2>
-                <p className="text-sm text-gray-500">NFS-e emitidas pelo OSTecnico via Bling. Para emitir, use o menu ⋮ da OS.</p>
+                <p className="text-sm text-gray-500">Notas emitidas pelo OSTecnico via Bling. Para emitir, use o menu ⋮ da OS.</p>
+            </div>
+
+            <div className="flex gap-2">
+                {(['nfse', 'nfe'] as Kind[]).map((k) => (
+                    <button
+                        key={k}
+                        type="button"
+                        onClick={() => setKind(k)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${kind === k
+                            ? 'bg-primary-cyan text-white border-primary-cyan'
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        {k === 'nfse' ? 'NFS-e (serviços)' : 'NF-e (produtos)'}
+                    </button>
+                ))}
             </div>
 
             <Card>
@@ -207,13 +241,14 @@ export default function Invoices() {
                     <div className="divide-y divide-gray-100">
                         {visible.map((r) => {
                             const badge = STATUS_BADGE[r.status];
-                            const canCancel = r.status === 'emitida' || r.status === 'enviada';
+                            // Só NFS-e cancela pelo app; a API do Bling não cancela NF-e (cancelar no Bling).
+                            const canCancel = r.kind === 'nfse' && (r.status === 'emitida' || r.status === 'enviada');
                             return (
                                 <div key={r.id} className="py-3 flex flex-wrap items-center justify-between gap-3">
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className="font-semibold text-dark">
-                                                {r.numero ? `NFS-e ${r.numero}` : 'NFS-e sem número'}
+                                                {r.numero ? `${KIND_LABEL[r.kind]} ${r.numero}` : `${KIND_LABEL[r.kind]} sem número`}
                                             </span>
                                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>{badge.label}</span>
                                         </div>
@@ -230,7 +265,7 @@ export default function Invoices() {
                                     <div className="flex items-center gap-2">
                                         <span className="font-bold text-dark whitespace-nowrap">{formatCurrency(r.valor)}</span>
                                         {r.link && (
-                                            <a href={r.link} target="_blank" rel="noreferrer" title="Abrir DANFSe">
+                                            <a href={r.link} target="_blank" rel="noreferrer" title={r.kind === 'nfe' ? 'Abrir DANFE' : 'Abrir DANFSe'}>
                                                 <Button type="button" variant="outline" size="sm"><ExternalLink className="w-4 h-4" /></Button>
                                             </a>
                                         )}

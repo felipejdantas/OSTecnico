@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, X, Search, Calculator, Repeat } from 'lucide-react';
+import { Package, FileText, User, Calendar, Star, PenTool, FileDown, Edit, Copy, Trash2, MessageCircle, Mail, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, AlertTriangle, X, Search, Calculator, Repeat } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { DropdownMenu } from '../components/ui/DropdownMenu';
@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, canEmitNfse, type OrderStatus } from '../lib/orderStatus';
 import { EmitNfseDrawer } from '../components/EmitNfseDrawer';
+import { EmitNfeDrawer } from '../components/EmitNfeDrawer';
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
 import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
@@ -241,6 +242,7 @@ export default function Dashboard() {
     const [showFixedCostAlert, setShowFixedCostAlert] = useState(false);
     const [paymentModalOrder, setPaymentModalOrder] = useState<ServiceOrder | null>(null);
     const [nfseOrder, setNfseOrder] = useState<{ id: string; os_number: number } | null>(null);
+    const [nfeOrder, setNfeOrder] = useState<{ id: string; os_number: number } | null>(null);
     const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
     const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
     const [rankingMonth, setRankingMonth] = useState(() => new Date());
@@ -1106,6 +1108,10 @@ export default function Dashboard() {
                                                     label: 'Emitir NFS-e',
                                                     icon: <FileText className="w-4 h-4" />,
                                                     onClick: () => setNfseOrder({ id: order.id, os_number: order.os_number }),
+                                                }, {
+                                                    label: 'Emitir NF-e (produtos)',
+                                                    icon: <Package className="w-4 h-4" />,
+                                                    onClick: () => setNfeOrder({ id: order.id, os_number: order.os_number }),
                                                 }] : []),
                                                 {
                                                     label: 'Duplicar',
@@ -1263,6 +1269,15 @@ export default function Dashboard() {
                     onClose={() => setNfseOrder(null)}
                     serviceOrderId={nfseOrder.id}
                     osNumber={nfseOrder.os_number}
+                />
+            )}
+
+            {nfeOrder && (
+                <EmitNfeDrawer
+                    open
+                    onClose={() => setNfeOrder(null)}
+                    serviceOrderId={nfeOrder.id}
+                    osNumber={nfeOrder.os_number}
                 />
             )}
         </div>
