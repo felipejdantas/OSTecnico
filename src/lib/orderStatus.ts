@@ -118,6 +118,12 @@ export function getStatusConfig(status: string): StatusConfig {
     return STATUS_CONFIG[status as OrderStatus] ?? STATUS_CONFIG.recebido;
 }
 
+// NFS-e só pode ser emitida quando o serviço já foi concluído. A mesma regra é
+// reforçada no servidor (Edge Function bling-nfse), então mantenha as duas iguais.
+export function canEmitNfse(status: string | null | undefined): boolean {
+    return status === 'pronto' || status === 'entregue';
+}
+
 // "Closed" means the equipment is no longer sitting at the shop, one way or
 // another — used to stop counters like days-in-shop that only make sense
 // while the order is still active.

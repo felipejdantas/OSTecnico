@@ -12,7 +12,8 @@ import { supabase } from '../lib/supabase';
 import { generateOSPDF } from '../lib/pdfGenerator';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, type OrderStatus } from '../lib/orderStatus';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, changeOrderStatus, canEmitNfse, type OrderStatus } from '../lib/orderStatus';
+import { EmitNfseDrawer } from '../components/EmitNfseDrawer';
 import { buildTrackingLink, buildTrackingMessage, openWhatsApp, openEmail, type TrackingMessageContext } from '../lib/shareLinks';
 import { PAYMENT_STATUS_CONFIG, calculateOrderTotal, formatCurrency, type PaymentStatus } from '../lib/orderFinance';
 import { elapsedBusinessHours, isBudgetOverdue, BUDGET_SLA_BUSINESS_HOURS } from '../lib/businessHours';
@@ -239,6 +240,7 @@ export default function Dashboard() {
     const [fixedCostAlerts, setFixedCostAlerts] = useState<FixedCostAlertRow[]>([]);
     const [showFixedCostAlert, setShowFixedCostAlert] = useState(false);
     const [paymentModalOrder, setPaymentModalOrder] = useState<ServiceOrder | null>(null);
+    const [nfseOrder, setNfseOrder] = useState<{ id: string; os_number: number } | null>(null);
     const [rawItemRows, setRawItemRows] = useState<RawRankingRow[]>([]);
     const [rawServiceRows, setRawServiceRows] = useState<RawRankingRow[]>([]);
     const [rankingMonth, setRankingMonth] = useState(() => new Date());
@@ -1100,6 +1102,11 @@ export default function Dashboard() {
                                                     icon: <Edit className="w-4 h-4" />,
                                                     onClick: () => navigate(`/editar-os/${order.id}`),
                                                 },
+                                                ...(canEmitNfse(order.status) ? [{
+                                                    label: 'Emitir NFS-e',
+                                                    icon: <FileText className="w-4 h-4" />,
+                                                    onClick: () => setNfseOrder({ id: order.id, os_number: order.os_number }),
+                                                }] : []),
                                                 {
                                                     label: 'Duplicar',
                                                     icon: <Copy className="w-4 h-4" />,
@@ -1247,6 +1254,15 @@ export default function Dashboard() {
                         setOrders(prev => prev.map(o => o.id === paymentModalOrder.id ? { ...o, payment_status: newStatus } : o));
                         setPaymentModalOrder(prev => prev ? { ...prev, payment_status: newStatus } : prev);
                     }}
+                />
+            )}
+
+            {nfseOrder && (
+                <EmitNfseDrawer
+                    open
+                    onClose={() => setNfseOrder(null)}
+                    serviceOrderId={nfseOrder.id}
+                    osNumber={nfseOrder.os_number}
                 />
             )}
         </div>

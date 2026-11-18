@@ -111,7 +111,7 @@ serve(async (req) => {
     if (!serviceOrderId) throw new UserError('OS não informada')
 
     const { data: os } = await admin.from('service_orders')
-      .select('id, os_number, user_id').eq('id', serviceOrderId).eq('user_id', tenantId).maybeSingle()
+      .select('id, os_number, user_id, status').eq('id', serviceOrderId).eq('user_id', tenantId).maybeSingle()
     if (!os) throw new UserError('OS não encontrada')
 
     const token = await getToken(admin, tenantId)
@@ -126,6 +126,11 @@ serve(async (req) => {
     }
 
     if (action !== 'emit') throw new UserError('Ação inválida')
+
+    // Mesma regra de canEmitNfse() no front: só com o serviço concluído.
+    if (os.status !== 'pronto' && os.status !== 'entregue') {
+      throw new UserError('Só é possível emitir NFS-e com a OS em "Pronto para Retirada" ou "Entregue".')
+    }
 
     // ---- Dados da emissão (já revisados pelo usuário no painel)
     const c = body.customer ?? {}

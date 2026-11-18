@@ -23,7 +23,7 @@ import ServiceOrderServicesSection, { type OrderServiceLine } from '../component
 import OrderBudgetSummary from '../components/OrderBudgetSummary';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig } from '../lib/orderStatus';
+import { STATUS_STEPS, STATUS_CONFIG, getStatusConfig, canEmitNfse } from '../lib/orderStatus';
 import type { DiscountType } from '../lib/orderFinance';
 import { toDateStr } from '../lib/fixedCosts';
 import { EQUIPMENT_TYPES } from './NewOS';
@@ -472,7 +472,13 @@ export default function EditOS() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" type="button" onClick={() => setShowNfse(true)}>
+                        <Button
+                            variant="outline"
+                            type="button"
+                            onClick={() => setShowNfse(true)}
+                            disabled={!canEmitNfse(originalStatus)}
+                            title={canEmitNfse(originalStatus) ? 'Emitir NFS-e' : 'Só é possível emitir NFS-e com a OS em "Pronto para Retirada" ou "Entregue" (salve o status antes)'}
+                        >
                             <FileText className="w-4 h-4 mr-2" />
                             NFS-e
                         </Button>
