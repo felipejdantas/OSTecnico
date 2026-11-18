@@ -144,13 +144,17 @@ serve(async (req) => {
     if (uf.length !== 2 || !city || !neighborhood) throw new UserError('Informe bairro, cidade e UF do tomador')
     const email = String(c.email ?? '').trim()
 
+    // Valores vêm do banco; só o TEXTO da descrição é aceito do painel (indexado pelo id da linha).
     const { data: svc } = await admin.from('service_order_services')
-      .select('service_name, description, quantity, price').eq('service_order_id', os.id)
+      .select('id, service_name, description, quantity, price').eq('service_order_id', os.id)
+    const descriptions: Record<string, unknown> = body.descriptions ?? {}
     const servicos = (svc ?? []).map((s: any) => {
       const qty = Number(s.quantity) || 1
+      const typed = String(descriptions[s.id] ?? '').trim()
+      const fallback = qty > 1 ? `${s.service_name} (x${qty})` : String(s.service_name)
       return {
         codigo: SERVICE_CODE,
-        descricao: (qty > 1 ? `${s.service_name} (x${qty})` : String(s.service_name)).slice(0, 250),
+        descricao: (typed || fallback).slice(0, 250),
         valor: round2(qty * Number(s.price || 0)),
       }
     }).filter((s: any) => s.valor > 0)

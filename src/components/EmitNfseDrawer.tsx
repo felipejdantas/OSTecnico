@@ -25,9 +25,13 @@ interface Emission {
 }
 
 interface ServiceLine {
-    name: string;
+    id: string;
+    description: string; // texto que vai na nota (editável)
     total: number;
 }
+
+// Nomes genéricos não dizem o que foi feito; nesse caso usamos o texto da OS.
+const isGenericName = (s: string) => ['', 'serviço', 'servico', 'serviços', 'servicos'].includes(s.trim().toLowerCase());
 
 const STATUS_LABEL: Record<Emission['status'], string> = {
     processando: 'Processando',
@@ -90,9 +94,10 @@ export function EmitNfseDrawer({ open, onClose, serviceOrderId, osNumber }: Prop
         try {
             const [{ data: os }, { data: svc }, { data: items }, { data: em }] = await Promise.all([
                 supabase.from('service_orders')
-                    .select('customer_id, discount_type, discount_value, guest_name').eq('id', serviceOrderId).single(),
+                    .select('customer_id, discount_type, discount_value, guest_name, equipment_type, brand, equipment, problem_resolution')
+                    .eq('id', serviceOrderId).single(),
                 supabase.from('service_order_services')
-                    .select('service_name, quantity, price').eq('service_order_id', serviceOrderId),
+                    .select('id, service_name, description, quantity, price').eq('service_order_id', serviceOrderId),
                 supabase.from('service_order_items')
                     .select('quantity, unit_price').eq('service_order_id', serviceOrderId),
                 supabase.from('nfse_emissions')
@@ -100,10 +105,16 @@ export function EmitNfseDrawer({ open, onClose, serviceOrderId, osNumber }: Prop
                     .eq('service_order_id', serviceOrderId).order('created_at', { ascending: false }).limit(1),
             ]);
 
+            // Texto sugerido quando o serviço tem nome genérico: o que foi feito na OS, ou o equipamento.
+            const equipmentText = [os?.equipment_type, os?.brand, os?.equipment].filter(Boolean).join(' ');
+            const fallbackText = (os?.problem_resolution || '').trim() || `Manutenção em ${equipmentText || 'equipamento'}`;
             const lines: ServiceLine[] = (svc ?? [])
                 .map((s: any) => {
                     const q = Number(s.quantity) || 1;
-                    return { name: q > 1 ? `${s.service_name} (x${q})` : s.service_name, total: q * Number(s.price || 0) };
+                    const base = isGenericName(s.service_name || '')
+                        ? (s.description || '').trim() || fallbackText
+                        : [s.service_name, (s.description || '').trim()].filter(Boolean).join(' - ');
+                    return { id: s.id as string, description: q > 1 ? `${base} (x${q})` : base, total: q * Number(s.price || 0) };
                 })
                 .filter((l) => l.total > 0);
             setServices(lines);
@@ -167,7 +178,10 @@ export function EmitNfseDrawer({ open, onClose, serviceOrderId, osNumber }: Prop
     const call = async (action: 'emit' | 'status') => {
         const { data: sessionData } = await supabase.auth.getSession();
         const { data, error } = await supabase.functions.invoke('bling-nfse', {
-            body: { action, serviceOrderId, customer: form, discount },
+            body: {
+                action, serviceOrderId, customer: form, discount,
+                descriptions: Object.fromEntries(services.map((s) => [s.id, s.description.trim()])),
+            },
             headers: { Authorization: `Bearer ${sessionData.session?.access_token}` },
         });
         if (error) {
@@ -212,7 +226,8 @@ export function EmitNfseDrawer({ open, onClose, serviceOrderId, osNumber }: Prop
     const docLen = onlyDigits(form.document).length;
     const formOk =
         !!form.name.trim() && (docLen === 11 || docLen === 14) && !!form.neighborhood.trim() &&
-        !!form.city.trim() && form.uf.trim().length === 2 && subtotal > 0 && discount < subtotal;
+        !!form.city.trim() && form.uf.trim().length === 2 && subtotal > 0 && discount < subtotal &&
+        services.every((s) => s.description.trim().length > 0);
 
     return (
         <Drawer open={open} onClose={onClose} title={`Emitir NFS-e${osNumber ? ` · OS ${osNumber}` : ''}`}>
@@ -277,11 +292,20 @@ export function EmitNfseDrawer({ open, onClose, serviceOrderId, osNumber }: Prop
                         {services.length === 0 ? (
                             <p className="text-sm text-red-600">Esta OS não tem serviços com valor. Peças não entram na NFS-e.</p>
                         ) : (
-                            <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 text-sm">
-                                {services.map((s, i) => (
-                                    <li key={i} className="flex justify-between gap-3 px-3 py-2">
-                                        <span>{s.name}</span>
-                                        <span className="whitespace-nowrap">{formatCurrency(s.total)}</span>
+                            <ul className="space-y-3">
+                                {services.map((s) => (
+                                    <li key={s.id} className="space-y-1">
+                                        <div className="flex justify-between gap-3 text-sm">
+                                            <label className="font-medium text-dark-lighter">Descrição na nota</label>
+                                            <span className="whitespace-nowrap font-medium">{formatCurrency(s.total)}</span>
+                                        </div>
+                                        <textarea
+                                            rows={2}
+                                            maxLength={250}
+                                            value={s.description}
+                                            onChange={(e) => setServices((all) => all.map((x) => x.id === s.id ? { ...x, description: e.target.value } : x))}
+                                            className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-green/50 focus:border-primary-green bg-white text-sm"
+                                        />
                                     </li>
                                 ))}
                             </ul>
