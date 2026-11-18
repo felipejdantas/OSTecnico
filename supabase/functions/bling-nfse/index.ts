@@ -121,8 +121,32 @@ serve(async (req) => {
       const { data: em } = await admin.from('nfse_emissions').select('*')
         .eq('service_order_id', os.id).not('bling_nfse_id', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
       if (!em) throw new UserError('Nenhuma NFS-e encontrada para esta OS')
+      if (em.status === 'cancelada') return json({ success: true, emission: em }) // cancelamento é final
       const patch = await syncFromBling(admin, token, em.id, em.bling_nfse_id)
       return json({ success: true, emission: { ...em, ...(patch ?? {}) } })
+    }
+
+    // ---- Cancelar NFS-e (Ambiente Nacional exige motivo + justificativa). Só o dono da conta.
+    if (action === 'cancel') {
+      if (membership) throw new UserError('Apenas o dono da conta pode cancelar NFS-e')
+      const { data: em } = await admin.from('nfse_emissions').select('*')
+        .eq('service_order_id', os.id).in('status', ['enviada', 'emitida']).not('bling_nfse_id', 'is', null)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (!em) throw new UserError('Não há NFS-e ativa para cancelar nesta OS')
+      const motivo = Number(body.codigoMotivo)
+      if (![1, 2, 9].includes(motivo)) throw new UserError('Motivo de cancelamento inválido')
+      const justificativa = String(body.justificativa ?? '').trim()
+      if (justificativa.length < 15) throw new UserError('A justificativa precisa ter pelo menos 15 caracteres')
+      const r = await bling(token, 'POST', `/nfse/${em.bling_nfse_id}/cancelar`, {
+        codigoMotivo: motivo, justificativa: justificativa.slice(0, 255),
+      })
+      if (!r.ok) throw new UserError('O Bling recusou o cancelamento: ' + blingError(r.data, 'erro desconhecido'))
+      const patch = {
+        status: 'cancelada', canceled_at: new Date().toISOString(),
+        cancel_reason: `${motivo}: ${justificativa}`.slice(0, 500), updated_at: new Date().toISOString(),
+      }
+      await admin.from('nfse_emissions').update(patch).eq('id', em.id)
+      return json({ success: true, emission: { ...em, ...patch } })
     }
 
     if (action !== 'emit') throw new UserError('Ação inválida')
