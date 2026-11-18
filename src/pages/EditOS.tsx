@@ -4,7 +4,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
-import { Save, ArrowLeft, Lock, UserPlus, Copy } from 'lucide-react';
+import { Save, ArrowLeft, Lock, UserPlus, Copy, FileText } from 'lucide-react';
+import { EmitNfseDrawer } from '../components/EmitNfseDrawer';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -103,6 +104,7 @@ export default function EditOS() {
     const [budgetApprovedAt, setBudgetApprovedAt] = useState<string | null>(null);
     const [isMarkingApproved, setIsMarkingApproved] = useState(false);
     const [isDuplicating, setIsDuplicating] = useState(false);
+    const [showNfse, setShowNfse] = useState(false);
     // Snapshot of the financials as loaded, so onSubmit can tell whether the
     // approved budget actually changed (vs. just re-saving the same numbers).
     const [originalFinancials, setOriginalFinancials] = useState({ discountType: 'fixed' as DiscountType, discountValue: 0, freight: 0, urgencyFee: 0 });
@@ -470,6 +472,10 @@ export default function EditOS() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button variant="outline" type="button" onClick={() => setShowNfse(true)}>
+                            <FileText className="w-4 h-4 mr-2" />
+                            NFS-e
+                        </Button>
                         <Button variant="outline" type="button" onClick={duplicateOS} disabled={isDuplicating}>
                             <Copy className="w-4 h-4 mr-2" />
                             {isDuplicating ? 'Duplicando...' : 'Duplicar'}
@@ -778,6 +784,16 @@ export default function EditOS() {
                     </div>
                 </div>
             </form>
+
+            {/* Fora do <form>: os inputs do painel não podem disparar a validação/salvamento da OS. */}
+            {id && (
+                <EmitNfseDrawer
+                    open={showNfse}
+                    onClose={() => setShowNfse(false)}
+                    serviceOrderId={id}
+                    osNumber={watch('osNumber')}
+                />
+            )}
         </div>
     );
 }
