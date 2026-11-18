@@ -336,7 +336,7 @@ export function EmitNfeDrawer({ open, onClose, serviceOrderId, osNumber }: Props
                         </div>
                         <p className="text-xs text-gray-500">
                             Natureza: venda de mercadoria para {isCompany ? 'PJ' : 'não contribuinte PF'}. CFOP{' '}
-                            {form.uf.trim().toUpperCase() === 'PE' ? '5102' : '6102'} (automático pela UF). O NCM digitado fica salvo no produto.
+                            {form.uf.trim().toUpperCase() === 'PE' ? '5102' : '6102'} (automático pela UF). Origem, CEST, GTIN e % de tributos vêm da aba Tributação do produto; o NCM digitado aqui fica salvo nele.
                         </p>
                     </section>
 

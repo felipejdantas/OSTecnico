@@ -166,7 +166,7 @@ serve(async (req) => {
       .select('id, product_id, product_name, quantity, unit_price').eq('service_order_id', os.id)
     const productIds = [...new Set((rows ?? []).map((r: any) => r.product_id).filter(Boolean))]
     const { data: prods } = productIds.length
-      ? await admin.from('products').select('id, sku, unit, ncm').eq('user_id', tenantId).in('id', productIds)
+      ? await admin.from('products').select('id, sku, unit, ncm, origem, cest, gtin, tributos_pct').eq('user_id', tenantId).in('id', productIds)
       : { data: [] as any[] }
     const prodMap = new Map((prods ?? []).map((p: any) => [p.id, p]))
     const ncmOverrides: Record<string, unknown> = body.ncm ?? {}
@@ -188,8 +188,14 @@ serve(async (req) => {
         valorTotal: round2(qty * unit),
         tipo: 'P',
         classificacaoFiscal: formatNcm(ncm),
-        origem: 0,
+        origem: Number(p?.origem ?? 0),
         cfop,
+        ...(p?.cest ? { cest: String(p.cest) } : {}),
+        ...(p?.gtin ? { gtin: String(p.gtin) } : {}),
+        // Só envia o bloco de impostos quando há % de tributos aproximados (Lei 12.741); o ICMS vem da natureza.
+        ...(Number(p?.tributos_pct) > 0
+          ? { impostos: { valorAproximadoTotalTributos: round2((qty * unit * Number(p.tributos_pct)) / 100) } }
+          : {}),
       }
     }).filter((i: any) => i.valorTotal > 0)
     if (!itens.length) throw new UserError('A OS não tem produtos com valor para emitir NF-e')

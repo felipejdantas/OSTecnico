@@ -22,6 +22,14 @@ const productSchema = z.object({
     unit: z.string().min(1, 'Informe a unidade'),
     // NCM (8 dígitos, exigido na NF-e). Aceita "8504.40.10" e guarda só os dígitos.
     ncm: z.string().optional().refine((v) => !v || v.replace(/\D/g, '').length === 8, 'NCM deve ter 8 dígitos'),
+    // Aba Tributação: dados que vão para a NF-e (itens da nota)
+    origem: z.coerce.number().int().min(0).max(8),
+    cest: z.string().optional().refine((v) => !v || v.replace(/\D/g, '').length === 7, 'CEST deve ter 7 dígitos'),
+    gtin: z.string().optional().refine(
+        (v) => !v || [8, 12, 13, 14].includes(v.replace(/\D/g, '').length),
+        'GTIN/EAN deve ter 8, 12, 13 ou 14 dígitos',
+    ),
+    tributos_pct: z.coerce.number().min(0, 'Valor inválido').max(100, 'Máximo 100%').optional(),
     cost_price: z.coerce.number().min(0, 'Valor inválido'),
     sale_price: z.coerce.number().min(0, 'Valor inválido'),
     stock_quantity: z.coerce.number().int('Deve ser um número inteiro'),
@@ -48,8 +56,9 @@ export default function Products() {
     const [existingPhotos, setExistingPhotos] = useState<string[]>([]);
     const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<ProductFormInput, any, ProductForm>({
         resolver: zodResolver(productSchema),
-        defaultValues: { unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0 },
+        defaultValues: { unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0, origem: 0, tributos_pct: 0 },
     });
+    const [tab, setTab] = useState<'geral' | 'tributacao'>('geral');
 
     useEffect(() => {
         if (tenantId) fetchProducts();
@@ -75,6 +84,11 @@ export default function Products() {
         setValue('category', product.category);
         setValue('unit', product.unit);
         setValue('ncm', product.ncm ?? '');
+        setValue('origem', product.origem ?? 0);
+        setValue('cest', product.cest ?? '');
+        setValue('gtin', product.gtin ?? '');
+        setValue('tributos_pct', product.tributos_pct ?? 0);
+        setTab('geral');
         setValue('cost_price', product.cost_price);
         setValue('sale_price', product.sale_price);
         setValue('stock_quantity', product.stock_quantity);
@@ -90,7 +104,15 @@ export default function Products() {
         setEditingId(null);
         setNewImages([]);
         setExistingPhotos([]);
-        reset({ unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0 });
+        reset({ unit: 'un', cost_price: 0, sale_price: 0, stock_quantity: 0, min_stock_alert: 0, origem: 0, tributos_pct: 0 });
+        setTab('geral');
+    };
+
+    // Se o salvamento falhar por um campo da aba Tributação, mostra essa aba para o erro ficar visível.
+    const onInvalid = (errs: Record<string, unknown>) => {
+        const fiscal = ['ncm', 'origem', 'cest', 'gtin', 'tributos_pct'];
+        const general = Object.keys(errs).some((k) => !fiscal.includes(k));
+        if (Object.keys(errs).length) setTab(general ? 'geral' : 'tributacao');
     };
 
     const uploadFile = async (file: File) => {
@@ -126,6 +148,9 @@ export default function Products() {
             const row = {
                 ...rest,
                 ncm: rest.ncm ? rest.ncm.replace(/\D/g, '') : null,
+                cest: rest.cest ? rest.cest.replace(/\D/g, '') : null,
+                gtin: rest.gtin ? rest.gtin.replace(/\D/g, '') : null,
+                tributos_pct: rest.tributos_pct ?? 0,
                 warranty_days: warranty_months ? warranty_months * 30 : null,
             };
 
@@ -204,13 +229,65 @@ export default function Products() {
                             {editingId ? 'Editar Produto' : 'Novo Produto'}
                         </h3>
                     </div>
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-4">
+                        <div className="flex gap-1 border-b border-gray-200">
+                            {([['geral', 'Geral'], ['tributacao', 'Tributação']] as const).map(([key, label]) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setTab(key)}
+                                    className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${tab === key
+                                        ? 'border-primary-green text-primary-green'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    {label}
+                                    {key === 'tributacao' && (errors.ncm || errors.cest || errors.gtin || errors.tributos_pct) && (
+                                        <span className="ml-1 text-red-500">•</span>
+                                    )}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Aba Tributação: escondida com `hidden` (não desmontada) para os campos seguirem registrados no form. */}
+                        <div className={tab === 'tributacao' ? 'space-y-4' : 'hidden'}>
+                            <p className="text-sm text-gray-500">
+                                Dados fiscais que vão para a NF-e deste produto. Preencha o NCM antes de emitir; o resto é opcional.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="block text-sm font-medium text-dark-lighter">Origem</label>
+                                    <select
+                                        {...register('origem')}
+                                        className="w-full px-4 py-2 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary-green/50 focus:border-primary-green"
+                                    >
+                                        <option value={0}>0 - Nacional (exceto as dos códigos 3, 4, 5 e 8)</option>
+                                        <option value={1}>1 - Estrangeira, importação direta</option>
+                                        <option value={2}>2 - Estrangeira, adquirida no mercado interno</option>
+                                        <option value={3}>3 - Nacional, importação entre 40% e 70%</option>
+                                        <option value={4}>4 - Nacional, processos produtivos básicos</option>
+                                        <option value={5}>5 - Nacional, importação até 40%</option>
+                                        <option value={6}>6 - Estrangeira, importação direta, sem similar nacional</option>
+                                        <option value={7}>7 - Estrangeira, mercado interno, sem similar nacional</option>
+                                        <option value={8}>8 - Nacional, importação superior a 70%</option>
+                                    </select>
+                                    {errors.origem && <p className="mt-1 text-xs text-red-500">{errors.origem.message}</p>}
+                                </div>
+                                <Input label="NCM" {...register('ncm')} placeholder="Ex: 8504.40.10" error={errors.ncm?.message} />
+                                <Input label="CEST" {...register('cest')} placeholder="7 dígitos (só se o produto tiver)" error={errors.cest?.message} />
+                                <Input label="GTIN / EAN" {...register('gtin')} placeholder="Vazio = sem GTIN" error={errors.gtin?.message} />
+                                <Input label="% Tributos (aproximado)" type="number" step="0.01" {...register('tributos_pct')} error={errors.tributos_pct?.message} />
+                            </div>
+                            <p className="text-xs text-gray-500">
+                                Peça importada comprada de fornecedor no Brasil costuma ser origem 2. Na dúvida, confirme com o contador.
+                            </p>
+                        </div>
+
+                        <div className={tab === 'geral' ? 'space-y-4' : 'hidden'}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Input label="Nome do Produto" {...register('name')} error={errors.name?.message} />
                             <Input label="SKU / Código" {...register('sku')} />
                             <Input label="Categoria" {...register('category')} placeholder="Ex: Peças, Cabos, Baterias..." />
                             <Input label="Unidade" {...register('unit')} placeholder="un, pç, m..." error={errors.unit?.message} />
-                            <Input label="NCM (para NF-e)" {...register('ncm')} placeholder="Ex: 8504.40.10" error={errors.ncm?.message} />
                             <Input label="Preço de Custo (R$)" type="number" step="0.01" {...register('cost_price')} error={errors.cost_price?.message} />
                             <Input label="Preço de Venda (R$)" type="number" step="0.01" {...register('sale_price')} error={errors.sale_price?.message} />
                             <Input label="Quantidade em Estoque" type="number" {...register('stock_quantity')} error={errors.stock_quantity?.message} />
@@ -232,6 +309,7 @@ export default function Products() {
                                 </div>
                             )}
                             <ImageUpload onImagesChange={setNewImages} />
+                        </div>
                         </div>
 
                         <div className="flex justify-end gap-3 pt-4">
